@@ -5,6 +5,7 @@ import { loadDefaultRequirements as loadSample } from '../io/sample-requirements
 import { Optimizer as DefaultOptimizer } from '../optimization/optimizer.js';
 import { createControls } from './controls.js';
 import { installTooltips } from './tooltips.js';
+import { createResultsView } from './results-view.js';
 
 export function createApp({ document, window, Optimizer = DefaultOptimizer, loadDefaultRequirements = loadSample, downloadFile = download }) {
     const requirementsInput = document.getElementById('requirementsInput');
@@ -13,8 +14,16 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, load
     const ballJointClampCheckbox = document.getElementById('ballJointClamp');
     const ballJointLimitInput = document.getElementById('ballJointLimit');
     let currentOptimizer = null;
+    let lastOutcome = null;
+    let runSerial = 0;
     const { populateRequirementsDefaults, readWorkspaceRanges } = createControls(document);
     installTooltips(document, window);
+    const resultsView = createResultsView(document, (candidate) => {
+        if (!currentOptimizer || currentOptimizer.running) return;
+        currentOptimizer.selectCandidate(candidate.layout.id);
+        resultOutput.value = JSON.stringify({ run: lastOutcome, result: displayResult(candidate) }, null, 2);
+    });
+    resultsView.clear();
 
     function showStatus(message, isError = false) {
         statusEl.textContent = message;
@@ -36,6 +45,10 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, load
     document.getElementById('clearRequirements').addEventListener('click', () => {
         requirementsInput.value = '';
         resultOutput.value = '';
+        currentOptimizer = null;
+        lastOutcome = null;
+        resultsView.clear();
+        setRunning(false);
         showStatus('Requirements cleared.');
     });
 
@@ -44,7 +57,8 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, load
             document.getElementById(id).disabled = running;
         }
         document.getElementById('cancelOptimization').disabled = !running;
-        document.getElementById('exportBestLayout').disabled = running || !currentOptimizer?.fitness.length;
+        document.getElementById('exportBestLayout').disabled = running
+            || !(currentOptimizer?.getSelectedCandidate?.() || currentOptimizer?.fitness?.length);
     }
 
     document.getElementById('cancelOptimization').addEventListener('click', () => {
@@ -54,6 +68,7 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, load
 
     document.getElementById('runOptimization').addEventListener('click', async () => {
         if (currentOptimizer?.running) return;
+        const thisRun = ++runSerial;
         try {
             const text = requirementsInput.value.trim();
             if (!text) {
@@ -78,13 +93,19 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, load
             });
 
             resultOutput.value = '';
+            lastOutcome = null;
+            resultsView.clear();
             const work = currentOptimizer.estimateWork();
             showStatus(`Optimization starting: ${work.totalPoses.toLocaleString()} pose evaluations.`);
             setRunning(true);
             const outcome = await currentOptimizer.start();
+            if (thisRun !== runSerial) return;
 
             const pareto = currentOptimizer.pareto && currentOptimizer.pareto.length ? currentOptimizer.pareto : currentOptimizer.fitness;
-            const best = selectBest(currentOptimizer.pareto, currentOptimizer.fitness);
+            const best = currentOptimizer.getSelectedCandidate?.()
+                ?? selectBest(currentOptimizer.pareto, currentOptimizer.fitness);
+            lastOutcome = outcome;
+            resultsView.render(currentOptimizer.fitness, best?.layout.id);
             resultOutput.value = best ? JSON.stringify({ run: outcome, result: displayResult(best) }, null, 2) : '';
             if (outcome.status === 'cancelled') {
                 showStatus(best ? 'Optimization cancelled. Showing partial results from the last completed population.' : 'Optimization cancelled before a population completed.');
@@ -92,10 +113,11 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, load
             }
             showStatus(`Optimization complete. Feasible coverage: ${best?.coverage ?? 0}%. Pareto front contains ${currentOptimizer.pareto.length || pareto.length} layouts. Coverage applies only to sampled poses and modeled constraints.`);
         } catch (error) {
+            if (thisRun !== runSerial) return;
             console.error(error);
             showStatus(error.message, true);
         } finally {
-            setRunning(false);
+            if (thisRun === runSerial) setRunning(false);
         }
     });
 

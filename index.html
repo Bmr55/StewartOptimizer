@@ -105,6 +105,15 @@
                 <button id="exportBestLayout" disabled>Download Layout JSON</button>
             </div>
             <div id="optStatus" class="status">Idle</div>
+            <div class="result-browser" aria-label="Candidate results">
+                <div class="grid result-controls">
+                    <label class="field">X axis<select id="chartXAxis" aria-label="Chart X axis"></select></label>
+                    <label class="field">Y axis<select id="chartYAxis" aria-label="Chart Y axis"></select></label>
+                    <label class="field">Candidate<select id="candidateSelect" aria-label="Select candidate"></select></label>
+                </div>
+                <div id="paretoChart" class="pareto-chart"></div>
+                <p id="candidateSummary" class="status" aria-live="polite">No completed candidate is available.</p>
+            </div>
             <textarea id="resultOutput" spellcheck="false" readonly aria-label="Optimization output"></textarea>
         </section>
     </main>

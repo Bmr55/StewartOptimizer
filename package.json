@@ -5,10 +5,14 @@
   "scripts": {
     "dev": "node scripts/serve.mjs",
     "test": "node --test",
+    "test:browser": "node scripts/browser-check.mjs",
     "smoke": "node scripts/smoke.mjs",
     "legacy:build": "npm --prefix archive/simulator run build"
   },
   "engines": {
     "node": ">=22"
+  },
+  "devDependencies": {
+    "playwright": "^1.63.0"
   }
 }

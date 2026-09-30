@@ -158,7 +158,8 @@ textarea {
 }
 
 input[type="number"],
-input[type="text"] {
+input[type="text"],
+select {
     background: #111;
     color: var(--text);
     border: 1px solid var(--border);
@@ -232,4 +233,35 @@ button.primary:hover {
 
 #resultOutput {
     min-height: 180px;
+}
+
+.result-browser {
+    display: grid;
+    gap: 12px;
+}
+
+.result-controls {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.pareto-chart {
+    background: #111;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    min-height: 220px;
+}
+
+.pareto-chart svg {
+    display: block;
+    width: 100%;
+}
+
+.pareto-chart circle {
+    cursor: pointer;
+}
+
+.pareto-chart circle:focus-visible {
+    outline: none;
+    stroke: white;
+    stroke-width: 3px;
 }
