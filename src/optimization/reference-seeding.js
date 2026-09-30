@@ -9,7 +9,19 @@ export function seedComposition(populationSize) {
   return { reference: 1, variations: populationSize - 1 - fresh, fresh };
 }
 
-function outside(value, [min, max]) { return value < min || value > max; }
+// Exported degrees do not round-trip exactly through radians, so a bound is
+// compared with a small relative tolerance (floored at an absolute 1e-9 so a
+// zero-width bound such as platform Z still accepts rounding noise).
+export const BOUNDS_TOLERANCE = 1e-9;
+
+function tolerance(min, max) {
+  return BOUNDS_TOLERANCE * Math.max(1, Math.abs(min), Math.abs(max));
+}
+
+function outside(value, [min, max]) {
+  const slack = tolerance(min, max);
+  return value < min - slack || value > max + slack;
+}
 
 // These are search bounds, not physical validity. The reference is retained
 // unchanged for diagnosis while every generated candidate uses the bounds.
@@ -21,7 +33,8 @@ export function referenceBoundsConflicts(layout, designSpace, servoRangeRad) {
   check('horn_length', layout.hornLength, designSpace.hornLengthBounds);
   check('rod_length', layout.rodLength, designSpace.rodLengthBounds);
   check('home_height', layout.homeHeight, designSpace.homeHeightBounds);
-  if (layout.servoRangeRad[0] < servoRangeRad[0] || layout.servoRangeRad[1] > servoRangeRad[1]) {
+  const servoSlack = tolerance(...servoRangeRad);
+  if (layout.servoRangeRad[0] < servoRangeRad[0] - servoSlack || layout.servoRangeRad[1] > servoRangeRad[1] + servoSlack) {
     conflicts.push({ field: 'servo_range', value: layout.servoRangeDeg ?? layout.servoRangeRad.map(radToDeg),
       bounds: servoRangeRad.map(radToDeg), unit: 'deg' });
   }

@@ -41,3 +41,11 @@ test('UI passes headless export data to its browser download adapter', async () 
   assert.equal(downloaded.base_anchors.length, 6);
   assert.equal(downloaded.metadata.coverage, JSON.parse(element('resultOutput').value).result.metrics.coverage);
 });
+
+test('display and download JSON share one degree conversion for servo_range', async () => {
+  const opt = new Optimizer({ servo_travel_bounds_deg: [-177, 177] }, { ballJointLimitDeg: 100 });
+  const result = await opt.evaluateLayout(opt.createRandomLayout());
+  opt.fitness = [result];
+  const exported = JSON.parse(opt.exportBest());
+  assert.deepEqual(displayResult(result).layout.servo_range, exported.servo_range);
+});
