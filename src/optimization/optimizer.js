@@ -4,14 +4,34 @@ import { DEFAULT_DESIGN_SPACE, cloneLayout, createRandomLayout, finalizeLayout, 
 import { dominates, fastNonDominatedSort, assignCrowdingDistance, tournamentSelect, selectFromFronts } from './nsga2.js';
 import { evaluateLayout, evaluateCycle, computeFatigue } from './evaluate-layout.js';
 import { estimateWork } from './budget.js';
-import { selectBest, exportResult } from '../io/results.js';
+import { selectBest, exportResult, layoutToJSON } from '../io/results.js';
 import { DEFAULT_TOPOLOGY, TOPOLOGIES } from '../contracts.js';
 import { normalizeSampling } from '../workspace/sampling.js';
 import { createRandom, normalizeSeed, RANDOM_ALGORITHM } from './random.js';
 import { validateConditionLimit } from '../model/conditioning.js';
+import { importLayout } from '../io/layout-import.js';
+import { evaluatePose } from '../model/pose.js';
+import { initialPopulation, referenceBoundsConflicts, seedComposition } from './reference-seeding.js';
 
 // Owns run state and population lifecycle. Numerical work and browser I/O live elsewhere.
 export class Optimizer {
+  static fromReplay(input, { onProgress } = {}) {
+    const { sourceRun } = importLayout(input);
+    const settings = sourceRun?.effective_settings;
+    if (!settings || typeof settings !== 'object' || Array.isArray(settings)) {
+      throw new TypeError('run.effective_settings is required to replay an exported result.');
+    }
+    if (settings.randomAlgorithm !== RANDOM_ALGORITHM) {
+      throw new RangeError(`run.effective_settings.randomAlgorithm must be ${RANDOM_ALGORITHM}.`);
+    }
+    return new Optimizer(settings.requirements ?? {}, {
+      ...settings,
+      ranges: settings.bounds,
+      referenceLayout: settings.reference_layout ?? null,
+      onProgress,
+    });
+  }
+
   constructor(requirements = {}, {
     populationSize = 12,
     generations = 5,
@@ -21,6 +41,7 @@ export class Optimizer {
     mutationRate = 0.35,
     designSpace = {},
     topology = DEFAULT_TOPOLOGY,
+    referenceLayout = null,
     homeHeightBounds,
     ballJointLimitDeg,
     lowerBallJointLimitDeg,
@@ -43,6 +64,10 @@ export class Optimizer {
       ? { ...sampling, sequenceStart: sampling.sequenceStart ?? this.seed } : sampling);
     this.random = createRandom(this.seed);
     this.mutationRate = clamp(mutationRate, 0, 1);
+    const imported = referenceLayout == null ? null : importLayout(referenceLayout);
+    this.referenceLayout = imported?.layout ?? null;
+    this.referenceSourceRun = imported?.sourceRun ?? null;
+    if (this.referenceLayout) topology = this.referenceLayout.topology;
     if (!TOPOLOGIES.includes(topology)) throw new Error(`topology must be one of ${TOPOLOGIES.join(', ')}.`);
     this.topology = topology;
     this.ballJointLimitDeg = ballJointLimitDeg ?? requirements.ball_joint_max_deg ?? 52;
@@ -81,6 +106,25 @@ export class Optimizer {
     }
 
     this.servoRangeRad = this.servoRangeDeg.map((deg) => degToRad(deg));
+    this.referenceDiagnostics = null;
+    if (this.referenceLayout) {
+      const home = evaluatePose(this.referenceLayout,
+        { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 }, {
+          ballJointLimitDeg: this.ballJointLimitDeg,
+          lowerBallJointLimitDeg: this.lowerBallJointLimitDeg,
+          upperBallJointLimitDeg: this.upperBallJointLimitDeg,
+          conditionLimit: this.conditionLimit,
+          servoRangeRad: this.referenceLayout.servoRangeRad,
+          mounting: this.referenceLayout.mounting,
+          recordLegData: true,
+        });
+      this.referenceDiagnostics = {
+        boundsConflicts: referenceBoundsConflicts(this.referenceLayout, this.designSpace, this.servoRangeRad),
+        homePoseSatisfied: home.reachable,
+        homePoseViolations: home.violations,
+      };
+      this.referenceLayout.referenceDiagnostics = this.referenceDiagnostics;
+    }
 
     this.population = [];
     this.fitness = [];
@@ -153,12 +197,22 @@ export class Optimizer {
         child = this.mutateLayout(child);
       }
       child.id = this.nextLayoutId++;
+      child.seedOrigin = 'offspring';
+      delete child.referenceDiagnostics;
+      delete child.servoRangeDeg;
+      delete child.migration;
       offspring.push(child);
     }
     return offspring;
   }
 
-  selectFromFronts(evaluations, fronts) { return selectFromFronts(evaluations, fronts, this.populationSize); }
+  selectFromFronts(evaluations, fronts) {
+    const survivors = selectFromFronts(evaluations, fronts, this.populationSize);
+    if (this.referenceEvaluation && !survivors.includes(this.referenceEvaluation)) {
+      survivors[survivors.length - 1] = this.referenceEvaluation;
+    }
+    return survivors;
+  }
 
   updateState(evaluations, fronts) {
     this.population = evaluations.map((ev) => cloneLayout(ev.layout));
@@ -185,8 +239,20 @@ export class Optimizer {
     const results = [];
     for (const layout of layouts) {
       this.abortController?.signal.throwIfAborted();
-      results.push(await this.evaluateLayout(layout));
-      this.completedPoseWork += results.at(-1).workspace.total + 1 + (results.at(-1).cycle.failedSample ?? results.at(-1).cycle.samples - 1) + 1;
+      const result = await this.evaluateLayout(layout);
+      if (layout.seedOrigin === 'reference') {
+        result.referenceDiagnostics = this.referenceDiagnostics;
+        if (this.referenceDiagnostics.boundsConflicts.length) {
+          result.feasibility.failedCategories = [...new Set([
+            ...(result.feasibility.failedCategories ?? []), 'geometry',
+          ])];
+          result.feasibility.passing = false;
+        }
+        this.referenceEvaluation = result;
+      }
+      results.push(result);
+      this.completedPoseWork += result.workspace.total + 1
+        + (result.cycle.failedSample ?? result.cycle.samples - 1) + 1;
       this.completedEvaluations += 1;
       this.onProgress?.({ completed: this.completedPoseWork,
         total: this.workEstimate.totalPoses, budgeted: this.workEstimate.totalPoses, generation: this.activeGeneration });
@@ -221,6 +287,8 @@ export class Optimizer {
       objectiveSet: ['coverage', 'relaxedCoverage', 'dexterity', 'stiffness', 'loadBalance',
         'isotropy', 'limitMargin', 'torque', 'speedDemand', 'fatigue'],
       servoRatingPolicy: 'not-enforced',
+      reference_layout: this.referenceLayout ? layoutToJSON(this.referenceLayout) : null,
+      seed_composition: this.referenceLayout ? seedComposition(this.populationSize) : null,
     }));
   }
 
@@ -230,7 +298,7 @@ export class Optimizer {
     this.completedPoseWork = 0;
     this.nextLayoutId = 1;
     this.random = createRandom(this.seed);
-    this.population = Array.from({ length: this.populationSize }, () => this.createRandomLayout());
+    this.population = initialPopulation(this);
     let evaluations = await this.evaluatePopulation(this.population);
     let fronts = this.fastNonDominatedSort(evaluations);
     this.assignCrowdingDistance(fronts, evaluations);
@@ -264,6 +332,8 @@ export class Optimizer {
     this.generation = 0;
     this.activeGeneration = 0;
     this.completedEvaluations = 0;
+    this.nextLayoutId = 1;
+    this.referenceEvaluation = null;
     try {
       await this.executeRun();
       this.runStatus = 'completed';
@@ -310,13 +380,7 @@ export class Optimizer {
     }
     return JSON.stringify(exportResult(best, {
       status: this.runStatus, completedGenerations: this.generation, partial: this.runStatus !== 'completed',
-      effective_settings: this.effectiveSettings?.() ?? {
-        requirements: this.requirements, ranges: this.ranges,
-        populationSize: this.populationSize, generations: this.generations,
-        mutationRate: this.mutationRate, designSpace: this.designSpace,
-        ballJointLimitDeg: this.ballJointLimitDeg, ballJointClamp: this.ballJointClamp,
-        conditionLimit: this.conditionLimit,
-      },
+      effective_settings: this.effectiveSettings(),
     }), null, 2);
   }
 }

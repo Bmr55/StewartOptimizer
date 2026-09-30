@@ -24,6 +24,14 @@
                 </div>
                 <textarea id="requirementsInput" spellcheck="false" aria-label="Requirements JSON"></textarea>
             </label>
+            <label class="field">
+                <div class="field-header"><span>Reference Layout JSON (optional)</span></div>
+                <textarea id="referenceLayoutInput" spellcheck="false" aria-label="Reference Layout JSON" placeholder="Paste a layout to refine, or load a JSON file. Leave empty for a fresh search."></textarea>
+            </label>
+            <div class="button-row">
+                <label class="field">Load Layout JSON<input type="file" id="referenceLayoutFile" accept=".json,application/json"></label>
+                <button type="button" id="clearReferenceLayout">Clear Reference</button>
+            </div>
         </section>
 
         <section>

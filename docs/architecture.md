@@ -22,12 +22,14 @@ The p5/quaternion/Stewart scripts belong only to the [archived simulator](../arc
 | `src/workspace/statistics.js` | Running metrics, counters and reservoir samples |
 | `src/optimization/optimizer.js` | Run state and population lifecycle |
 | `src/optimization/layout-operators.js` | Generation, finalization, mutation and crossover |
+| `src/optimization/reference-seeding.js` | Imported-reference composition, bounds checks and exact seed retention |
 | `src/optimization/topology.js` | Symmetric anchor generators and declared-topology validation |
 | `src/optimization/nsga2.js` | Ranking, crowding, tournament and survivor selection |
 | `src/optimization/evaluate-layout.js` | Workspace/home/cycle scoring and objectives |
 | `src/optimization/budget.js` | Run workload estimate and limits |
 | `src/io/results.js` | Best-candidate selection and both output formats |
 | `src/io/sample-requirements.js` | Fetching the bundled example |
+| `src/io/layout-import.js` | Reference-layout parsing, field validation and mounting migration |
 | `src/math.js` | Shared numerical primitives |
 
 The UI depends on the optimizer; the optimizer composes search and evaluation functions. Both cycle and workspace evaluation depend on the pose evaluator. Numerical modules never import the UI or manipulate the DOM. Abort signals and progress callbacks cross these boundaries explicitly. NSGA-II intentionally updates evaluation rank/crowding fields; layout mutation and crossover clone their inputs.

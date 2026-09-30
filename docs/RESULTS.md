@@ -44,6 +44,7 @@ The download is `optimized_layout.json` with these top-level fields:
 | home_height | Platform home offset along Z, mm |
 | schema_version / model_version | Layout format and physical model versions |
 | id / topology / topology_parameters / mounting / migration | Selected candidate identity, geometry/model metadata, effective socket directions and sources, and legacy-upgrade note when present |
+| seed_origin / reference_diagnostics | Whether the candidate is the exact reference, a variation, fresh, or offspring; search-bound conflicts and home-pose reasons for the reference |
 | diagnostic | True when this result fails an enforced requirement |
 | metadata | Metrics described above |
 | cycle | Validity, axis, phase count, peak demands, per-servo peaks/model when valid, failure reason when invalid |
@@ -55,5 +56,7 @@ The download is `optimized_layout.json` with these top-level fields:
 The on-screen JSON has a `run`/`result` wrapper and includes bounded example poses; it is not byte-for-byte identical to the download. Pose samples store translation offsets in mm and Euler angles in radians. Internal servo angles/statistics are radians. Cycles are always checked strictly, even when workspace exploration is soft. Unavailable demand is null with an explicit reason, never an implicit zero.
 
 Replay uses the saved normalized requirements, bounds, sampling strategy/count and sequence start, seed, random algorithm, population and generation counts, mutation rate, design space, and effective joint/servo policies. `mulberry32-v1` drives candidate evolution and bounded example-pose retention. A seed is reused until changed explicitly; Randomize draws a new 32-bit seed from the browser. Equal effective settings reproduce candidate layouts and sampled results in the same model version. The work budget reserves all workspace poses, one home check and up to 64 cycle checks per candidate; early cycle failure may leave actual work below the budget.
+
+An imported reference is reevaluated. Its old metadata is never trusted, and it can remain a selectable diagnostic even if outside search bounds or invalid at home. The downloaded `run.effective_settings.reference_layout` stores the original reference for replay. See [reference import](./IMPORT.md).
 
 JSON is the only implemented export format. Import into CAD or the archived simulator may require an adapter; no general compatibility guarantee is made.

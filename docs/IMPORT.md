@@ -1,0 +1,17 @@
+# Importing a reference layout
+
+Paste a layout into **Reference Layout JSON** or use **Load Layout JSON**. This input is separate from requirements: it supplies geometry to refine, while the requirements and optimization controls still define the search bounds and evaluation. Clear Reference starts a fresh search. Headless callers pass `referenceLayout` to `new Optimizer(requirements, options)`.
+
+Supported inputs are a plain layout, a downloaded layout with `metadata`, a `{"layout": ...}` wrapper, and the on-screen `{"run": ..., "result": {"layout": ...}}` wrapper. External layout keys are `base_anchors`, `platform_anchors`, `beta_angles`, `horn_length`, `rod_length`, `servo_range`, and `home_height`. Coordinates and lengths are millimeters, beta angles are radians, and `servo_range` is degrees. The headless API also accepts the corresponding internal camel-case fields, with `servoRangeRad` in radians.
+
+Import validates six finite 3D anchors on each plate, six finite beta angles, positive horn/rod lengths and home height, and ordered finite servo bounds before evaluation. A declared `topology` and `topology_parameters` must recreate the actual anchors and beta angles. A layout with no declared topology becomes `free` without changing its geometry. Bad input produces an error naming the offending field.
+
+The exact imported layout is candidate 1. It is never finalized or repaired. It keeps every anchor coordinate, beta angle, length, servo bound, and home height. The optimizer evaluates it again under the current physical model and ignores imported metrics. Search-bound conflicts and home-pose violations are recorded as reference diagnostics; the original stays selectable and exportable even when diagnostic. Generated variations, fresh candidates, and offspring obey the effective search bounds and use the reference topology.
+
+For population 12, initialization creates **1 exact reference, 8 variations, and 3 fresh candidates**. For other supported sizes, one reference is fixed, fresh count is `Math.round((population - 1) / 4)` (nearest integer, half upward), and variations fill the remainder. The exact reference remains in the retained population after each generation. The result browser labels it **Exact reference** and shows its bounds conflicts and home-pose failures.
+
+If mounting directions are absent, import derives lower and upper socket directions from the unchanged home geometry and exposes a migration note. Supplied mounting directions follow the [joint model](./JOINT_MODEL.md). Derived directions are recalculated after geometry changes. `schema_version` and `model_version` identify the layout format and physical model separately.
+
+Downloaded JSON includes the selected layout, `seed_origin`, reference diagnostics when relevant, and `run.effective_settings`. For an imported run, effective settings also save the original `reference_layout` and deterministic seed composition so the run can be replayed from its actual starting geometry. Treat imported `metadata`, `cycle`, and `feasibility` as stale; they are recalculated on the new run.
+
+Headless replay uses `const replay = Optimizer.fromReplay(downloadedJSON); await replay.run()`. The factory restores the saved seed, sampling sequence, requirements, bounds, physical limits, topology, and original reference. It rejects exports without recorded effective settings or with an unsupported random algorithm.
