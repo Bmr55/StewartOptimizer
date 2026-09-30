@@ -93,6 +93,28 @@ test('diagnostics refresh on settings, animation, and geometry changes', () => {
   assert.equal(updates.at(-1).requestedStatus, 'accepted');
 });
 
+test('a focused but untouched limit field follows a load or settings change', () => {
+  const document = createFakeDocument();
+  const controller = createSimulatorController();
+  const options = { ballJointLimitDeg: 180, lowerBallJointLimitDeg: 120, upperBallJointLimitDeg: 130, rodLengthTolerance: 0.5 };
+  controller.loadLayout(asymmetricJointFixture(), { options });
+  mountSimulatorDiagnostics({ document, controller, host: document.createElement('section') });
+  const lower = document.getElementById('simLowerJointLimit');
+  document.activeElement = lower;
+  lower.value = '3';
+  lower.dispatch('change');
+  assert.equal(controller.getState().options.lowerBallJointLimitDeg, 3);
+  assert.equal(lower.value, '3');
+  controller.loadLayout(asymmetricJointFixture(), { options });
+  assert.equal(lower.value, '120', 'focused field kept the previous limit after a load');
+  controller.setOptions({ lowerBallJointLimitDeg: 45 });
+  assert.equal(lower.value, '45');
+  lower.value = '4';
+  controller.setAnimation('wobble', true);
+  controller.tick(0.016);
+  assert.equal(lower.value, '4', 'uncommitted typing was overwritten');
+});
+
 test('focused limit fields keep their text across animation frames and are restored after a rejected edit', () => {
   const document = createFakeDocument();
   const controller = createSimulatorController();

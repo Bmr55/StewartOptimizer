@@ -65,9 +65,12 @@ with coordinates from the chosen shared generator. Changing unrelated lengths,
 height, or servo bounds never regenerates explicit anchors. Sliders and numeric
 fields show the same current value; invalid edits, including an empty or
 non-numeric field (never read as 0), leave the last valid layout in place,
-restore the field and report a field-specific error. A focused field is not
-rewritten by animation frames, so geometry can be edited while a pattern
-plays; a rejected edit still restores the stored value.
+restore the field and report a field-specific error. A focused field whose
+text the user has changed is not rewritten by animation frames, so geometry
+can be edited while a pattern plays; a rejected edit still restores the stored
+value. A focused field that has not been edited follows every layout change,
+so Reset geometry, a candidate or reference load and a browser-save restore
+update it even in browsers where clicking a button leaves focus in the field.
 ## Browser workflow
 
 The Optimize and Simulate tabs share the retained candidate selection. The
@@ -113,4 +116,4 @@ the first animation has been started.
 
 The diagnostics panel subscribes to the same controller as the renderer. It reports the six-axis **requested** pose and last valid **rendered accepted** pose separately. A rejected request remains visible with its evaluator failures while the renderer holds the last accepted geometry. Red leg rows and matching WebGL leg colors mark failures in the requested pose; a whole-platform conditioning failure has a separate message and color. Highlighting does not imply that the rejected pose was rendered.
 
-Each leg shows lower and upper socket deflection against their effective limits, maximum deflection, rod-length deviation against the editable tolerance, and servo angle. Unavailable measurements show a dash because the evaluator may stop at the first structural failure. Lower and upper joint limits and rod tolerance can be edited in the panel; changes reevaluate the current request and last accepted pose, a focused field keeps its text while an animation plays, and a rejected value is restored. The mandatory reciprocal conditioning cutoff and optional engineering condition limit are displayed. Simulator JSON saves these effective options with the requested and accepted poses, and loading that JSON restores them.
+Each leg shows lower and upper socket deflection against their effective limits, maximum deflection, rod-length deviation against the editable tolerance, and servo angle. Unavailable measurements show a dash because the evaluator may stop at the first structural failure. Lower and upper joint limits and rod tolerance can be edited in the panel; changes reevaluate the current request and last accepted pose, a focused field keeps text the user has typed while an animation plays, an untouched focused field still follows loads and settings changes, and a rejected value is restored. The mandatory reciprocal conditioning cutoff and optional engineering condition limit are displayed. Simulator JSON saves these effective options with the requested and accepted poses, and loading that JSON restores them.

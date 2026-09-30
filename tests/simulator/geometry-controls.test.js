@@ -42,6 +42,38 @@ test('cleared or non-numeric geometry fields are rejected instead of being read 
   assert.equal(explicit.controller.getState().layout.baseAnchors[0][0], 12.5);
 });
 
+test('a focused but untouched geometry field follows Reset geometry and a new load', () => {
+  const source = asymmetricJointFixture();
+  const { document, controller, input } = mount(source);
+  const horn = input('sim-hornLength-number');
+  const rod = input('sim-rodLength-number');
+  // Safari and Firefox on macOS leave focus in the field when a button is clicked.
+  document.activeElement = horn;
+  horn.value = '77';
+  horn.dispatch('change');
+  assert.equal(controller.getState().layout.hornLength, 77);
+  assert.equal(horn.value, '77');
+  input('sim-reset-geometry').dispatch('click');
+  assert.equal(controller.getState().layout.hornLength, source.hornLength);
+  assert.equal(horn.value, String(source.hornLength), 'focused field kept the pre-reset value');
+  assert.equal(input('sim-hornLength-range').value, String(source.hornLength));
+  // Uncommitted typing in a focused field is kept through frames and a reset of another field.
+  document.activeElement = rod;
+  rod.value = '123';
+  controller.setAnimation('wobble', true);
+  controller.tick(0.016);
+  assert.equal(rod.value, '123');
+  rod.dispatch('change');
+  assert.equal(controller.getState().layout.rodLength, 123);
+  input('sim-reset-geometry').dispatch('click');
+  assert.equal(rod.value, String(source.rodLength));
+  // A wholesale load from outside the editor is also followed by a focused untouched field.
+  document.activeElement = horn;
+  const other = { ...asymmetricJointFixture(), hornLength: 61 };
+  controller.loadLayout(other, { source: { kind: 'candidate', candidateId: 3 }, options: { ballJointLimitDeg: 180 } });
+  assert.equal(horn.value, '61');
+});
+
 test('a focused geometry field keeps its text across animation frames and is restored after a rejected edit', () => {
   const { document, controller, input } = mount(asymmetricJointFixture());
   const horn = input('sim-hornLength-number');

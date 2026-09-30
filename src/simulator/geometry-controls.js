@@ -47,10 +47,23 @@ export function suggestedParameters(layout, topology) {
   return parameters;
 }
 
+// Writes the layout's value into an input unless the user is editing it: the
+// input is focused and its text has moved away from the value last written to
+// it. A focused but untouched field still follows a load or reset, which
+// matters in browsers where clicking a button does not move focus.
+export function syncInput(document, input, shown, synced, force = false) {
+  const untouched = input.value === synced.get(input) || input.value === shown;
+  if (!force && input === document.activeElement && !untouched) return false;
+  input.value = shown;
+  synced.set(input, shown);
+  return true;
+}
+
 export function createGeometryControls({ document, container, controller }) {
   if (!container) throw new Error('A simulator geometry controls container is required.');
   const editor = createGeometryEditor(controller);
   const controls = new Map();
+  const synced = new WeakMap();
   let structure = null;
   let status = null;
   let unsubscribe;
@@ -234,11 +247,10 @@ export function createGeometryControls({ document, container, controller }) {
     container.appendChild(status);
   }
 
-  // Animation ticks notify every frame; a focused input keeps the user's text
-  // unless the caller forces a rewrite after a rejected edit.
+  // Animation ticks notify every frame; an input the user is typing into keeps
+  // its text unless the caller forces a rewrite after a rejected edit.
   function sync(state, { force = false } = {}) {
     if (!state.layout) return;
-    const active = document.activeElement;
     const layout = state.layout;
     const values = { hornLength: layout.hornLength, rodLength: layout.rodLength,
       homeHeight: layout.homeHeight,
@@ -261,11 +273,11 @@ export function createGeometryControls({ document, container, controller }) {
     for (const [key, control] of controls) {
       const value = values[key];
       if (value == null) continue;
-      if (force || control.number !== active) control.number.value = String(value);
+      syncInput(document, control.number, String(value), synced, force);
       if (control.range) {
         control.range.min = String(Math.min(Number(control.range.min), value));
         control.range.max = String(Math.max(Number(control.range.max), value));
-        if (force || control.range !== active) control.range.value = String(value);
+        syncInput(document, control.range, String(value), synced, force);
       }
     }
     report(state.source?.kind === 'editable'
