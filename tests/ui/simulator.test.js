@@ -69,3 +69,51 @@ test('a simulator saved before animation reloads with a playable pattern', async
     assert.equal(element('simPlay').textContent, 'Pause');
   }
 });
+
+test('loading a reference with invalid simulator options reports the error and keeps the loaded candidate', async () => {
+  const element = await loadUI(FixtureOptimizer);
+  await element('runOptimization').handlers.click();
+  element('simUseReference').handlers.click();
+  const saved = JSON.parse(element('referenceLayoutInput').value);
+  saved.home_height = 555;
+  saved.simulator.options.rodLengthTolerance = -1;
+  element('referenceLayoutInput').value = JSON.stringify(saved);
+  element('simLoadReference').handlers.click();
+  assert.match(element('optStatus').textContent, /rodLengthTolerance/);
+  assert.match(element('simPoseStatus').textContent, /Accepted request/);
+  element('simUseReference').handlers.click();
+  const exported = JSON.parse(element('referenceLayoutInput').value);
+  assert.equal(exported.home_height, source.homeHeight);
+  assert.notEqual(exported.simulator.options.rodLengthTolerance, -1);
+  assert.deepEqual(exported.simulator.accepted, { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 });
+});
+
+test('repeated reference loads keep a single Imported reference option', async () => {
+  const element = await loadUI(FixtureOptimizer);
+  await element('runOptimization').handlers.click();
+  element('simUseReference').handlers.click();
+  for (let i = 0; i < 3; i++) element('simLoadReference').handlers.click();
+  const options = element('simCandidateSelect').innerHTML.match(/<option /g);
+  assert.equal(options.length, 2);
+  assert.equal(element('simCandidateSelect').innerHTML.match(/Imported reference/g).length, 1);
+  assert.match(element('simCandidateSelect').innerHTML, /Candidate 19/);
+});
+
+test('reset, play, and speed controls surface controller errors instead of throwing', async () => {
+  const element = await loadUI(FixtureOptimizer);
+  assert.doesNotThrow(() => element('simResetPose').handlers.click());
+  assert.match(element('simPoseStatus').textContent, /Load a layout before requesting a pose/);
+  await element('runOptimization').handlers.click();
+  assert.match(element('simPoseStatus').textContent, /Accepted request/);
+  element('simSpeed').value = '';
+  assert.doesNotThrow(() => element('simSpeed').handlers.change({ target: element('simSpeed') }));
+  assert.match(element('simPoseStatus').textContent, /Animation speed must be positive/);
+  element('simPattern').value = 'wobble';
+  assert.doesNotThrow(() => element('simPlay').handlers.click());
+  assert.match(element('simPoseStatus').textContent, /Animation speed must be positive/);
+  assert.equal(element('simPlay').textContent, 'Play');
+  element('simSpeed').value = '2';
+  element('simSpeed').handlers.change({ target: element('simSpeed') });
+  element('simPlay').handlers.click();
+  assert.equal(element('simPlay').textContent, 'Pause');
+});
