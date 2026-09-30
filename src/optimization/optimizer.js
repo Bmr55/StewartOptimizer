@@ -32,6 +32,9 @@ export class Optimizer {
     }
     return new Optimizer(settings.requirements ?? {}, {
       ...settings,
+      // Full runs saved before solved load sharing optimized the directional proxy.
+      objectiveSet: settings.objectiveSet === 'full'
+        && settings.objectiveDefinitions?.some(definition => definition.key === 'loadBalance') ? 'full-v1' : settings.objectiveSet,
       // Runs saved before adaptive sampling used the fixed 64-sample schedule.
       cycleSampling: settings.cycleSampling ?? LEGACY_CYCLE_SAMPLING,
       ranges: settings.bounds,

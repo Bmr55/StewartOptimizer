@@ -16,7 +16,7 @@ Supplied servo ratings add a separate capacity check to the feasibility flags. E
 
 ## Metric meanings
 
-The default Compact search maximizes feasible coverage and worst valid home/workspace reciprocal conditioning, and minimizes peak cycle torque and speed. Full adds home dexterity, geometric stiffness proxy, directional load-balance proxy, sampled joint-limit margin proxy, and fatigue heuristic. Metrics remain in diagnostic JSON even when they are not objectives. `run.effective_settings.objectiveSet` records `compact` or `full`; `objectiveDefinitions` records each selected key, direction, unit, and approximation label. Older ten-slot snapshots can still replay as `legacy-v2`.
+The default Compact search maximizes feasible coverage and worst valid home/workspace reciprocal conditioning, and minimizes peak cycle torque and speed. Full adds home dexterity, geometric stiffness proxy, solved rod-force load sharing (`loadSharing`), sampled joint-limit margin proxy, and fatigue heuristic. `full-v1` is the earlier Full set, which used the directional `loadBalance` proxy; exported Full runs whose `objectiveDefinitions` name `loadBalance` replay as `full-v1`. Metrics remain in diagnostic JSON even when they are not objectives. `run.effective_settings.objectiveSet` records `compact` or `full`; `objectiveDefinitions` records each selected key, direction, unit, and approximation label. Older ten-slot snapshots can still replay as `legacy-v2`.
 
 | Export metadata | Calculation / interpretation |
 | --- | --- |
@@ -28,7 +28,8 @@ The default Compact search maximizes feasible coverage and worst valid home/work
 | dexterity | Valid home-pose reciprocal actuator condition, or null if unavailable |
 | stiffness | Mean eligible minimum singular value, falling back to the home value; a dimensionless actuator proxy, not N/m |
 | isotropy | Mean reciprocal actuator condition across feasible workspace poses |
-| load_balance | Mean 1/(1 + standard deviation of normalized absolute vertical base-to-platform leg directions); a proxy, not the solved cycle loads |
+| load_sharing | 1/(1 + CV) with CV = std(abs(f))/mean(abs(f)) of the six solved rod forces, time-weighted over cycle samples with load; null for zero load or an invalid cycle |
+| load_balance | Legacy diagnostic: mean 1/(1 + standard deviation of normalized absolute vertical base-to-platform leg directions); a directional proxy, not the solved cycle loads |
 | limit_margin | Product of the worst lower/upper ball-angle headroom and violation-free pose fraction, clipped to [0,1] |
 | fatigue | (mean maximum joint-angle utilization + mean servo-span utilization) * frequency * stroke in meters; a relative heuristic, not service life or a material fatigue model |
 
@@ -53,6 +54,7 @@ The download is `optimized_layout.json` with these top-level fields:
 | metadata | Metrics described above |
 | cycle | Validity, legacy axis (null for supplied trajectories), sample count, trajectory definition/identity/source, mass model, model version, peak torque/speed/acceleration, per-servo peaks, limiting samples, failure sample/time/reason when invalid |
 | conditioning | Compact home, workspace, cycle, limit, and numerical threshold summary; nonfinite values are null |
+| actuator_utilization | Per-servo peak output-shaft torque, its CV across servos, and utilization against peak torque ratings (`rated`, `partial`, `unrated`, `unavailable`); separate from rod-force balance |
 | servo_capacity | Capacity model version, effective shared and per-servo ratings, source (`shared`, `override`, `unrated`), policy, demand reference, per-servo peak torque/speed, envelope (with limiting operating point), continuous RMS and duration-limited status and margins, grouped peak/continuous/duration status, worst fractional headroom |
 | feasibility | Independent sampled-workspace, home-pose and cycle flags, cycle sampling status (`cycleConvergence`) and whether it satisfies its policy, passing status, failed categories, and scope text |
 | constraint_policy | Strict/soft workspace policy, effective joint limits, mandatory numerical cutoff, and optional engineering condition limit |

@@ -7,6 +7,7 @@ import { isStationary, legacyTrajectory, trajectoryIdentity, trajectoryState } f
 import { CYCLE_MODEL_VERSION } from '../contracts.js';
 import { LEGACY_CYCLE_SAMPLING, normalizeCycleSampling, periodicSampleWeights } from './cycle-sampling.js';
 import { actuatorTorque } from './servo-ratings.js';
+import { createLoadSharingAccumulator, unavailableLoadSharing } from './load-sharing.js';
 
 const TRANSMISSION_CUTOFF = 1e-10;
 
@@ -191,7 +192,7 @@ export function computeCycleDemand(layout, { mass = 0, stroke = 0, frequency = 0
     return { valid: false, axis: legacyAxis, samples: evaluated, failedSample: evaluated - 1, failedTime: time,
       failedPose: state.pose, reason: result.reason, violations: result.violations ?? [],
       conditioning: { ...conditionTrack, failedPose: result.conditioning ?? null, conditionLimit },
-      sampling: samplingSummary(status), ...identity,
+      sampling: samplingSummary(status), loadSharing: unavailableLoadSharing(result.reason), ...identity,
       torqueNm: null, speedRadPerSec: null, accelerationRadPerSec2: null };
   };
   const evaluateAt = time => {
@@ -294,12 +295,14 @@ export function computeCycleDemand(layout, { mass = 0, stroke = 0, frequency = 0
     perServoPeakTorqueNm: actuatorPeaks, perServoRmsTorqueNm: actuatorRms,
     peakTorqueNm: Math.max(...actuatorPeaks), rmsTorqueNm: Math.max(...actuatorRms),
   };
+  const loadSharing = createLoadSharingAccumulator();
+  samples.forEach(({ time, result }, k) => loadSharing.add(result.rodForces, weights[k], time));
   const samplingResult = samplingSummary(status, { maxUnresolved });
   const output = { valid: true, axis: legacyAxis, samples: evaluated, periodS: period,
     torqueNm: Math.max(...torque), speedRadPerSec: Math.max(...speed),
     accelerationRadPerSec2: Math.max(...acceleration),
     perServoTorqueNm: torque, perServoSpeedRadPerSec: speed, perServoAccelerationRadPerSec2: acceleration,
-    limiting, actuator,
+    limiting, actuator, loadSharing: loadSharing.finish(),
     conditioning: { ...conditionTrack, conditionLimit },
     sampling: samplingResult,
     ...identity,

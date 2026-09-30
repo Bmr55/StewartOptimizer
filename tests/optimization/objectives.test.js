@@ -13,12 +13,15 @@ test('Compact and Full have named directions and retain proxy labels', () => {
   ]);
   assert.deepEqual(full.map(item => item.key), [
     'coverage', 'conditioningQuality', 'torque', 'speedDemand', 'dexterity',
-    'stiffness', 'loadBalance', 'limitMargin', 'fatigue',
+    'stiffness', 'loadSharing', 'limitMargin', 'fatigue',
   ]);
   assert.equal(full.length, 9);
-  for (const key of ['stiffness', 'loadBalance', 'limitMargin', 'fatigue']) {
+  for (const key of ['stiffness', 'loadSharing', 'limitMargin', 'fatigue']) {
     assert.ok(full.find(item => item.key === key).approximation);
   }
+  const legacyFull = objectiveDefinitions('full-v1');
+  assert.equal(legacyFull[6].key, 'loadBalance');
+  assert.match(legacyFull[6].approximation, /legacy directional proxy/);
   assert.equal(compact.find(item => item.key === 'torque').unit, 'N m');
   assert.equal(compact.find(item => item.key === 'speedDemand').unit, 'rad/s');
   assert.throws(() => normalizeObjectiveSet('unknown'), /objectiveSet/);
@@ -28,7 +31,8 @@ test('unavailable demand is worst in either objective set and passing still wins
   const metrics = { coverage: 100, conditioningQuality: 0.2, torque: 3, speedDemand: 4,
     dexterity: 0.1, stiffness: 2, loadBalance: 0.9, limitMargin: 0.8, fatigue: 0.3 };
   assert.deepEqual(objectiveValues(metrics, 'compact'), [100, 0.2, -3, -4]);
-  assert.deepEqual(objectiveValues(metrics, 'full'), [100, 0.2, -3, -4, 0.1, 2, 0.9, 0.8, -0.3]);
+  assert.deepEqual(objectiveValues(metrics, 'full-v1'), [100, 0.2, -3, -4, 0.1, 2, 0.9, 0.8, -0.3]);
+  assert.deepEqual(objectiveValues({ ...metrics, loadSharing: 0.7 }, 'full'), [100, 0.2, -3, -4, 0.1, 2, 0.7, 0.8, -0.3]);
   const missing = { ...metrics, torque: null, speedDemand: NaN };
   assert.deepEqual(objectiveValues(missing, 'compact').slice(-2), [-Infinity, -Infinity]);
   const passing = { ...metrics, layout: { id: 1 }, feasibility: { passing: true } };

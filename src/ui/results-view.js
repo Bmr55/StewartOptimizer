@@ -2,7 +2,7 @@ import { METRICS } from '../contracts.js';
 import { failureCategories, isPassing, rankCandidates } from '../io/results.js';
 
 const AXES = ['torque', 'speedDemand', 'coverage', 'conditioningQuality', 'dexterity',
-  'stiffness', 'loadBalance', 'isotropy', 'limitMargin', 'fatigue'];
+  'stiffness', 'loadSharing', 'loadBalance', 'isotropy', 'limitMargin', 'fatigue'];
 const label = key => `${key.replace(/([A-Z])/g, ' $1')} (${METRICS[key].unit})`;
 const printable = value => Number.isFinite(value) ? Number(value).toPrecision(4) : 'unavailable';
 const escapeHtml = value => String(value).replace(/[&<>"']/g, char => ({
@@ -135,9 +135,11 @@ export function createResultsView(document, onSelect, ChartClass = globalThis.Ch
       : '';
     const cycle = selected.cycle;
     const cycleText = cycle?.trajectoryId ? ` Cycle ${cycle.trajectorySource === 'supplied' ? 'trajectory' : 'single-axis'} ${cycle.trajectoryId}; ${cycle.massModel === 'rigid-body' ? 'rigid-body mass properties' : 'legacy centered point mass'}.` : '';
+    const sharing = cycle?.loadSharing;
+    const sharingText = sharing ? ` Rod load sharing ${sharing.status === 'available' ? `CV ${printable(sharing.meanCv)} (score ${printable(sharing.balanceScore)})` : sharing.status}.` : '';
     const sampled = cycle?.sampling;
     const samplingText = sampled ? ` Cycle sampling ${sampled.status} after ${sampled.evaluatedSamples} samples${sampled.status === 'budget-limited' ? ' (inconclusive)' : ''}.` : '';
-    summary.textContent = `Candidate ${selectedId}: ${isPassing(selected) ? 'passing' : `diagnostic (${failures.join(', ') || 'requirements failed'})`}. Feasible sampled coverage ${printable(selected.coverage)}%. Home ${flags.homePoseSatisfied ? 'pass' : 'fail'}; workspace ${flags.sampledWorkspaceSatisfied ? 'pass' : 'fail'}; cycle ${flags.cycleSatisfied ? 'pass' : 'fail'}. Torque ${printable(selected.torque)} N m; speed ${printable(selected.speedDemand)} rad/s.${cycleText}${samplingText}${capacityText}${details}`;
+    summary.textContent = `Candidate ${selectedId}: ${isPassing(selected) ? 'passing' : `diagnostic (${failures.join(', ') || 'requirements failed'})`}. Feasible sampled coverage ${printable(selected.coverage)}%. Home ${flags.homePoseSatisfied ? 'pass' : 'fail'}; workspace ${flags.sampledWorkspaceSatisfied ? 'pass' : 'fail'}; cycle ${flags.cycleSatisfied ? 'pass' : 'fail'}. Torque ${printable(selected.torque)} N m; speed ${printable(selected.speedDemand)} rad/s.${cycleText}${samplingText}${sharingText}${capacityText}${details}`;
   }
 
   function choose(id) {
