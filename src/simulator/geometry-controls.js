@@ -70,7 +70,8 @@ export function createGeometryControls({ document, container, controller }) {
 
   function report(message, error = false) {
     if (!status) return;
-    status.textContent = message;
+    // The status is aria-live and sync runs every animation frame.
+    if (status.textContent !== message) status.textContent = message;
     status.classList.toggle('error', error);
   }
 
