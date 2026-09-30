@@ -1,5 +1,6 @@
 import { vectorMagnitude, vectorNormalize, vectorSub } from '../math.js';
 import { computeHornTip, solveServoAngle, worldToHornLocal } from './kinematics.js';
+import { MODEL_VERSION } from '../contracts.js';
 
 const JOINTS = ['lower', 'upper'];
 
@@ -76,11 +77,20 @@ export function resolveMounting(layout, { imported = false } = {}) {
       };
     });
   }
-  const migration = imported && input == null ? {
-    upgraded: true,
-    fromModelVersion: layout.modelVersion ?? layout.model_version ?? 1,
-    toModelVersion: 2,
-    note: 'Legacy single-angle joint model upgraded to home-aligned lower and upper sockets; previous metrics are stale and must be recalculated.',
-  } : null;
-  return { mounting, migration };
+  return { mounting, migration: imported && input == null ? migrationNote(layout) : null };
+}
+
+// Only a pre-socket-model import is an upgrade. A current-version layout that simply
+// omits `mounting` gets derived sockets and a neutral note.
+function migrationNote(layout) {
+  const fromModelVersion = layout.modelVersion ?? layout.model_version ?? 1;
+  const upgraded = fromModelVersion < MODEL_VERSION;
+  return {
+    upgraded,
+    fromModelVersion,
+    toModelVersion: MODEL_VERSION,
+    note: upgraded
+      ? 'Legacy single-angle joint model upgraded to home-aligned lower and upper sockets; previous metrics are stale and must be recalculated.'
+      : 'No mounting data supplied; lower and upper socket directions derived from the home geometry.',
+  };
 }

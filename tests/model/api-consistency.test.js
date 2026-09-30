@@ -130,3 +130,16 @@ test('evaluateLayout honours a supplied trajectory without an explicit trajector
   assert.throws(() => evaluateCycle(pairedFixture(), { ...base, trajectorySource: 'supplied', stroke: 0, frequency: 0 }),
     /requires a trajectory/);
 });
+
+test('evaluateLayout normalizes a JSON-shaped trajectory instead of passing it through raw', async () => {
+  const base = { ranges: {}, sampling: { strategy: 'grid' }, payload: 2, servoRangeRad: [-Math.PI, Math.PI], ballJointLimitDeg: 180 };
+  const json = { frequency_hz: 2, components: [{ axis: 'Z', amplitude_mm: 5 }] };
+  const raw = await evaluateLayout(pairedFixture(), { ...base, trajectory: json });
+  const normalized = await evaluateLayout(pairedFixture(), { ...base, trajectory: normalizeTrajectory(json) });
+  assert.equal(raw.cycle.valid, true);
+  assert.equal(raw.cycle.trajectoryId, 'sinusoid-v1:f=2Hz;z:5mm@0deg');
+  assert.deepEqual(raw.cycle, normalized.cycle);
+  assert.equal(raw.fatigue, normalized.fatigue);
+  assert.throws(() => evaluateCycle(pairedFixture(), { ...base, trajectory: { frequency_hz: 2 } }), /components must be an array/);
+  assert.throws(() => evaluateCycle(pairedFixture(), { ...base, trajectory: 'z' }), /must be an object/);
+});

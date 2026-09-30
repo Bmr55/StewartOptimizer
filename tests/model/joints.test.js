@@ -6,6 +6,7 @@ import { computeWorkspace } from '../../src/workspace/sweep.js';
 import { computeCycleDemand } from '../../src/model/cycle.js';
 import { hornLocalToWorld, worldToHornLocal } from '../../src/model/kinematics.js';
 import { resolveMounting } from '../../src/model/mounting.js';
+import { MODEL_VERSION } from '../../src/contracts.js';
 
 const close = (a, b, tolerance = 1e-6) => assert.ok(Math.abs(a - b) <= tolerance, `${a} != ${b}`);
 
@@ -119,6 +120,23 @@ test('legacy mounting upgrade preserves geometry and rederives after home edits'
   assert.notDeepEqual(moved.lower[0].direction, first);
   layout.mounting.lower[0] = { source: 'supplied', direction: [1, 0, 0] };
   assert.deepEqual(resolveMounting(layout).mounting.lower[0], { source: 'supplied', direction: [1, 0, 0] });
+});
+
+test('a current-version layout without mounting gets derived sockets and a neutral note, not an upgrade', () => {
+  const layout = jointFixture();
+  delete layout.mounting;
+  layout.model_version = MODEL_VERSION;
+  const resolved = resolveMounting(layout, { imported: true });
+  assert.deepEqual(resolved.migration, { upgraded: false, fromModelVersion: MODEL_VERSION, toModelVersion: MODEL_VERSION,
+    note: 'No mounting data supplied; lower and upper socket directions derived from the home geometry.' });
+  assert.ok(resolved.mounting.lower.every(entry => entry.source === 'derived'));
+  assert.equal(resolveMounting(layout).migration, null);
+  layout.model_version = 1;
+  const legacy = resolveMounting(layout, { imported: true }).migration;
+  assert.equal(legacy.upgraded, true);
+  assert.equal(legacy.fromModelVersion, 1);
+  assert.equal(legacy.toModelVersion, MODEL_VERSION);
+  assert.match(legacy.note, /Legacy single-angle/);
 });
 
 test('malformed or zero mounting overrides are rejected', () => {

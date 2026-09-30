@@ -51,10 +51,11 @@ export function normalizeStiffnessModel(input) {
     const material = input.rod_material;
     if (!material || typeof material !== 'object' || Array.isArray(material)) throw new TypeError(`${name('rod_material')} must be an object.`);
     const modulusPa = positive(material.youngs_modulus_gpa, name('rod_material.youngs_modulus_gpa')) * 1e9;
-    if ((material.area_mm2 == null) === (material.diameter_mm == null)) {
+    // Only omission selects the other field; an explicit null is rejected like any other non-number.
+    if ((material.area_mm2 === undefined) === (material.diameter_mm === undefined)) {
       throw new RangeError(`${name('rod_material')} needs exactly one of area_mm2 or diameter_mm.`);
     }
-    const areaM2 = material.area_mm2 != null ? positive(material.area_mm2, name('rod_material.area_mm2')) * 1e-6
+    const areaM2 = material.area_mm2 !== undefined ? positive(material.area_mm2, name('rod_material.area_mm2')) * 1e-6
       : Math.PI * (positive(material.diameter_mm, name('rod_material.diameter_mm')) / 2000) ** 2;
     rod = { kind: 'material', modulusPa, areaM2 };
   }

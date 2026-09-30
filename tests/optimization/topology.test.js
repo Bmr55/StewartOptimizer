@@ -112,6 +112,21 @@ test('exported layouts round-trip topology, parameters, geometry, units, and hom
   }
 });
 
+test('headless designSpace horn and rod bounds are honoured; requirement bounds still win', () => {
+  const option = new Optimizer({}, { designSpace: { hornLengthBounds: [50, 60], rodLengthBounds: [200, 210],
+    homeHeightBounds: [100, 110] } });
+  assert.deepEqual(option.designSpace.hornLengthBounds, [50, 60]);
+  assert.deepEqual(option.designSpace.rodLengthBounds, [200, 210]);
+  assert.deepEqual(option.designSpace.homeHeightBounds, [100, 110]);
+  for (let i = 0; i < 20; i++) checkBounds(option.createRandomLayout(), option.designSpace);
+  const requirement = new Optimizer({ horn_length_bounds_mm: [40, 45], rod_length_bounds_mm: [300, 310] },
+    { designSpace: { hornLengthBounds: [50, 60], rodLengthBounds: [200, 210] } });
+  assert.deepEqual(requirement.designSpace.hornLengthBounds, [40, 45]);
+  assert.deepEqual(requirement.designSpace.rodLengthBounds, [300, 310]);
+  assert.deepEqual(new Optimizer().designSpace.hornLengthBounds, DEFAULT_DESIGN_SPACE.hornLengthBounds);
+  assert.throws(() => new Optimizer({}, { designSpace: { hornLengthBounds: [60, 50] } }), /horn/i);
+});
+
 test('new searches default to C3 paired and reject unsupported topology and invalid height bounds', () => {
   assert.equal(new Optimizer().topology, 'c3_paired');
   assert.throws(() => new Optimizer({}, { topology: 'hexagonal' }), /topology must be/);
