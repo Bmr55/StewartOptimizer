@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import { createApp } from '../src/ui/app.js';
 export const sampleText = fs.readFileSync(new URL('../Additional_Repo_Stuff/examples/Sample_Requirements.json', import.meta.url), 'utf8');
-export async function loadUI(Optimizer) {
+export async function loadUI(Optimizer, options = {}) {
   const elements = new Map();
   const element = id => {
     if (!elements.has(id)) elements.set(id, {
@@ -15,7 +15,7 @@ export async function loadUI(Optimizer) {
   const document = { getElementById: element, createElement: () => element('popup'),
     body: { appendChild() {} }, addEventListener() {} };
   const app = createApp({ document, window: { addEventListener() {} },
-    Optimizer, loadDefaultRequirements: async () => sampleText });
+    Optimizer, loadDefaultRequirements: async () => sampleText, ...options });
   await app.ready;
   element('optPopulation').value = '4';
   element('optGenerations').value = '1';
