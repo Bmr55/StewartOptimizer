@@ -18,12 +18,13 @@ import { createGeometryControls } from '../simulator/geometry-controls.js';
 import { mountSimulatorDiagnostics } from '../simulator/diagnostics.js';
 import { LOCAL_WORKSPACE_KEY, captureLocalWorkspace, parseLocalWorkspace,
     applyLocalWorkspace } from './local-workspace.js';
+import { DEFAULT_BALL_JOINT_LIMIT_DEG } from '../contracts.js';
 
 function simulatorOptions(settings = {}, layout = {}) {
     return {
-        ballJointLimitDeg: settings.ballJointLimitDeg ?? 45,
-        lowerBallJointLimitDeg: settings.lowerBallJointLimitDeg ?? settings.ballJointLimitDeg ?? 45,
-        upperBallJointLimitDeg: settings.upperBallJointLimitDeg ?? settings.ballJointLimitDeg ?? 45,
+        ballJointLimitDeg: settings.ballJointLimitDeg ?? DEFAULT_BALL_JOINT_LIMIT_DEG,
+        lowerBallJointLimitDeg: settings.lowerBallJointLimitDeg ?? settings.ballJointLimitDeg ?? DEFAULT_BALL_JOINT_LIMIT_DEG,
+        upperBallJointLimitDeg: settings.upperBallJointLimitDeg ?? settings.ballJointLimitDeg ?? DEFAULT_BALL_JOINT_LIMIT_DEG,
         conditionLimit: settings.conditionLimit ?? null,
         servoRangeRad: layout.servoRangeRad,
         rodLengthTolerance: settings.rodLengthTolerance ?? 0.5,

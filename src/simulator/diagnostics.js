@@ -1,4 +1,6 @@
 import { radToDeg } from '../math.js';
+import { DEFAULT_BALL_JOINT_LIMIT_DEG } from '../contracts.js';
+import { NUMERICAL_RECIPROCAL_CUTOFF } from '../model/conditioning.js';
 
 const numeric = value => Number.isFinite(value) ? value : null;
 const rounded = (value, digits = 3) => value == null ? '—' : Number(value.toFixed(digits)).toString();
@@ -9,8 +11,8 @@ const angleDeg = value => numeric(value) == null ? null : radToDeg(value);
 
 export function buildPoseDiagnostics(state) {
   const options = state?.options ?? {};
-  const lowerLimitDeg = options.lowerBallJointLimitDeg ?? options.ballJointLimitDeg ?? 45;
-  const upperLimitDeg = options.upperBallJointLimitDeg ?? options.ballJointLimitDeg ?? 45;
+  const lowerLimitDeg = options.lowerBallJointLimitDeg ?? options.ballJointLimitDeg ?? DEFAULT_BALL_JOINT_LIMIT_DEG;
+  const upperLimitDeg = options.upperBallJointLimitDeg ?? options.ballJointLimitDeg ?? DEFAULT_BALL_JOINT_LIMIT_DEG;
   const rodLengthToleranceMm = options.rodLengthTolerance ?? 0.5;
   const conditionLimit = options.conditionLimit ?? null;
   const assessment = state?.assessment ?? null;
@@ -44,7 +46,8 @@ export function buildPoseDiagnostics(state) {
     acceptedStatus: state?.accepted ? 'retained' : 'none',
     source: state?.requestSource ?? null,
     lowerLimitDeg, upperLimitDeg, rodLengthToleranceMm, conditionLimit,
-    numericalThreshold: assessment?.conditioning?.numericalThreshold ?? 1e-10,
+    // Pose conditioning applies the shared cutoff but does not echo it back.
+    numericalThreshold: NUMERICAL_RECIPROCAL_CUTOFF,
     legs,
     globalFailures: violations.filter(violation => !Number.isInteger(violation.leg))
       .map(violation => ({ type: violation.type, reason: violation.reason ?? null })),
@@ -92,7 +95,7 @@ export function mountSimulatorDiagnostics({ document, controller, host = documen
     setValue('simLowerJointLimit', diagnostics.lowerLimitDeg);
     setValue('simUpperJointLimit', diagnostics.upperLimitDeg);
     setValue('simRodTolerance', diagnostics.rodLengthToleranceMm);
-    field('simConditionPolicy').textContent = `Condition limit: ${diagnostics.conditionLimit ?? 'none'}; mandatory reciprocal cutoff: 1e-10. Joint limits ${diagnostics.lowerLimitDeg}° lower / ${diagnostics.upperLimitDeg}° upper; rod tolerance ±${diagnostics.rodLengthToleranceMm} mm.`;
+    field('simConditionPolicy').textContent = `Condition limit: ${diagnostics.conditionLimit ?? 'none'}; mandatory reciprocal cutoff: ${diagnostics.numericalThreshold}. Joint limits ${diagnostics.lowerLimitDeg}° lower / ${diagnostics.upperLimitDeg}° upper; rod tolerance ±${diagnostics.rodLengthToleranceMm} mm.`;
     field('simGlobalFailures').textContent = diagnostics.globalFailures.length
       ? `Whole-platform failure: ${diagnostics.globalFailures.map(failure => failure.type).join(', ')}.` : 'No whole-platform failure.';
     field('simDiagnosticRows').innerHTML = diagnostics.legs.map(leg => {

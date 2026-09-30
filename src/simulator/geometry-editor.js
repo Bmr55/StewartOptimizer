@@ -1,20 +1,20 @@
 import { degToRad } from '../math.js';
 import { ensureLayout } from '../model/pose.js';
 import { resolveMounting } from '../model/mounting.js';
-import { topologyGeometry, validateTopology } from '../optimization/topology.js';
+import { topologyFields, topologyGeometry, validateTopology } from '../optimization/topology.js';
 import { TOPOLOGIES } from '../contracts.js';
 
 const copy = value => structuredClone(value);
 const loadKey = state => state.layout == null ? null
   : JSON.stringify({ layout: state.layout, source: state.source });
 
-export const PARAMETER_FIELDS = Object.freeze({
-  circular: ['base_radius', 'platform_radius', 'base_orientation', 'platform_orientation', 'beta_offset', 'beta_pair_offset'],
-  c3_paired: ['base_radius', 'platform_radius', 'base_pair_gap', 'platform_pair_gap',
-    'base_orientation', 'platform_orientation', 'beta_offset'],
-  rectangular_paired: ['base_radius', 'platform_radius', 'base_aspect', 'platform_aspect',
-    'base_orientation', 'platform_orientation', 'beta_offset', 'beta_pair_offset'],
-});
+// The editable parameters of each parametric topology are the shared
+// `topologyFields`, shown in the editor's order: sizes (radii, then C3 gaps or
+// rectangular aspects), then plate turns, then horn direction offsets.
+const DISPLAY_GROUPS = [/_radius$/, /_(gap|aspect)$/, /_orientation$/, /^beta_/];
+const displayOrder = fields => DISPLAY_GROUPS.flatMap(group => fields.filter(field => group.test(field)));
+export const PARAMETER_FIELDS = Object.freeze(Object.fromEntries(TOPOLOGIES.filter(topology => topology !== 'free')
+  .map(topology => [topology, Object.freeze(displayOrder(topologyFields(topology)))])));
 
 export function geometryMode(layout) {
   if (!layout) return null;

@@ -45,12 +45,13 @@ Supplied servo ratings add a separate capacity check to the feasibility flags. E
 
 ## Metric meanings
 
-The default Compact search maximizes feasible coverage and worst valid home/workspace reciprocal conditioning, and minimizes peak cycle torque and speed. Full adds home dexterity, geometric stiffness proxy, solved rod-force load sharing (`loadSharing`), sampled joint-limit margin proxy, and fatigue heuristic. With `stiffness_model.use_as_objective`, Full uses `physicalStiffness` in place of the stiffness proxy, and `objectiveDefinitions` records it. `full-v1` is the earlier Full set, which used the directional `loadBalance` proxy; exported Full runs whose `objectiveDefinitions` name `loadBalance` replay as `full-v1`. Metrics remain in diagnostic JSON even when they are not objectives. `run.effective_settings.objectiveSet` records `compact` or `full`; `objectiveDefinitions` records each selected key, direction, unit, and approximation label. Older ten-slot snapshots can still replay as `legacy-v2`.
+The default Compact search maximizes feasible coverage and worst valid home/workspace reciprocal conditioning, and minimizes peak cycle torque and speed. Full adds home dexterity, geometric stiffness proxy, solved rod-force load sharing (`loadSharing`), sampled joint-limit margin proxy, and fatigue heuristic. With `stiffness_model.use_as_objective`, Full uses `physicalStiffness` in place of the stiffness proxy, and `objectiveDefinitions` records it. `full-v1` is the earlier Full set, which used the directional `loadBalance` proxy; exported Full runs whose `objectiveDefinitions` name `loadBalance` replay as `full-v1`. Metrics remain in diagnostic JSON even when they are not objectives. `run.effective_settings.objectiveSet` records one of `compact`, `full`, `full-v1` (a replayed older Full run) or `legacy-v2` (a replayed ten-slot snapshot); `objectiveDefinitions` records each selected key, direction, unit, and approximation label. Older ten-slot snapshots can still replay as `legacy-v2`.
 
 | Export metadata | Calculation / interpretation |
 | --- | --- |
 | coverage | Feasible sampled workspace percentage |
 | relaxed_coverage | Separate workspace exploration percentage |
+| payload_coverage | Capacity-qualified static-support coverage percentage when `workspace_payload_support` is enabled and rated; otherwise null |
 | conditioning_quality | Worst reciprocal condition among valid home/workspace samples, or null if unavailable |
 | torque | Peak sampled absolute servo torque in N m, or null for an invalid cycle |
 | speed_demand | Peak sampled absolute servo speed in rad/s, or null for an invalid cycle |
