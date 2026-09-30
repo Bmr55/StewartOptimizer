@@ -4,7 +4,7 @@ This guide describes the implemented root application. The supplemental v3/v4 sp
 
 ## Runtime
 
-Run `npm run dev` with Node.js >=22 and open the printed URL. This local static server binds to 127.0.0.1; `-- --port 0` chooses a free port. Any other static server also works. The HTML loads a stylesheet and `src/main.js`, which initializes native JavaScript modules. The sample loader resolves its JSON URL relative to its module. There is no backend, database, bundler or third-party math dependency in the active app.
+Run `npm run dev` with Node.js >=22 and open the printed URL. This local static server binds to 127.0.0.1; `-- --port 0` chooses a free port. Any other static server also works. The HTML loads a stylesheet, a locally bundled Chart.js script for the results plot, and `src/main.js`, which initializes native JavaScript modules. The sample loader resolves its JSON URL relative to its module. There is no backend, database, bundler or third-party math dependency in the active app.
 
 The p5/quaternion/Stewart scripts belong only to the [archived simulator](../archive/simulator/README.md). Its prebuilt bundle includes separate third-party dependencies and has its own locked build command.
 

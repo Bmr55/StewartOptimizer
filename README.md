@@ -1,6 +1,6 @@
 # Stewart Platform Optimizer
 
-A browser-based prototype for exploring six-servo Stewart platform geometries. Supply payload and movement requirements, evolve candidate layouts with NSGA-II, inspect sampled workspace/cycle results, and view a selected layout in the integrated WebGL2 simulator. Computation stays in the browser; the active app has no external runtime dependencies or backend.
+A browser-based prototype for exploring six-servo Stewart platform geometries. Supply payload and movement requirements, evolve candidate layouts with NSGA-II, inspect sampled workspace/cycle results, and view a selected layout in the integrated WebGL2 simulator. Computation stays in the browser; the app has no backend, and its Chart.js results plot is bundled locally.
 
 ## Run the application
 
@@ -11,6 +11,8 @@ npm run dev
 ```
 
 Open the printed local URL. If port 8000 is occupied, use `npm run dev -- --port 8001`; port 0 selects a free port. The server binds only to 127.0.0.1. Any static HTTP server also works, including `python -m http.server 8000 --bind 127.0.0.1`. Opening index.html as a local file is not supported because modules and sample JSON use browser loading rules.
+
+For a persistent LAN deployment on the Ubuntu server, clone the repository and run `docker compose up -d --build` from its root. The site listens on port 8081; the Compose service restarts after a reboot.
 
 1. The supplied [sample requirements](./examples/sample-requirements.json) load automatically.
 2. Edit the requirements JSON and/or controls. Optionally paste or load a [reference layout](./docs/IMPORT.md) in its separate input to refine a previous design. Choose a [layout topology](./docs/TOPOLOGIES.md) and home-height bounds for fresh searches. Explicit control overrides win; untouched controls follow edited JSON defaults. Load Sample Requirements resets the controls.

@@ -1,0 +1,7 @@
+.git
+node_modules
+archive
+docs
+scripts
+tests
+package*.json
