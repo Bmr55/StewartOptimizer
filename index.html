@@ -323,8 +323,23 @@
                         </div>
                         <div class="button-row"><button id="simPlay" aria-pressed="false">Play</button><label><input id="simGamepad" type="checkbox"> Gamepad</label></div>
                         <div class="button-row"><label><input id="simMarkers" type="checkbox" checked> Markers</label><label><input id="simTraces" type="checkbox"> Traces</label><button id="simClearTrace">Clear trace</button></div>
-                        <h2>Overlays</h2>
+                        <div class="section-title">
+                            <h2>Overlays</h2>
+                            <button type="button" class="info-button" id="simOverlaysInfoButton" aria-controls="simOverlaysInfo" aria-label="About the overlays"></button>
+                        </div>
                         <div id="simOverlays" class="button-row" role="group" aria-label="Overlays"><label><input id="simOverlayGroundGrid" type="checkbox" checked> Ground grid</label><label><input id="simOverlayServoArcs" type="checkbox" checked> Servo arcs</label><label><input id="simOverlayJointCones" type="checkbox" checked> Joint cones</label><label><input id="simOverlayWorkspaceBox" type="checkbox" checked> Workspace box</label><label><input id="simOverlayRequestedGhost" type="checkbox" checked> Rejected pose ghost</label><label><input id="simOverlayPlatformAxes" type="checkbox" checked> Platform axes</label><label><input id="simOverlayWorldAxes" type="checkbox" checked> World axes</label></div>
+                        <div id="simOverlaysInfo" class="field-info-panel sim-overlay-info" hidden>
+                            <dl>
+                                <dt>Ground grid</dt><dd>Dim lines every 25 mm on the base plane (z = 0), reaching 1.5 times the base radius, for scale.</dd>
+                                <dt>Servo arcs</dt><dd>Each servo&#39;s allowed travel, drawn as an arc of horn length about its base anchor, with ticks at both stops and a marker at the current horn angle. Grey normally, yellow within 5° of a stop, red when the requested pose breaks that servo&#39;s range.</dd>
+                                <dt>Joint cones</dt><dd>The cone each ball joint allows at the current pose, with its tip at the rod end; the rod must stay inside it. Same grey, yellow and red scheme. It shows the joint limit only, not collisions.</dd>
+                                <dt>Workspace box</dt><dd>The requirement X, Y and Z ranges as a box around the home pose: the region the platform origin must reach. Rotation ranges are not drawn. It appears when the layout comes from an optimizer run, or from simulator JSON that carries ranges or a run.</dd>
+                                <dt>Rejected pose ghost</dt><dd>When a requested pose is rejected, a dimmed outline of that pose beside the held accepted pose. Failing legs are red, and a whole-platform failure outlines it in magenta.</dd>
+                                <dt>Platform axes</dt><dd>The platform&#39;s own X (red), Y (green) and Z (blue) directions at the accepted pose.</dd>
+                                <dt>World axes</dt><dd>The fixed X (red), Y (green) and Z (blue) axes at the origin, 30 mm long.</dd>
+                            </dl>
+                            <p>The toggles are saved with simulator JSON and browser saves.</p>
+                        </div>
                     </div>
                 </div>
             </section>

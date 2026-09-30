@@ -22,6 +22,20 @@ try {
   assert.match(await page.locator('#simRequestedDiagnostic').textContent(), /accepted/);
   assert.match(await page.locator('#simAcceptedDiagnostic').textContent(), /X 0 Y 0 Z 0/);
 
+  // The Overlays info button opens an inline panel explaining every toggle.
+  const overlayInfo = page.locator('#simOverlaysInfo');
+  assert.equal(await overlayInfo.isVisible(), false);
+  await page.locator('#simOverlaysInfoButton').click();
+  assert.equal(await overlayInfo.isVisible(), true);
+  assert.equal(await page.locator('#simOverlaysInfoButton').getAttribute('aria-expanded'), 'true');
+  assert.equal(await page.locator('.info-popup.visible').count(), 0);
+  const overlayLabels = await page.locator('#simOverlays label').allInnerTexts();
+  assert.deepEqual(await overlayInfo.locator('dt').allInnerTexts(), overlayLabels.map(label => label.trim()));
+  await page.mouse.wheel(0, 200);
+  assert.equal(await overlayInfo.isVisible(), true, 'scrolling closed the overlay panel');
+  await page.locator('#simOverlaysInfoButton').click();
+  assert.equal(await overlayInfo.isVisible(), false);
+
   await page.locator('#simZInput').fill('100');
   await page.locator('#simZInput').press('Tab');
   assert.match(await page.locator('#simRequestedDiagnostic').textContent(), /rejected/);

@@ -42,6 +42,11 @@ main {
 .sim-axis input[type="range"] { width: 100%; }
 .sim-controls h2 { font-size: 18px; margin-top: 6px; }
 .sim-controls p { font-size: 13px; line-height: 1.5; }
+.sim-overlay-info { margin-top: 8px; }
+.sim-overlay-info dl { margin: 0; }
+.sim-overlay-info dt { font-weight: 600; }
+.sim-overlay-info dd { margin: 0 0 8px; }
+.sim-overlay-info p { margin: 0; }
 #simGeometryControls:empty, #simDiagnostics:empty { display: none; }
 .sim-diagnostic-settings { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
 .sim-diagnostic-table-wrap { overflow-x: auto; }
