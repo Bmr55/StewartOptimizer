@@ -29,12 +29,26 @@
                 </div>
                 <textarea id="requirementsInput" spellcheck="false" aria-label="Requirements JSON"></textarea>
             </label>
-            <label class="field">
-                <div class="field-header"><span>Reference Layout JSON (optional)</span></div>
-                <textarea id="referenceLayoutInput" spellcheck="false" aria-label="Reference Layout JSON" placeholder="Paste a layout to refine, or load a JSON file. Leave empty for a fresh search."></textarea>
-            </label>
-            <div class="button-row">
-                <label class="field">Load Layout JSON<input type="file" id="referenceLayoutFile" accept=".json,application/json"></label>
+            <div class="field">
+                <label class="field-header" for="referenceLayoutInput"><span>Reference Layout JSON (optional)</span></label>
+                <p class="field-help" id="referenceLayoutHelp">Have a layout you want to improve? Paste a previously downloaded Layout JSON here, or load its file below. The optimizer keeps that design as an exact candidate and creates variations from it. The requirements above still determine how each design is evaluated. Leave this empty to start a fresh search.</p>
+                <details class="field-info-panel">
+                    <summary>Layout format and units</summary>
+                    <div class="field-info-content">
+                        <p>A downloaded Layout JSON works as-is. For a hand-written layout, provide these fields:</p>
+                        <ul>
+                            <li><code>base_anchors</code> and <code>platform_anchors</code>: six <code>[x, y, z]</code> coordinates each, in millimeters.</li>
+                            <li><code>beta_angles</code>: six servo angles, in radians.</li>
+                            <li><code>horn_length</code>, <code>rod_length</code>, and <code>home_height</code>: positive lengths, in millimeters.</li>
+                            <li><code>servo_range</code>: <code>[minimum, maximum]</code> angles, in degrees.</li>
+                        </ul>
+                        <p>All numbers must be finite. If you include a topology, its parameters must match the supplied geometry. Imported scores are recalculated using the current requirements.</p>
+                    </div>
+                </details>
+                <textarea id="referenceLayoutInput" spellcheck="false" aria-describedby="referenceLayoutHelp" placeholder="Paste a downloaded layout JSON here"></textarea>
+            </div>
+            <div class="button-row reference-actions">
+                <label class="field reference-file-field">Load Layout JSON<input type="file" id="referenceLayoutFile" accept=".json,application/json"></label>
                 <button type="button" id="clearReferenceLayout">Clear Reference</button>
             </div>
         </section>
