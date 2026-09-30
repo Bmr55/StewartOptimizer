@@ -89,6 +89,14 @@ export function evaluateDynamicPose(layout, state, massProperties, options = {})
   const result = evaluatePose(layout, state.pose, { ...options, ballJointClamp: false, recordLegData: true });
   if (!result.reachable) return { valid: false, reason: 'Cycle pose violates a modeled mechanical constraint.',
     violations: result.violations, conditioning: result.conditioning };
+  return dynamicsAtPose(layout, result, state, massProperties);
+}
+
+export const staticState = pose => ({ pose, velocity: [0, 0, 0], acceleration: [0, 0, 0],
+  omega: [0, 0, 0], angularAcceleration: [0, 0, 0] });
+
+// Rod forces and servo demand for a valid pose result recorded with leg data.
+export function dynamicsAtPose(layout, result, state, massProperties) {
   const motion = physicalMotionJacobian(layout, result);
   if (!motion.rows) return { valid: false, reason: motion.reason, leg: motion.leg, conditioning: result.conditioning };
   const equilibrium = Array.from({ length: 6 }, (_, row) => motion.A.map(col => col[row]));

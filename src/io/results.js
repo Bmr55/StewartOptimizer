@@ -14,6 +14,7 @@ export function failureCategories(evaluation) {
   if (flags.conditionSatisfied === false) categories.add('conditioning');
   if (flags.cycleConvergenceSatisfied === false) categories.add('cycle_convergence');
   if (flags.servoCapacityEnforced && flags.servoCapacitySatisfied === false) categories.add('servo_capacity');
+  if (flags.payloadSupportEnforced && flags.payloadSupportSatisfied === false) categories.add('payload_support');
   return [...categories].sort();
 }
 
@@ -118,6 +119,7 @@ export function displayResult(evaluation) {
     servo_capacity: evaluation.servoCapacity ?? null,
     actuator_utilization: evaluation.actuatorUtilization ?? null,
     physical_stiffness: evaluation.compliance ?? null,
+    payload_support: evaluation.workspace?.payloadSupport ?? null,
     feasibility: resultFeasibility(evaluation),
     constraint_policy: evaluation.workspace?.constraintPolicy,
     workspace_stats: evaluation.workspace?.stats,
@@ -137,6 +139,7 @@ export function exportResult(evaluation, run) {
     servo_capacity: evaluation.servoCapacity ?? null,
     actuator_utilization: evaluation.actuatorUtilization ?? null,
     physical_stiffness: evaluation.compliance ?? null,
+    payload_support: evaluation.workspace?.payloadSupport ?? null,
     feasibility: resultFeasibility(evaluation),
     constraint_policy: evaluation.workspace?.constraintPolicy ?? null,
     workspace_counts: evaluation.workspace?.counts ?? null,

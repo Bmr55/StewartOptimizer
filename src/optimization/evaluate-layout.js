@@ -2,7 +2,9 @@ import { computeCycleDemand } from '../model/cycle.js';
 import { evaluatePose } from '../model/pose.js';
 import { resolveMounting } from '../model/mounting.js';
 import { validateConditionLimit, NUMERICAL_RECIPROCAL_CUTOFF } from '../model/conditioning.js';
-import { evaluateServoCapacity } from '../model/servo-ratings.js';
+import { evaluateServoCapacity, normalizeServoRatings } from '../model/servo-ratings.js';
+import { massPropertiesDescription, normalizeMassProperties } from '../model/mass-properties.js';
+import { payloadSupportSatisfied } from '../workspace/payload-support.js';
 import { actuatorUtilization } from '../model/load-sharing.js';
 import { evaluateCompliance } from '../model/compliance.js';
 import { computeWorkspace } from '../workspace/sweep.js';
@@ -17,10 +19,17 @@ export async function evaluateLayout(layout, options) {
   const conditionLimit = validateConditionLimit(options.conditionLimit);
   const mounting = resolveMounting(layout).mounting;
   layout.mounting = mounting;
+  const massProperties = options.massProperties ?? normalizeMassProperties({ mass_kg: payload ?? 0 });
+  const payloadSupport = options.payloadSupport ? { settings: options.payloadSupport, massProperties,
+    ratings: options.servoRatings ?? normalizeServoRatings(),
+    loadCase: `${massPropertiesDescription(massProperties)}; ${massProperties.massKg} kg; `
+      + `center of mass ${massProperties.centerOfMassM.map(v => v * 1000).join(', ')} mm (platform frame); `
+      + `external force ${massProperties.externalForceN.join(', ')} N and moment ${massProperties.externalMomentNm.join(', ')} N m (base frame); `
+      + 'gravity along -Z; zero velocity and acceleration' } : null;
   const workspaceResult = await computeWorkspace(layout, ranges, {
     signal, onProgress,
     payload, stroke, frequency, ballJointLimitDeg, lowerBallJointLimitDeg,
-    upperBallJointLimitDeg, ballJointClamp, mounting, sampling, random, conditionLimit,
+    upperBallJointLimitDeg, ballJointClamp, mounting, sampling, random, conditionLimit, payloadSupport,
   });
 
   const coverage = Number.isFinite(workspaceResult.coverage) ? workspaceResult.coverage : 0;
@@ -57,6 +66,8 @@ export async function evaluateLayout(layout, options) {
   const loadSharing = cycle.loadSharing?.balanceScore ?? null;
   const compliance = evaluateCompliance(layout, homeResult, options.stiffnessModel ?? null);
   const physicalStiffness = compliance.minScaledStiffnessNPerM;
+  const support = workspaceResult.payloadSupport;
+  const payloadCoverage = support?.qualifiedCoverage ?? null;
   const utilization = actuatorUtilization(cycle, options.servoRatings);
   const isotropy = stats.averageIsotropy ?? 0;
   const stiffnessScore = stats.averageStiffness > 0 ? stats.averageStiffness : stiffness;
@@ -91,6 +102,9 @@ export async function evaluateLayout(layout, options) {
       || cycle.sampling?.inconclusivePolicy === 'advisory',
     servoCapacitySatisfied: !servoCapacity.hasRatings || servoCapacity.compliant === true,
     servoCapacityEnforced: servoCapacity.hasRatings && servoCapacity.policy === 'enforced',
+    payloadSupport: support?.status ?? null,
+    payloadSupportSatisfied: payloadSupportSatisfied(support),
+    payloadSupportEnforced: support?.policy === 'enforced',
     scope: 'Sampled poses under the modeled geometry, servo, rod, ball-joint and conditioning constraints',
   };
   feasibility.failedCategories = failureCategories({ feasibility, cycle });
@@ -101,6 +115,7 @@ export async function evaluateLayout(layout, options) {
     workspace: workspaceResult,
     coverage,
     relaxedCoverage,
+    payloadCoverage,
     cycle,
     feasibility,
     dexterity,

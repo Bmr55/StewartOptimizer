@@ -17,6 +17,7 @@ import { normalizeObjectiveSet, objectiveDefinitions } from './objectives.js';
 import { trajectoryFromRequirements, trajectoryIdentity, trajectorySummary } from '../model/trajectory.js';
 import { normalizeMassProperties, RIGID_BODY_FIELDS } from '../model/mass-properties.js';
 import { normalizeStiffnessModel } from '../model/compliance.js';
+import { normalizePayloadSupport } from '../workspace/payload-support.js';
 import { CYCLE_MODEL_VERSION } from '../contracts.js';
 import { DEFAULT_CYCLE_SAMPLING, LEGACY_CYCLE_SAMPLING, normalizeCycleSampling } from '../model/cycle-sampling.js';
 
@@ -146,6 +147,7 @@ export class Optimizer {
 
     this.massProperties = normalizeMassProperties({ ...cycleInput, mass_kg: this.payload });
     this.stiffnessModel = normalizeStiffnessModel(requirements.stiffness_model);
+    this.payloadSupport = normalizePayloadSupport(requirements.workspace_payload_support);
     this.objectiveVariant = { stiffnessMetric: this.stiffnessModel?.useAsObjective ? 'physicalStiffness' : 'stiffness' };
     this.servoRangeRad = this.servoRangeDeg.map((deg) => degToRad(deg));
     this.referenceDiagnostics = null;
@@ -200,7 +202,9 @@ export class Optimizer {
       ballJointClamp: this.ballJointClamp,
       servoRangeRad: this.servoRangeRad, sampling: this.sampling,
       servoRatings: this.servoRatings, objectiveSet: this.objectiveSet,
-      stiffnessModel: this.stiffnessModel, objectiveVariant: this.objectiveVariant };
+      stiffnessModel: this.stiffnessModel,
+      payloadSupport: this.payloadSupport, objectiveVariant: this.objectiveVariant,
+      payloadSupport: this.payloadSupport };
   }
 
   evaluateLayout(layout) {
@@ -302,7 +306,7 @@ export class Optimizer {
         this.referenceEvaluation = result;
       }
       results.push(result);
-      this.completedPoseWork += result.workspace.total + 1 + result.cycle.samples;
+      this.completedPoseWork += (result.workspace.workUnits ?? result.workspace.total) + 1 + result.cycle.samples;
       this.completedEvaluations += 1;
       this.onProgress?.({ completed: this.completedPoseWork,
         total: this.workEstimate.totalPoses, budgeted: this.workEstimate.totalPoses, generation: this.activeGeneration });
@@ -312,7 +316,7 @@ export class Optimizer {
 
   estimateWork() {
     return estimateWork({ ranges: this.ranges, sampling: this.sampling, trajectory: this.trajectory,
-      cycleSampling: this.cycleSampling,
+      cycleSampling: this.cycleSampling, payloadSupport: this.payloadSupport,
       populationSize: this.populationSize, generations: this.generations });
   }
 
@@ -345,6 +349,7 @@ export class Optimizer {
       objectiveSet: this.objectiveSet,
       objectiveDefinitions: objectiveDefinitions(this.objectiveSet, this.objectiveVariant),
       stiffnessModel: this.stiffnessModel,
+      payloadSupport: this.payloadSupport,
       reference_layout: this.referenceLayout ? layoutToJSON(this.referenceLayout) : null,
       seed_composition: this.referenceLayout ? seedComposition(this.populationSize) : null,
     }));

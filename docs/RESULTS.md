@@ -12,6 +12,22 @@ Strict mode is the default. In optional soft-ball-joint mode, `metadata.relaxed_
 
 The three feasibility flags report sampled workspace satisfaction, home-pose satisfaction and cycle satisfaction independently. They describe the implemented checks only. The candidate browser includes every retained candidate, including diagnostic failures and coincident chart points. Passing candidates rank ahead of diagnostics. Diagnostics rank by fewer failed categories, then greater feasible coverage, then lower available torque/speed demand. Initial selection among passing candidates is lowest torque, then speed, then better conditioning; with no passing candidate, it uses diagnostic order. The X/Y chart defaults to torque versus speed and can use other available metrics. The keyboard-accessible candidate list changes the displayed and downloaded layout. A new run clears the prior selection.
 
+## Static payload support across the workspace
+
+Coverage above is geometric/mechanical feasibility only, and servo capacity is otherwise checked on the cycle about home. With `workspace_payload_support`, every strictly feasible workspace pose also gets a static holding check (`static-payload-support-v1`). It uses the same mass properties, gravity and external wrench as the cycle, with zero velocity and acceleration, the same actual-rod wrench balance and servo transmission, and so the same demand as the cycle evaluator at that pose. Tilting the platform changes both geometry and, with an offset center of mass, the gravity moment.
+
+`payload_support` reports:
+- the load case and rating semantics;
+- counts of `supported` (all six servos rated and within), `exceeded`, `partiallyRated`, `unrated`, `unavailable` (singular or nonfinite equilibrium) and `notEvaluated` (geometrically infeasible) poses;
+- `qualifiedCoverage`, the percentage of all sampled poses that are fully rated and supported, which is null when no applicable rating exists;
+- per-servo peak holding torque with its pose, ratings and headroom;
+- the worst margin;
+- up to 50 failing samples.
+
+`rating: "continuous"` (default) compares the constant holding torque with the continuous (RMS) torque rating; `rating: "peak"` uses the peak/stall rating and is disclosed as not implying sustained capability. A missing applicable rating is unrated, never substituted.
+
+The enforced policy adds the `payload_support` failure category when any evaluated pose is exceeded, partially rated or unavailable. The advisory policy keeps these outcomes visible without disqualifying the candidate. With no applicable rating the check is demand-only. `metadata.payload_coverage` is the qualified coverage; geometric `coverage` is unchanged. This mode covers static support only; dynamic feasibility still comes from the cycle trajectory. The work budget adds one check per workspace pose against the existing 1,000,000 limit, and progress, cancellation and replay (`run.effective_settings.payloadSupport`) include it.
+
 Supplied servo ratings add a separate capacity check to the feasibility flags. Enforced mode is the default: a rated demand that exceeds its limit or is unavailable makes the candidate diagnostic and affects ranking. Advisory mode keeps the capacity status and warning visible without disqualifying the candidate for capacity alone. No ratings means demand-only results.
 
 ## Metric meanings
@@ -56,6 +72,7 @@ The download is `optimized_layout.json` with these top-level fields:
 | cycle | Validity, legacy axis (null for supplied trajectories), sample count, trajectory definition/identity/source, mass model, model version, peak torque/speed/acceleration, per-servo peaks, limiting samples, failure sample/time/reason when invalid |
 | conditioning | Compact home, workspace, cycle, limit, and numerical threshold summary; nonfinite values are null |
 | actuator_utilization | Per-servo peak output-shaft torque, its CV across servos, and utilization against peak torque ratings (`rated`, `partial`, `unrated`, `unavailable`); separate from rod-force balance |
+| payload_support | Static workspace holding check (when enabled): load case, rating semantics, outcome counts, capacity-qualified coverage, peak holding torque, margins, bounded failing samples |
 | physical_stiffness | Compliance model version, status, units, reference, stiffness and compliance matrices, leg stiffness and servo share, characteristic length and source, test-wrench displacements, assumptions |
 | servo_capacity | Capacity model version, effective shared and per-servo ratings, source (`shared`, `override`, `unrated`), policy, demand reference, per-servo peak torque/speed, envelope (with limiting operating point), continuous RMS and duration-limited status and margins, grouped peak/continuous/duration status, worst fractional headroom |
 | feasibility | Independent sampled-workspace, home-pose and cycle flags, cycle sampling status (`cycleConvergence`) and whether it satisfies its policy, passing status, failed categories, and scope text |

@@ -2,6 +2,7 @@ import { normalizeServoRatings, PER_SERVO_RATING_KEYS, SERVO_RATING_KEYS } from 
 import { normalizeTrajectory } from './trajectory.js';
 import { normalizeMassProperties, RIGID_BODY_FIELDS } from './mass-properties.js';
 import { normalizeStiffnessModel } from './compliance.js';
+import { normalizePayloadSupport } from '../workspace/payload-support.js';
 
 const DEFAULTS = {
   ball_joint_max_deg: 45,
@@ -88,7 +89,7 @@ export function parseRequirements(text) {
     }
   }
   const constraints = nested ? ('constraints' in data ? object(data.constraints, 'constraints') : {}) : data;
-  for (const key of [...SERVO_RATING_KEYS, 'stiffness_model']) {
+  for (const key of [...SERVO_RATING_KEYS, 'stiffness_model', 'workspace_payload_support']) {
     if (key in constraints && constraints[key] === null) throw new Error(`${key} must not be null.`);
   }
   if (Array.isArray(constraints.per_servo_ratings)) {
@@ -100,7 +101,8 @@ export function parseRequirements(text) {
       }
     });
   }
-  for (const key of [...Object.keys(DEFAULTS), 'servo_max_deg', ...SERVO_RATING_KEYS, 'stiffness_model']) {
+  for (const key of [...Object.keys(DEFAULTS), 'servo_max_deg', ...SERVO_RATING_KEYS, 'stiffness_model',
+    'workspace_payload_support']) {
     if (key in constraints) source[key] = constraints[key];
   }
   const normalized = { ...source };
@@ -124,6 +126,7 @@ export function parseRequirements(text) {
   validatePhysicalRequirements(normalized);
   normalizeServoRatings(normalized);
   normalizeStiffnessModel(normalized.stiffness_model);
+  normalizePayloadSupport(normalized.workspace_payload_support);
   normalized.servo_rating_policy ??= 'enforced';
   const workspace = {};
   [...TRANSLATIONS, ...ROTATIONS].forEach((key, index) => {
