@@ -14,6 +14,9 @@ import { evaluatePose } from '../model/pose.js';
 import { initialPopulation, referenceBoundsConflicts, seedComposition } from './reference-seeding.js';
 import { normalizeServoRatings } from '../model/servo-ratings.js';
 import { normalizeObjectiveSet, objectiveDefinitions } from './objectives.js';
+import { trajectoryFromRequirements, trajectoryIdentity, trajectorySummary } from '../model/trajectory.js';
+import { normalizeMassProperties, RIGID_BODY_FIELDS } from '../model/mass-properties.js';
+import { CYCLE_MODEL_VERSION } from '../contracts.js';
 
 // Owns run state and population lifecycle. Numerical work and browser I/O live elsewhere.
 export class Optimizer {
@@ -92,8 +95,13 @@ export class Optimizer {
       .map(key => [key, Object.hasOwn(servoRatings ?? {}, key) ? servoRatings[key] : requirements[key]]));
     this.servoRatings = normalizeServoRatings(this.servoRatingsInput);
     this.payload = requirements.mass_kg ?? 0;
-    this.stroke = requirements.cycle_mm ?? 0;
-    this.frequency = requirements.frequency_hz ?? 0;
+    const cycleInput = Object.fromEntries(['trajectory', ...RIGID_BODY_FIELDS]
+      .filter(key => requirements[key] != null).map(key => [key, requirements[key]]));
+    const { trajectory, source: trajectorySource } = trajectoryFromRequirements(requirements);
+    this.trajectory = trajectory;
+    this.trajectorySource = trajectorySource;
+    // Stroke/frequency feed the fatigue heuristic; supplied trajectories use the largest translation.
+    ({ stroke: this.stroke, frequency: this.frequency } = trajectorySummary(trajectory));
     this.cycleAxis = requirements.cycle_axis ?? 'z';
 
     const hornBounds = requirements.horn_length_bounds_mm || DEFAULT_DESIGN_SPACE.hornLengthBounds;
@@ -110,7 +118,7 @@ export class Optimizer {
     };
     validateDesignSpace(this.designSpace);
 
-    validatePhysicalRequirements({ mass_kg: this.payload, cycle_mm: this.stroke,
+    validatePhysicalRequirements({ ...cycleInput, mass_kg: this.payload, cycle_mm: this.stroke,
       frequency_hz: this.frequency, cycle_axis: this.cycleAxis,
       ball_joint_max_deg: this.ballJointLimitDeg, servo_travel_bounds_deg: this.servoRangeDeg,
       horn_length_bounds_mm: hornBounds, rod_length_bounds_mm: rodBounds,
@@ -121,6 +129,7 @@ export class Optimizer {
       }
     }
 
+    this.massProperties = normalizeMassProperties({ ...cycleInput, mass_kg: this.payload });
     this.servoRangeRad = this.servoRangeDeg.map((deg) => degToRad(deg));
     this.referenceDiagnostics = null;
     if (this.referenceLayout) {
@@ -165,6 +174,7 @@ export class Optimizer {
   evaluationOptions() {
     return { ranges: this.ranges, signal: this.abortController?.signal,
       payload: this.payload, stroke: this.stroke, frequency: this.frequency, cycleAxis: this.cycleAxis,
+      trajectory: this.trajectory, trajectorySource: this.trajectorySource, massProperties: this.massProperties,
       ballJointLimitDeg: this.ballJointLimitDeg,
       lowerBallJointLimitDeg: this.lowerBallJointLimitDeg,
       upperBallJointLimitDeg: this.upperBallJointLimitDeg,
@@ -283,7 +293,7 @@ export class Optimizer {
   }
 
   estimateWork() {
-    return estimateWork({ ranges: this.ranges, sampling: this.sampling, stroke: this.stroke, frequency: this.frequency,
+    return estimateWork({ ranges: this.ranges, sampling: this.sampling, trajectory: this.trajectory,
       populationSize: this.populationSize, generations: this.generations });
   }
 
@@ -309,6 +319,9 @@ export class Optimizer {
       servoRatings: this.servoRatingsInput,
       effectiveServoRatings: this.servoRatings,
       servoRatingPolicy: this.servoRatings.policy,
+      cycleModel: { modelVersion: CYCLE_MODEL_VERSION, trajectory: this.trajectory,
+        trajectoryId: trajectoryIdentity(this.trajectory), trajectorySource: this.trajectorySource,
+        massProperties: this.massProperties },
       objectiveSet: this.objectiveSet,
       objectiveDefinitions: objectiveDefinitions(this.objectiveSet),
       reference_layout: this.referenceLayout ? layoutToJSON(this.referenceLayout) : null,

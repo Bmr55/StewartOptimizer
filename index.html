@@ -26,10 +26,14 @@
                         <table>
                             <thead><tr><th scope="col">Field</th><th scope="col">Domain / meaning</th><th scope="col">Default</th></tr></thead>
                             <tbody>
-                                <tr><th scope="row"><code>mass_kg</code></th><td>Finite number ≥ 0; centered payload mass, kg</td><td>Required</td></tr>
-                                <tr><th scope="row"><code>cycle_mm</code></th><td>Finite number ≥ 0; peak-to-peak translation, mm</td><td>Required</td></tr>
-                                <tr><th scope="row"><code>frequency_hz</code></th><td>Finite number ≥ 0; zero means stationary</td><td>Required</td></tr>
-                                <tr><th scope="row"><code>cycle_axis</code></th><td>x, y, or z, case-insensitive</td><td>Required</td></tr>
+                                <tr><th scope="row"><code>mass_kg</code></th><td>Finite number ≥ 0; combined moving platform and payload mass, kg</td><td>Required</td></tr>
+                                <tr><th scope="row"><code>cycle_mm</code></th><td>Finite number ≥ 0; peak-to-peak translation, mm</td><td>Required unless <code>trajectory</code></td></tr>
+                                <tr><th scope="row"><code>frequency_hz</code></th><td>Finite number ≥ 0; zero means stationary</td><td>Required unless <code>trajectory</code></td></tr>
+                                <tr><th scope="row"><code>cycle_axis</code></th><td>x, y, or z, case-insensitive</td><td>Required unless <code>trajectory</code></td></tr>
+                                <tr><th scope="row"><code>trajectory</code></th><td>Optional payload field replacing the three cycle fields: <code>{ "frequency_hz": f, "components": [{ "axis": "x|y|z", "amplitude_mm": a, "phase_deg": p }, { "axis": "rx|ry|rz", "amplitude_deg": a }] }</code>; common-frequency sinusoid about home</td><td>Single-axis cycle</td></tr>
+                                <tr><th scope="row"><code>center_of_mass_mm</code></th><td>Optional payload field; [x, y, z] in the platform frame from the moving origin, mm</td><td>[0, 0, 0]</td></tr>
+                                <tr><th scope="row"><code>inertia_kg_m2</code></th><td>Optional payload field; symmetric positive-semidefinite tensor about the center of mass in platform axes, 3×3 or <code>ixx/iyy/izz/ixy/ixz/iyz</code> (tensor entries), kg m²</td><td>Zero</td></tr>
+                                <tr><th scope="row"><code>external_force_n</code>, <code>external_moment_nm</code></th><td>Optional payload fields; base-frame force at the center of mass (N) and moment (N m) applied to the moving body</td><td>Zero</td></tr>
                                 <tr><th scope="row"><code>x_range_mm</code>, <code>y_range_mm</code>, <code>z_range_mm</code></th><td>Finite min/max with max ≥ min; offsets from home, mm</td><td>Required</td></tr>
                                 <tr><th scope="row"><code>rx_range_deg</code>, <code>ry_range_deg</code>, <code>rz_range_deg</code></th><td>Finite min/max with max ≥ min; roll/pitch/yaw, degrees</td><td>Required</td></tr>
                                 <tr><th scope="row"><code>ball_joint_max_deg</code></th><td>Finite number in [0, 180]</td><td>45</td></tr>
