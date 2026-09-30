@@ -1,8 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Optimizer } from '../../src/optimization/optimizer.js';
-import { DEFAULT_DESIGN_SPACE, crossoverLayouts } from '../../src/optimization/layout-operators.js';
-import { topologyGeometry, validateTopology } from '../../src/optimization/topology.js';
+import { DEFAULT_DESIGN_SPACE, crossoverLayouts, createRandomLayout, finalizeLayout, mutateLayout } from '../../src/optimization/layout-operators.js';
+import { topologyGeometry, validateTopology, wrapAngle } from '../../src/optimization/topology.js';
+import { createRandom } from '../../src/optimization/random.js';
 import { layoutToJSON } from '../../src/io/results.js';
 import { importLayout } from '../../src/io/layout-import.js';
 import { evaluatePose } from '../../src/model/pose.js';
@@ -234,5 +235,81 @@ test('a wide-gap diagnostic reference completes seeded evolution and stays uncha
     checkBounds(item.layout, optimizer.designSpace);
     within(item.layout.topologyParameters.base_pair_gap, optimizer.designSpace.pairGapBounds);
     within(item.layout.topologyParameters.platform_pair_gap, optimizer.designSpace.pairGapBounds);
+  }
+});
+
+const close = (actual, expected, tolerance = 1e-9, message = '') =>
+  assert.ok(Math.abs(actual - expected) <= tolerance, `${message} ${actual} vs ${expected}`);
+
+function parametricLayout(topology, parameters) {
+  return { topology, topologyParameters: parameters, ...topologyGeometry(topology, parameters),
+    hornLength: 50, rodLength: 200, homeHeight: 180, servoRangeRad: [-2, 2] };
+}
+
+test('C3 pair gaps are capped at 1.2 times the plate radius by generation, mutation and finalization', () => {
+  const space = { ...DEFAULT_DESIGN_SPACE, baseRadius: [100, 100], platformRadius: [20, 20] };
+  const context = { designSpace: space, servoRangeRad: [-2, 2] };
+  const source = parametricLayout('c3_paired', { base_radius: 100, platform_radius: 20,
+    base_pair_gap: 35, platform_pair_gap: 35, base_orientation: 0, platform_orientation: 0.3, beta_offset: 0 });
+  const finalized = finalizeLayout(structuredClone(source), context);
+  assert.equal(finalized.topologyParameters.base_pair_gap, 35, 'inside [12, min(45, 1.2 * 100)]');
+  assert.equal(finalized.topologyParameters.platform_pair_gap, 24, 'clamped to 1.2 * 20');
+  assert.deepEqual(topologyGeometry('c3_paired', finalized.topologyParameters).platformAnchors, finalized.platformAnchors);
+  assert.equal(validateTopology(finalized), 'c3_paired');
+  // Random draws and mutations stay under the cap and use the room beneath it.
+  const random = createRandom(3);
+  const gaps = [];
+  for (let i = 0; i < 40; i++) {
+    const layout = createRandomLayout({ ...context, topology: 'c3_paired', random });
+    gaps.push(layout.topologyParameters.platform_pair_gap);
+    gaps.push(mutateLayout(layout, { ...context, random }).topologyParameters.platform_pair_gap);
+  }
+  assert.ok(gaps.every(gap => gap >= 12 && gap <= 24), `${gaps}`);
+  assert.ok(Math.max(...gaps) > 21, `the cap, not the floor, bounds the draws: ${Math.max(...gaps)}`);
+  // A radius too small for the gap floor at this ratio is rejected rather than clamped.
+  assert.throws(() => finalizeLayout(structuredClone(source),
+    { ...context, designSpace: { ...space, platformRadius: [9, 9] } }), /cannot fit/);
+});
+
+test('operators wrap topology orientation angles and free beta angles into (-pi, pi]', () => {
+  const context = { designSpace: DEFAULT_DESIGN_SPACE, servoRangeRad: [-2, 2] };
+  const inRange = angle => angle > -Math.PI && angle <= Math.PI;
+  const unwrapped = { base_radius: 110, platform_radius: 60, base_pair_gap: 20, platform_pair_gap: 20,
+    base_orientation: 0.3 + 2 * Math.PI, platform_orientation: -0.2 - 4 * Math.PI, beta_offset: 0.1 + 2 * Math.PI };
+  const source = parametricLayout('c3_paired', unwrapped);
+  const finalized = finalizeLayout(structuredClone(source), context);
+  close(finalized.topologyParameters.base_orientation, 0.3);
+  close(finalized.topologyParameters.platform_orientation, -0.2);
+  close(finalized.topologyParameters.beta_offset, 0.1);
+  finalized.baseAnchors.forEach((point, i) => point.forEach((value, k) => close(value, source.baseAnchors[i][k])));
+  finalized.betaAngles.forEach((angle, i) => close(angle, source.betaAngles[i]));
+  // Paired-horn families also wrap beta_pair_offset.
+  const circular = parametricLayout('circular', { base_radius: 110, platform_radius: 60, base_orientation: 0,
+    platform_orientation: 0.4, beta_offset: 0, beta_pair_offset: 0.5 - 2 * Math.PI });
+  close(finalizeLayout(structuredClone(circular), context).topologyParameters.beta_pair_offset, 0.5);
+  close(crossoverLayouts(circular, circular, { ...context, random: createRandom(1) }).topologyParameters.beta_pair_offset, 0.5);
+  // Mutating an orientation at +pi or just above -pi lands back inside the range.
+  for (let seed = 1; seed <= 12; seed++) {
+    const nearPi = parametricLayout('c3_paired', { ...unwrapped, base_orientation: Math.PI,
+      platform_orientation: -Math.PI + 1e-9, beta_offset: Math.PI });
+    const child = mutateLayout(nearPi, { ...context, random: createRandom(seed) });
+    for (const field of ['base_orientation', 'platform_orientation', 'beta_offset']) {
+      const value = child.topologyParameters[field];
+      assert.ok(inRange(value), `${field} ${value} (seed ${seed})`);
+      assert.ok(Math.abs(wrapAngle(value - nearPi.topologyParameters[field])) < 0.5, `${field} moved ${value}`);
+    }
+    const pairChild = mutateLayout(parametricLayout('circular', { ...circular.topologyParameters, beta_pair_offset: Math.PI }),
+      { ...context, random: createRandom(seed) });
+    assert.ok(inRange(pairChild.topologyParameters.beta_pair_offset), `beta_pair_offset ${pairChild.topologyParameters.beta_pair_offset}`);
+  }
+  // Free topology: generated beta angles and mutated angles at the seam are wrapped.
+  for (let seed = 1; seed <= 12; seed++) {
+    const random = createRandom(seed);
+    const layout = createRandomLayout({ ...context, topology: 'free', random });
+    assert.ok(layout.betaAngles.every(inRange), `generated ${layout.betaAngles}`);
+    layout.betaAngles = layout.betaAngles.map((_, i) => (i % 2 ? Math.PI : -Math.PI + 1e-9));
+    const child = mutateLayout(layout, { ...context, random });
+    assert.ok(child.betaAngles.every(inRange), `mutated ${child.betaAngles}`);
+    child.betaAngles.forEach((angle, i) => assert.ok(Math.abs(wrapAngle(angle - layout.betaAngles[i])) < 0.5));
   }
 });
