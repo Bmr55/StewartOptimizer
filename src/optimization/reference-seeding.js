@@ -34,6 +34,7 @@ export function referenceBoundsConflicts(layout, designSpace, servoRangeRad) {
     }
     layout.baseAnchors.forEach((point, i) => check(`base_anchors[${i}][2]`, point[2],
       [-designSpace.baseZJitter, designSpace.baseZJitter]));
+    layout.platformAnchors.forEach((point, i) => check(`platform_anchors[${i}][2]`, point[2], [0, 0]));
   } else {
     const p = layout.topologyParameters;
     check('topology_parameters.base_radius', p.base_radius, designSpace.baseRadius);
@@ -63,7 +64,6 @@ export function initialPopulation(optimizer) {
     const variation = optimizer.mutateLayout(reference);
     variation.id = optimizer.nextLayoutId++;
     variation.seedOrigin = 'variation';
-    delete variation.servoRangeDeg;
     delete variation.referenceDiagnostics;
     delete variation.migration;
     population.push(variation);

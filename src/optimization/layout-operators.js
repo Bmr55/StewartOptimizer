@@ -1,6 +1,6 @@
 import { clamp, randomNormal, degToRad } from '../math.js';
 import { DEFAULT_TOPOLOGY, TOPOLOGIES } from '../contracts.js';
-import { topologyGeometry, validateTopology, wrapAngle,
+import { topologyGeometry, topologyFields, validateTopology, wrapAngle,
   PAIRED_HORN_TOPOLOGIES, DEFAULT_BETA_PAIR_OFFSET } from './topology.js';
 
 export const DEFAULT_DESIGN_SPACE = {
@@ -127,11 +127,18 @@ export function finalizeLayout(layout, { designSpace: space, servoRangeRad }) {
       clampPointRadius(point, space.baseRadius);
       point[2] = clamp(point[2], -space.baseZJitter, space.baseZJitter);
     }
-    for (const point of layout.platformAnchors) clampPointRadius(point, space.platformRadius);
+    // Generated platform anchors stay in the platform plane, so an out-of-plane
+    // reference anchor is not inherited by its variations or offspring.
+    for (const point of layout.platformAnchors) {
+      clampPointRadius(point, space.platformRadius);
+      point[2] = 0;
+    }
   } else {
     regenerateBoundedTopology(layout, space);
   }
   layout.servoRangeRad = servoRangeRad.slice();
+  // The imported-degree copy would otherwise shadow the finalized range on export.
+  delete layout.servoRangeDeg;
   return layout;
 }
 
@@ -195,9 +202,10 @@ export function crossoverLayouts(a, b, { designSpace: space, servoRangeRad, rand
       layout.betaAngles[i] = b.betaAngles[i];
     }
   } else {
-    const fields = new Set(Object.keys(layout.topologyParameters));
-    if (PAIRED_HORN_TOPOLOGIES.includes(layout.topology)) fields.add('beta_pair_offset');
-    for (const field of fields) {
+    // Draw in a fixed field order so a seeded run does not depend on the key
+    // order of an imported reference's topology_parameters.
+    layout.topologyParameters = {};
+    for (const field of topologyFields(layout.topology)) {
       const fallback = field === 'beta_pair_offset' ? 0 : undefined;
       layout.topologyParameters[field] = random() < 0.5
         ? a.topologyParameters[field] ?? fallback : b.topologyParameters[field] ?? fallback;
