@@ -378,6 +378,18 @@ button.primary:hover {
     gap: 10px;
 }
 
+.execution-actions {
+    align-items: flex-end;
+}
+
+.execution-download-format {
+    min-width: 190px;
+}
+
+.execution-download-format select {
+    width: 100%;
+}
+
 .reference-actions {
     align-items: flex-end;
 }

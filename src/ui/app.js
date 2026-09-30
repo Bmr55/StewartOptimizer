@@ -44,6 +44,8 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
     let runReferenceNote = '';
     const dashboard = createRunDashboard(document, { now });
     const fallbackButton = document.getElementById('runMainThreadFallback');
+    const downloadFormat = document.getElementById('downloadFormat');
+    const downloadButton = document.getElementById('downloadSelected');
     function offerFallback(available) {
         fallbackButton.hidden = !available;
         fallbackButton.disabled = !available;
@@ -163,6 +165,14 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
         }
     });
 
+    function updateDownloadControls(running) {
+        const selected = currentOptimizer?.getSelectedCandidate?.();
+        const hasResult = Boolean(selected || currentOptimizer?.fitness?.length);
+        downloadFormat.disabled = running || !hasResult;
+        downloadButton.disabled = running || !hasResult
+            || (downloadFormat.value !== 'json' && !canExportCad(selected));
+    }
+
     function setRunning(running) {
         ratingControls.setDisabled(running);
         for (const id of ['runOptimization', 'loadSampleRequirements', 'clearRequirements',
@@ -172,12 +182,10 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
         }
         document.getElementById('cancelOptimization').disabled = !running;
         if (running) fallbackButton.disabled = true;
-        document.getElementById('exportBestLayout').disabled = running
-            || !(currentOptimizer?.getSelectedCandidate?.() || currentOptimizer?.fitness?.length);
-        const cadAvailable = !running && canExportCad(currentOptimizer?.getSelectedCandidate?.());
-        document.getElementById('exportFusionScript').disabled = !cadAvailable;
-        document.getElementById('exportCoordinateCsv').disabled = !cadAvailable;
+        updateDownloadControls(running);
     }
+
+    downloadFormat.addEventListener('change', () => updateDownloadControls(Boolean(currentOptimizer?.running)));
 
     document.getElementById('cancelOptimization').addEventListener('click', () => {
         currentOptimizer?.stop();
@@ -331,7 +339,7 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
         }
     });
 
-    document.getElementById('exportBestLayout').addEventListener('click', () => {
+    function exportLayout() {
         try {
             if (!currentOptimizer) {
                 showStatus('Run the optimization before exporting.', true);
@@ -343,7 +351,7 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
             console.error(error);
             showStatus(error.message, true);
         }
-    });
+    }
 
     function simulatorJSON() {
         const state = simulatorController.getState();
@@ -414,8 +422,10 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
         }
     }
 
-    document.getElementById('exportFusionScript').addEventListener('click', () => exportCad('fusion'));
-    document.getElementById('exportCoordinateCsv').addEventListener('click', () => exportCad('csv'));
+    downloadButton.addEventListener('click', () => {
+        if (downloadFormat.value === 'json') exportLayout();
+        else if (downloadFormat.value === 'fusion' || downloadFormat.value === 'csv') exportCad(downloadFormat.value);
+    });
 
     const ready = loadDefaultRequirements()
         .then((json) => {

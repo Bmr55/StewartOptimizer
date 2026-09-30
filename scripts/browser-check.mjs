@@ -74,7 +74,7 @@ try {
   assert.equal(await page.locator(`#paretoChart circle[data-candidate-id="${selected}"]`).count(), 1);
 
   const downloadPromise = page.waitForEvent('download');
-  await page.locator('#exportBestLayout').click();
+  await page.locator('#downloadSelected').click();
   const downloaded = JSON.parse(await readFile(await (await downloadPromise).path(), 'utf8'));
   assert.equal(downloaded.id, Number(selected));
   assert.equal(downloaded.schema_version, 2);
@@ -87,6 +87,29 @@ try {
   assert.equal(downloaded.run.effective_settings.effectiveServoRatings.perServo[1].torqueNm, 0.000001);
   assert.equal(downloaded.servo_capacity.policy, 'advisory');
   assert.match(await page.locator('#candidateSummary').textContent(), /Servo capacity .+ \(advisory(?: warning)?\)/);
+  const formatSelect = page.locator('#downloadFormat');
+  assert.deepEqual(await formatSelect.locator('option').evaluateAll(nodes => nodes.map(node => node.value)),
+    ['json', 'fusion', 'csv']);
+  await formatSelect.selectOption('fusion');
+  if (!(await page.locator('#downloadSelected').isEnabled())) {
+    for (const id of options) {
+      await candidateSelect.selectOption(id);
+      if (await page.locator('#downloadSelected').isEnabled()) break;
+    }
+  }
+  assert.equal(await page.locator('#downloadSelected').isEnabled(), true);
+  const fusionDownload = page.waitForEvent('download');
+  await page.locator('#downloadSelected').click();
+  const fusionFile = await fusionDownload;
+  assert.equal(fusionFile.suggestedFilename(), 'stewart_construction.py');
+  assert.match(await readFile(await fusionFile.path(), 'utf8'), /import adsk\.core, adsk\.fusion/);
+  await formatSelect.selectOption('csv');
+  const csvDownload = page.waitForEvent('download');
+  await page.locator('#downloadSelected').click();
+  const csvFile = await csvDownload;
+  assert.equal(csvFile.suggestedFilename(), 'stewart_coordinates.csv');
+  assert.match(await readFile(await csvFile.path(), 'utf8'), /^candidate_id,name,kind,frame,x_mm,y_mm,z_mm/);
+  await formatSelect.selectOption('json');
   await page.locator('#referenceLayoutInput').fill(JSON.stringify(downloaded));
   await page.locator('#runOptimization').click();
   await page.waitForFunction(() => document.querySelector('#optStatus').textContent.includes('Optimization complete'), null, { timeout: 30000 });
@@ -149,7 +172,7 @@ try {
   assert.equal(await errorPage.locator('#runPhase').textContent(), 'failed · partial results');
   assert.equal(await errorPage.locator('#runCandidates').textContent(), '4 / 8');
   assert.match(await errorPage.locator('#runBestCandidate').textContent(), /#\d+ ·/);
-  assert.equal(await errorPage.locator('#exportBestLayout').isEnabled(), true);
+  assert.equal(await errorPage.locator('#downloadSelected').isEnabled(), true);
 
   const stalePage = await browser.newPage();
   await stalePage.route('**/src/ui/optimizer-worker.js', route => route.fulfill({

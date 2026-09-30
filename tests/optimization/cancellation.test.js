@@ -61,5 +61,5 @@ test('UI cancel interrupts a run and restores controls', async () => {
   assert.match(element('optStatus').textContent, /cancelled/);
   assert.equal(element('runOptimization').disabled, false);
   assert.equal(element('cancelOptimization').disabled, true);
-  assert.equal(element('exportBestLayout').disabled, true);
+  assert.equal(element('downloadSelected').disabled, true);
 });
