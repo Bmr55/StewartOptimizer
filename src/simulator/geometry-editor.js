@@ -121,9 +121,9 @@ export function createGeometryEditor(controller) {
     const key = loadKey(state);
     if (key !== observedKey) {
       observedKey = key;
-      if (!applying && state.layout) baseline = {
+      if (!applying) baseline = state.layout ? {
         layout: copy(state.layout), source: copy(state.source),
-      };
+      } : null;
     }
     for (const listener of listeners) listener(state);
   });

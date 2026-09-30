@@ -116,5 +116,8 @@ test('mode switching is explicit and controller edits copy candidates, reset, an
   editor.edit({ type: 'scalar', field: 'rodLength', value: next.rodLength + 2 });
   state = editor.reset();
   assert.equal(state.source.candidateId, 21);
+  controller.clear();
+  assert.equal(editor.getBaseline(), null);
+  assert.throws(() => editor.reset(), /No loaded geometry/);
   editor.dispose();
 });
