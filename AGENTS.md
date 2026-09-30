@@ -11,7 +11,7 @@ Node.js 22 or newer. `npm run dev`, `npm test` and `npm run smoke` need no insta
 | `npm run dev` | Static server on 127.0.0.1:8000 (`-- --port 0` picks a free port) |
 | `npm test` | Regression suite, `node --test` over `tests/**/*.test.js` |
 | `npm run smoke` | Full default sample run plus export checks |
-| `npm run test:browser`, `test:browser:geometry`, `test:browser:diagnostics` | Playwright checks; run `npm ci` first and have Google Chrome installed |
+| `npm run test:browser`, `test:browser:geometry`, `test:browser:diagnostics` | Playwright checks; run `npm ci` first. They launch Google Chrome, fall back to Playwright's bundled Chromium, and honour `PLAYWRIGHT_CHANNEL` (a channel name or `bundled`) |
 | `npm run build:charts`, `npm run build:icons` | Refresh the vendored Chart.js and Lucide icons in `assets/` |
 
 Run `npm test` after any change. Run `npm run smoke` when touching the optimizer, evaluator, cycle model or export. Run the browser checks when touching `index.html`, `src/ui/` or `src/simulator/`.

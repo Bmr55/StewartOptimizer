@@ -405,7 +405,7 @@ Root `math.js`, `workspace.js`, `cycle.js`, `requirements.js` and `optimizer.js`
 | `docker compose up -d --build` | nginx image serving the app on host port 8081, restarting after reboot |
 | `npm test` | Node test suite under `tests/` (no installation needed) |
 | `npm run smoke` | Runs the bundled sample headlessly and asserts 72 evaluations, a 92,232-pose budget, completion and a valid export |
-| `npm run test:browser`, `test:browser:geometry`, `test:browser:diagnostics` | Playwright checks in a real browser; they require `npm ci` and an installed Google Chrome, since they launch the `chrome` channel |
+| `npm run test:browser`, `test:browser:geometry`, `test:browser:diagnostics` | Playwright checks in a real browser; they require `npm ci`, launch Google Chrome (the `chrome` channel) by default, fall back to Playwright's bundled Chromium when Chrome is missing, and honour `PLAYWRIGHT_CHANNEL` (a channel name or `bundled`) |
 | `npm run build:charts`, `npm run build:icons` | Refresh the vendored Chart.js bundle and the Lucide info icon from devDependencies |
 | `npm run legacy:build` | Rebuild the archived p5 simulator bundle after `npm --prefix archive/simulator ci` |
 
