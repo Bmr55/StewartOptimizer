@@ -92,3 +92,37 @@ test('the popup is clamped to the viewport width excluding a classic scrollbar',
   assert.equal(view.popup().style.left, '192px');
   assert.equal(view.popup().style.top, '128px');
 });
+
+test('an info button that controls a panel shows and hides it instead of the popup', () => {
+  const handlers = {};
+  const panel = { hidden: true };
+  const button = fakeElement({ dataset: {}, closest() { return this; },
+    getAttribute: name => (name === 'aria-controls' ? 'overlayHelp' : null) });
+  const tip = fakeElement({ dataset: { info: 'Tip' }, closest() { return this; } });
+  let popup;
+  const document = {
+    createElement() { popup = fakeElement({ getBoundingClientRect: () => ({ width: 100, height: 40 }) }); return popup; },
+    body: { appendChild() {} }, documentElement: { clientWidth: 300 },
+    querySelectorAll: () => [button, tip], getElementById: id => (id === 'overlayHelp' ? panel : null),
+    addEventListener(type, handler) { handlers[type] = handler; },
+  };
+  installTooltips(document, { addEventListener() {}, scrollX: 0, scrollY: 0 });
+  let prevented = 0;
+  const click = target => handlers.click({ target, preventDefault() { prevented++; }, stopPropagation() {} });
+  assert.equal(button.attributes['aria-expanded'], 'false');
+  click(tip);
+  assert.equal(popup.classList.contains('visible'), true);
+  click(button);
+  assert.equal(panel.hidden, false);
+  assert.equal(button.attributes['aria-expanded'], 'true');
+  assert.equal(popup.classList.contains('visible'), false, 'opening the panel left the popup open');
+  assert.equal(popup.textContent, '');
+  // Scrolling, Escape and clicks elsewhere leave the panel alone; its button closes it.
+  handlers.keydown({ key: 'Escape' });
+  click(fakeElement({ closest: () => null }));
+  assert.equal(panel.hidden, false);
+  click(button);
+  assert.equal(panel.hidden, true);
+  assert.equal(button.attributes['aria-expanded'], 'false');
+  assert.equal(prevented, 3);
+});

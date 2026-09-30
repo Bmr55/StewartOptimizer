@@ -54,11 +54,27 @@ export function installTooltips(document, window) {
         nextFrame(() => { if (frame === shownFrame) ignoreScroll = false; });
     }
 
+    // An info button with `aria-controls` names an inline panel for longer
+    // explanations; it shows and hides that panel instead of the popup, so the
+    // text stays open while the page scrolls.
+    function toggleInfoPanel(button, panel) {
+        hideInfoPopup();
+        const open = panel.hidden;
+        panel.hidden = !open;
+        button.setAttribute('aria-expanded', String(open));
+    }
+
     document.addEventListener('click', (event) => {
         const button = event.target.closest('.info-button');
         if (button) {
             event.preventDefault();
             event.stopPropagation();
+            const panelId = button.getAttribute?.('aria-controls');
+            const panel = panelId ? document.getElementById(panelId) : null;
+            if (panel) {
+                toggleInfoPanel(button, panel);
+                return;
+            }
             if (activeInfoButton === button && infoPopup.classList.contains('visible')) {
                 hideInfoPopup();
             } else {

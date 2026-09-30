@@ -195,8 +195,10 @@ default; today these are **Ground grid** (`groundGrid`), **Servo arcs**
 axis overlays on, the scene matches the original single-function renderer line
 for line (a frozen fixture in `tests/fixtures/scene-geometry.json` checks this). The Simulate tab shows one checkbox per overlay in the
 **Overlays** group, with the id `simOverlay` plus the capitalised name (for
-example `simOverlayWorldAxes`). A new overlay adds one builder, one default,
-one checkbox and a paragraph here; new overlays default off unless their
+example `simOverlayWorldAxes`). The info button beside the heading
+(`simOverlaysInfoButton`) shows and hides `#simOverlaysInfo`, a panel with a
+short description of each toggle. A new overlay adds one builder, one default,
+one checkbox, one entry in that panel and a paragraph here; new overlays default off unless their
 issue says otherwise.
 
 **Ground grid** (on by default) gives the scene a scale: a square grid of dim
