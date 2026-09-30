@@ -1,6 +1,7 @@
 import {
   degToRad,
   buildRange,
+  rangeCount,
   rotationMatrixFromEuler,
   rotateVector,
   vectorAdd,
@@ -189,6 +190,26 @@ export function evaluatePose(layout, pose, options = {}) {
   };
 }
 
+export const MAX_WORKSPACE_POSES = 100000;
+export function estimateWorkspaceSize(ranges = {}) {
+  let total = 1;
+  for (const axis of ['x', 'y', 'z', 'rx', 'ry', 'rz']) {
+    total *= rangeCount(ranges[axis]);
+    if (!Number.isSafeInteger(total) || total > MAX_WORKSPACE_POSES) {
+      throw new RangeError('Workspace exceeds 100,000 poses per layout. Increase sweep steps or narrow ranges.');
+    }
+  }
+  return total;
+}
+
+export const yieldToEventLoop = () => new Promise(resolve => setTimeout(resolve, 0));
+
+function runningMean() {
+  let count = 0;
+  let total = 0;
+  return { add(value) { total += value; count++; }, value() { return count ? total / count : 0; } };
+}
+
 export async function computeWorkspace(layout, ranges = {}, options = {}) {
   ensureLayout(layout);
   const {
@@ -199,8 +220,10 @@ export async function computeWorkspace(layout, ranges = {}, options = {}) {
     frequency = 0,
     sampleLimit = 200,
     violationSampleLimit = sampleLimit,
+    onProgress,
   } = options;
 
+  const totalPoses = estimateWorkspaceSize(ranges);
   const xs = buildRange(ranges.x, 0);
   const ys = buildRange(ranges.y, 0);
   const zs = buildRange(ranges.z, 0);
@@ -208,17 +231,16 @@ export async function computeWorkspace(layout, ranges = {}, options = {}) {
   const rys = buildRange(toRadiansRange(ranges.ry), 0);
   const rzs = buildRange(toRadiansRange(ranges.rz), 0);
 
-  const totalPoses = xs.length * ys.length * zs.length * rxs.length * rys.length * rzs.length;
   const normalizedSampleLimit = Math.max(0, Math.floor(sampleLimit));
   const normalizedViolationSampleLimit = Math.max(0, Math.floor(violationSampleLimit));
   const reachableSamples = [];
   const unreachableSamples = [];
   const violationSamples = [];
   const violationCounts = {};
-  const isotropySamples = [];
-  const stiffnessSamples = [];
-  const loadShareSamples = [];
-  const ballJointSamples = [];
+  const isotropySamples = runningMean();
+  const stiffnessSamples = runningMean();
+  const loadShareSamples = runningMean();
+  const ballJointSamples = runningMean();
   const servoRanges = Array.from({ length: 6 }, () => ({ min: Infinity, max: -Infinity }));
   const ballJointMax = new Array(6).fill(0);
 
@@ -234,48 +256,6 @@ export async function computeWorkspace(layout, ranges = {}, options = {}) {
     }
   };
 
-  if (totalPoses === 0) {
-    return {
-      coverage: 0,
-      total: 0,
-      reachable: [],
-      unreachable: [],
-      violations: [],
-      payload,
-      stroke,
-      frequency,
-      stats: {
-        reachableCount: 0,
-        averageIsotropy: 0,
-        averageStiffness: 0,
-        loadBalanceScore: 0,
-        servoUsage: new Array(6).fill(0),
-        servoUsageAvg: 0,
-        servoUsagePeak: 0,
-        ballJointMax: new Array(6).fill(0),
-        ballJointOverallMax: 0,
-        ballJointAverage: 0,
-        violationCounts: {},
-        violationRate: 0,
-      },
-      counts: {
-        reachable: 0,
-        unreachable: 0,
-        violationPoses: 0,
-      },
-      samples: {
-        reachable: [],
-        unreachable: [],
-        violations: [],
-        limits: {
-          reachable: normalizedSampleLimit,
-          unreachable: normalizedSampleLimit,
-          violations: normalizedViolationSampleLimit,
-        },
-      },
-    };
-  }
-
   let relaxedReachableCount = 0;
   let reachableCount = 0;
   let unreachableCount = 0;
@@ -284,6 +264,9 @@ export async function computeWorkspace(layout, ranges = {}, options = {}) {
   let unreachableSeen = 0;
   let violationSeen = 0;
 
+  let completed = 0;
+  onProgress?.({ completed, total: totalPoses });
+  await yieldToEventLoop();
   for (const x of xs) {
     for (const y of ys) {
       for (const z of zs) {
@@ -311,8 +294,8 @@ export async function computeWorkspace(layout, ranges = {}, options = {}) {
                     const sigmaMax = Math.max(...sv);
                     const sigmaMin = Math.min(...sv);
                     if (Number.isFinite(sigmaMax) && Number.isFinite(sigmaMin) && sigmaMax > EPS && sigmaMin > EPS) {
-                      isotropySamples.push(sigmaMin / sigmaMax);
-                      stiffnessSamples.push(sigmaMin);
+                      isotropySamples.add(sigmaMin / sigmaMax);
+                      stiffnessSamples.add(sigmaMin);
                     }
                   }
                 }
@@ -323,7 +306,7 @@ export async function computeWorkspace(layout, ranges = {}, options = {}) {
                   const normalized = shares.map((value) => value / sumShares);
                   const loadStd = standardDeviation(normalized);
                   const loadScore = 1 / (1 + loadStd);
-                  loadShareSamples.push(loadScore);
+                  loadShareSamples.add(loadScore);
                 }
 
                 if (Array.isArray(result.servoAngles)) {
@@ -337,7 +320,7 @@ export async function computeWorkspace(layout, ranges = {}, options = {}) {
 
                 if (Array.isArray(result.ballJointAngles)) {
                   const maxAngle = Math.max(...result.ballJointAngles.map((value) => (Number.isFinite(value) ? value : 0)), 0);
-                  ballJointSamples.push(maxAngle);
+                  ballJointSamples.add(maxAngle);
                   for (let iLeg = 0; iLeg < Math.min(6, result.ballJointAngles.length); iLeg++) {
                     const angle = result.ballJointAngles[iLeg];
                     if (Number.isFinite(angle) && angle > ballJointMax[iLeg]) {
@@ -364,12 +347,18 @@ export async function computeWorkspace(layout, ranges = {}, options = {}) {
                   violationCounts[violation.type] = (violationCounts[violation.type] || 0) + 1;
                 }
               }
+              completed++;
+              if (completed % 256 === 0) {
+                onProgress?.({ completed, total: totalPoses });
+                await yieldToEventLoop();
+              }
             }
           }
         }
       }
     }
   }
+  onProgress?.({ completed, total: totalPoses });
 
   const coverage = (reachableCount / totalPoses) * 100;
   const relaxedCoverage = (relaxedReachableCount / totalPoses) * 100;
@@ -385,15 +374,15 @@ export async function computeWorkspace(layout, ranges = {}, options = {}) {
 
   const stats = {
     reachableCount,
-    averageIsotropy: average(isotropySamples),
-    averageStiffness: average(stiffnessSamples),
-    loadBalanceScore: average(loadShareSamples),
+    averageIsotropy: isotropySamples.value(),
+    averageStiffness: stiffnessSamples.value(),
+    loadBalanceScore: loadShareSamples.value(),
     servoUsage,
     servoUsageAvg,
     servoUsagePeak,
     ballJointMax,
     ballJointOverallMax: Math.max(0, ...ballJointMax),
-    ballJointAverage: average(ballJointSamples),
+    ballJointAverage: ballJointSamples.value(),
     violationCounts,
     violationRate,
   };

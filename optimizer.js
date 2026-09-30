@@ -1,4 +1,4 @@
-import { computeWorkspace, evaluatePose } from './workspace.js';
+import { computeWorkspace, evaluatePose, estimateWorkspaceSize } from './workspace.js';
 import {
   clamp,
   singularValues,
@@ -74,14 +74,20 @@ function normalizedObjectives(objectives) {
 
 export class Optimizer {
   constructor(requirements = {}, {
-    populationSize = 40,
-    generations = 25,
+    populationSize = 12,
+    generations = 5,
     ranges = {},
     mutationRate = 0.35,
     designSpace = {},
     ballJointLimitDeg,
     ballJointClamp = false,
+    onProgress,
   } = {}) {
+    if (!Number.isSafeInteger(populationSize) || populationSize < 4
+        || !Number.isSafeInteger(generations) || generations < 1) {
+      throw new RangeError('Population must be an integer >= 4 and generations an integer >= 1.');
+    }
+    this.onProgress = onProgress;
     this.requirements = requirements;
     this.populationSize = Math.max(4, populationSize);
     this.generations = Math.max(1, generations);
@@ -233,6 +239,11 @@ export class Optimizer {
 
   async evaluateLayout(layout) {
     const workspaceResult = await computeWorkspace(layout, this.ranges, {
+      onProgress: ({ completed, total }) => this.onProgress?.({
+        completed: (this.completedEvaluations || 0) * total + completed,
+        total: this.workEstimate?.totalPoses ?? total,
+        generation: this.generation,
+      }),
       payload: this.payload,
       stroke: this.stroke,
       frequency: this.frequency,
@@ -496,11 +507,24 @@ export class Optimizer {
     const results = [];
     for (const layout of layouts) {
       results.push(await this.evaluateLayout(layout));
+      this.completedEvaluations += 1;
     }
     return results;
   }
 
+  estimateWork() {
+    const posesPerLayout = estimateWorkspaceSize(this.ranges);
+    const evaluations = this.populationSize * (this.generations + 1);
+    const totalPoses = posesPerLayout * evaluations;
+    if (!Number.isSafeInteger(totalPoses) || totalPoses > 1000000) {
+      throw new RangeError('Run exceeds 1,000,000 pose evaluations. Increase sweep steps or reduce population/generations.');
+    }
+    return { posesPerLayout, evaluations, totalPoses };
+  }
+
   async run() {
+    this.workEstimate = this.estimateWork();
+    this.completedEvaluations = 0;
     this.population = Array.from({ length: this.populationSize }, () => this.createRandomLayout());
     let evaluations = await this.evaluatePopulation(this.population);
     let fronts = this.fastNonDominatedSort(evaluations);

@@ -7,6 +7,7 @@ test('run keeps explicit overrides and refreshes untouched defaults from JSON', 
   let captured;
   class StubOptimizer {
     constructor(requirements, options) { captured = { requirements, options }; this.pareto = []; this.fitness = []; }
+    estimateWork() { return { totalPoses: 8 }; }
     start(done) { done?.(); return Promise.resolve({ status: 'completed' }); }
   }
   const element = await loadUI(StubOptimizer);
