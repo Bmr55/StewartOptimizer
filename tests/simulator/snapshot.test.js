@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseSimulatorSnapshot, SIMULATOR_OPTION_KEYS } from '../../src/simulator/snapshot.js';
+import { parseSimulatorSnapshot, parseWorkspaceRanges, SIMULATOR_OPTION_KEYS, workspaceRangesToJSON } from '../../src/simulator/snapshot.js';
 import { asymmetricJointFixture } from '../fixtures/layout.js';
 
 const layout = asymmetricJointFixture();
@@ -80,4 +80,28 @@ test('saved overlay toggles keep known names, drop unknown ones and are type-che
   assert.throws(() => parse({ overlays: 'all' }), /simulator.overlays must be an object/);
   assert.throws(() => parse({ overlays: [true] }), /simulator.overlays must be an object/);
   assert.throws(() => parse({ overlays: { platformAxes: 1 } }), /simulator.overlays.platformAxes must be true or false/);
+});
+
+test('saved workspace ranges read mm and degrees, fall back to the run bounds and write back unchanged', () => {
+  const json = { x: { min: -40, max: 40 }, y: { min: -40, max: 40 }, z: { min: -20, max: 40 },
+    rx: { min: -12, max: 12 }, ry: { min: -12, max: 12 }, rz: { min: -8, max: 8 } };
+  const ranges = parse({ workspaceRanges: { ...json, x: { ...json.x, step: 40 } } }).workspaceRanges;
+  assert.deepEqual(ranges.x, { min: -40, max: 40 });
+  assert.deepEqual(ranges.z, { min: -20, max: 40 });
+  assert.ok(Math.abs(ranges.rx.max - 12 * Math.PI / 180) < 1e-15 && Math.abs(ranges.rz.min + 8 * Math.PI / 180) < 1e-15);
+  assert.deepEqual(workspaceRangesToJSON(ranges), json);
+  assert.equal(workspaceRangesToJSON(null), null);
+  assert.deepEqual(parseWorkspaceRanges(json), ranges);
+  // Missing from the block: the source run's bounds, else none.
+  const withRun = (simulator, bounds) => parseSimulatorSnapshot(simulator, layout, fallback, bounds).workspaceRanges;
+  assert.equal(parse({}).workspaceRanges, null);
+  assert.equal(parse(null).workspaceRanges, null);
+  assert.deepEqual(withRun({}, json), ranges);
+  assert.deepEqual(withRun({ workspaceRanges: null }, json), ranges);
+  assert.deepEqual(withRun({ workspaceRanges: { x: json.x } }, json), { x: { min: -40, max: 40 } });
+  // Bad run bounds only mean no box; a bad saved block rejects the file by field.
+  assert.equal(withRun({}, { x: { min: 1, max: -1 } }), null);
+  assert.equal(withRun({}, 'bounds'), null);
+  assert.throws(() => parse({ workspaceRanges: [] }), /simulator.workspaceRanges must be an object/);
+  assert.throws(() => parse({ workspaceRanges: { z: { min: 4 } } }), /simulator.workspaceRanges.z must have finite min and max/);
 });

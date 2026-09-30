@@ -5,8 +5,10 @@ import { asymmetricJointFixture } from '../fixtures/layout.js';
 import { createSimulatorController } from '../../src/simulator/controller.js';
 import { buildSceneGeometry, cameraFrame, createWebGLRenderer, NEAR_PLANE_MM, projectPoint,
   projectSegment } from '../../src/simulator/renderer.js';
-import { GHOST_DEPTH_BIAS_MM, NEAR_LIMIT_MARGIN_RAD, OVERLAY_DEFAULTS, OVERLAY_NAMES, SCENE_BACKGROUND, SCENE_BUILDERS,
-  SCENE_COLORS } from '../../src/simulator/scene.js';
+import { GHOST_DEPTH_BIAS_MM, GROUND_DEPTH_BIAS_MM, GROUND_GRID_PITCH_MM, NEAR_LIMIT_MARGIN_RAD, OVERLAY_DEFAULTS,
+  OVERLAY_NAMES, SCENE_BACKGROUND, SCENE_BUILDERS, SCENE_COLORS } from '../../src/simulator/scene.js';
+import { parseWorkspaceRanges } from '../../src/simulator/snapshot.js';
+import { parseRequirements } from '../../src/model/requirements.js';
 import { computeHornTip, hornLocalToWorld } from '../../src/model/kinematics.js';
 import { rotateVector, vectorAdd } from '../../src/math.js';
 import { resolveMounting } from '../../src/model/mounting.js';
@@ -14,6 +16,11 @@ import { mountSimulatorDiagnostics } from '../../src/simulator/diagnostics.js';
 import { createSimulatorView } from '../../src/simulator/view.js';
 import { createFakeDocument } from './helpers.js';
 import { effectiveServoRange } from '../../src/model/pose.js';
+
+// The sample requirements' ranges as the simulator holds them (mm and radians):
+// X and Y ±40 mm, Z −20 to 40 mm about home.
+const sampleRanges = () => parseWorkspaceRanges(parseRequirements(fs.readFileSync(
+  new URL('../../examples/sample-requirements.json', import.meta.url), 'utf8')).workspace);
 
 test('scene uses solved asymmetric anchor, horn, rod and platform frames', () => {
   const controller = createSimulatorController();
@@ -33,8 +40,9 @@ test('scene uses solved asymmetric anchor, horn, rod and platform frames', () =>
   const rejected = controller.loadLayout(asymmetricJointFixture(),
     { options: { ballJointLimitDeg: 180, conditionLimit: 1 } });
   assert.equal(rejected.accepted, null);
-  // Base, servo directions and world axes; the arcs and the ghost of the rejected home are switched off.
-  assert.equal(buildSceneGeometry({ ...rejected, overlays: { ...rejected.overlays, servoArcs: false, requestedGhost: false } }).lines.length, 15);
+  // Base, servo directions and world axes; the grid, arcs and the ghost of the rejected home are switched off.
+  assert.equal(buildSceneGeometry({ ...rejected, overlays: { ...rejected.overlays, groundGrid: false, servoArcs: false,
+    requestedGhost: false } }).lines.length, 15);
 });
 
 test('unavailable WebGL2 leaves renderer inactive with actionable error', () => {
@@ -120,7 +128,8 @@ const FROZEN_OVERLAYS = { platformAxes: true, worldAxes: true };
 const onlyFrozenOverlays = () => Object.fromEntries(OVERLAY_NAMES.map(name => [name, FROZEN_OVERLAYS[name] ?? false]));
 function frozenSceneStates() {
   const controller = createSimulatorController();
-  controller.loadLayout(asymmetricJointFixture(), { options: { ballJointLimitDeg: 180 } });
+  controller.loadLayout(asymmetricJointFixture(), { options: { ballJointLimitDeg: 180 },
+    workspaceRanges: sampleRanges() });
   controller.setTraces(true);
   for (const z of [2, 4, 6]) controller.requestPose({ z, rx: 0.02 * z, rz: 0.01 });
   const accepted = controller.requestPose({ x: 3, y: -2, z: 5, rx: 0.05, ry: -0.03, rz: 0.04 });
@@ -154,7 +163,8 @@ test('each overlay toggle removes only its own builder output', () => {
   const parts = Object.fromEntries(SCENE_BUILDERS.map(builder =>
     [builder.name, builder.build(state, state.layout, state.acceptedAssessment)]));
   assert.deepEqual(SCENE_BUILDERS.map(builder => builder.name),
-    ['base', 'platform', 'legs', 'servoArcs', 'jointCones', 'requestedGhost', 'platformAxes', 'worldAxes', 'trace']);
+    ['groundGrid', 'base', 'platform', 'legs', 'servoArcs', 'jointCones', 'workspaceBox', 'requestedGhost',
+      'platformAxes', 'worldAxes', 'trace']);
   assert.deepEqual(SCENE_BUILDERS.filter(builder => builder.overlay).map(builder => builder.overlay), OVERLAY_NAMES);
   assert.equal(parts.platformAxes.lines.length, 3);
   assert.equal(parts.worldAxes.lines.length, 3);
@@ -471,8 +481,8 @@ test('ghost failure lines win depth ties with the held pose and dimmed ghost lin
   const global = { ...state, assessment: { ...state.assessment, violations: [{ type: 'conditionLimit' }] } };
   assert.ok(ghostOf(global).slice(0, 6).every(line => line.depthBias === GHOST_DEPTH_BIAS_MM));
   assert.ok(ghostOf(global).slice(6).every(line => line.depthBias === -GHOST_DEPTH_BIAS_MM));
-  // No other builder biases its lines.
-  assert.ok(buildSceneGeometry({ ...state, overlays: { ...state.overlays, requestedGhost: false } })
+  // No other builder but the ground grid biases its lines.
+  assert.ok(buildSceneGeometry({ ...state, overlays: { ...state.overlays, requestedGhost: false, groundGrid: false } })
     .lines.every(line => line.depthBias === undefined));
   // The bias shifts depth by exactly its length in the depth mapping, either
   // way, and leaves x and y alone.
@@ -518,4 +528,72 @@ test('lines crossing the near plane are clipped there instead of dropped', () =>
   const clipped = lines.filter(line => projectSegment(line.from, line.to, closeUp, 800, 500)).length;
   assert.ok(clipped > bothEnds, `the close-up should have lines with one end behind the eye: ${clipped} vs ${bothEnds}`);
   assert.equal(lineVertices, 2 * clipped);
+});
+
+const buildOf = name => SCENE_BUILDERS.find(builder => builder.name === name).build;
+const key = point => point.map(value => Number(value.toFixed(9))).join(',');
+
+test('the workspace box is the twelve edges of the sample x/y/z ranges about home', () => {
+  const controller = createSimulatorController();
+  const state = controller.loadLayout(asymmetricJointFixture(), { options: { ballJointLimitDeg: 180 },
+    workspaceRanges: sampleRanges() });
+  const home = state.layout.homeHeight;
+  const edges = buildOf('workspaceBox')(state, state.layout, state.acceptedAssessment).lines;
+  assert.equal(edges.length, 12);
+  assert.ok(edges.every(edge => edge.color === SCENE_COLORS.workspace && edge.depthBias === undefined));
+  const corners = [];
+  for (const x of [-40, 40]) for (const y of [-40, 40]) for (const z of [home - 20, home + 40]) corners.push([x, y, z]);
+  const drawn = new Set(edges.flatMap(edge => [key(edge.from), key(edge.to)]));
+  assert.deepEqual([...drawn].sort(), corners.map(key).sort());
+  // Every edge runs along one axis for that axis's full span, four per axis.
+  const spans = [80, 80, 60];
+  const perAxis = [0, 0, 0];
+  for (const edge of edges) {
+    const moved = [0, 1, 2].filter(k => Math.abs(edge.to[k] - edge.from[k]) > 1e-9);
+    assert.equal(moved.length, 1);
+    assert.ok(Math.abs(Math.abs(edge.to[moved[0]] - edge.from[moved[0]]) - spans[moved[0]]) < 1e-9);
+    perAxis[moved[0]]++;
+  }
+  assert.deepEqual(perAxis, [4, 4, 4]);
+  // Rotation ranges are not drawn, and the box stays put when the pose moves.
+  const { rx, ry, rz, ...translations } = state.workspaceRanges;
+  assert.ok(rx && ry && rz);
+  const moved = controller.requestPose({ x: 5, z: 10, rz: 0.1 });
+  assert.deepEqual(plain(buildOf('workspaceBox')({ ...moved, workspaceRanges: translations }, moved.layout, null).lines),
+    plain(edges));
+  // No ranges, or no Z range, draws no box.
+  assert.deepEqual(buildOf('workspaceBox')({ ...state, workspaceRanges: null }, state.layout, null).lines, []);
+  assert.deepEqual(buildOf('workspaceBox')({ ...state, workspaceRanges: { x: translations.x, y: translations.y } },
+    state.layout, null).lines, []);
+  assert.equal(buildSceneGeometry(controller.setWorkspaceRanges(null)).lines.length,
+    buildSceneGeometry(moved).lines.length - 12);
+});
+
+test('the ground grid spans the base on z = 0 at the fixed pitch, behind anything it touches', () => {
+  const state = createSimulatorController().loadLayout(asymmetricJointFixture(), { options: { ballJointLimitDeg: 180 } });
+  const lines = buildOf('groundGrid')(state, state.layout, null).lines;
+  const radius = Math.max(...state.layout.baseAnchors.map(([x, y]) => Math.hypot(x, y)));
+  const half = Math.max(...lines.map(line => line.to[0]));
+  const cells = half / GROUND_GRID_PITCH_MM;
+  assert.equal(GROUND_GRID_PITCH_MM, 25);
+  assert.ok(Number.isInteger(cells) && half >= 1.5 * radius && half < 1.5 * radius + GROUND_GRID_PITCH_MM, `${half} vs ${radius}`);
+  assert.equal(lines.length, 2 * (2 * cells + 1));
+  const offsets = new Set();
+  for (const line of lines) {
+    assert.equal(line.from[2], 0);
+    assert.equal(line.to[2], 0);
+    assert.equal(line.color, SCENE_COLORS.grid);
+    assert.equal(line.depthBias, -GROUND_DEPTH_BIAS_MM);
+    const along = line.from[0] === line.to[0] ? 1 : 0;
+    assert.deepEqual([line.from[along], line.to[along]], [-half, half]);
+    offsets.add(line.from[1 - along]);
+  }
+  assert.deepEqual([...offsets].sort((a, b) => a - b),
+    Array.from({ length: 2 * cells + 1 }, (_, k) => (k - cells) * GROUND_GRID_PITCH_MM));
+  // Pushed back only in depth: a grid line under a world axis loses the tie.
+  const camera = { target: [0, 0, 100], yaw: 0.7, pitch: 0.4, distance: 600 };
+  const [gridStart] = projectSegment([0, 0, 0], [30, 0, 0], camera, 800, 500, -GROUND_DEPTH_BIAS_MM);
+  const [axisStart] = projectSegment([0, 0, 0], [30, 0, 0], camera, 800, 500);
+  assert.deepEqual(gridStart.slice(0, 2), axisStart.slice(0, 2));
+  assert.ok(gridStart[2] > axisStart[2]);
 });

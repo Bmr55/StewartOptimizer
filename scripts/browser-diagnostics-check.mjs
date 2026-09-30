@@ -68,7 +68,8 @@ try {
     const withoutArcs = toggle('simOverlayServoArcs', false);
     const withoutAxes = toggle('simOverlayWorldAxes', false);
     return { all, withoutGhost, withGhost, narrowCones, wideCones, withoutCones, withoutArcs, withoutAxes,
-      withoutEither: toggle('simOverlayPlatformAxes', false), restored: toggle('simOverlayPlatformAxes', true) };
+      withoutEither: toggle('simOverlayPlatformAxes', false), restored: toggle('simOverlayPlatformAxes', true),
+      withoutGrid: toggle('simOverlayGroundGrid', false), gridRestored: toggle('simOverlayGroundGrid', true) };
   });
   assert.ok(overlayPixels.withoutGhost < overlayPixels.all, `the rejected request drew no ghost: ${JSON.stringify(overlayPixels)}`);
   assert.equal(overlayPixels.withGhost, overlayPixels.all);
@@ -79,6 +80,8 @@ try {
   assert.ok(overlayPixels.withoutArcs > overlayPixels.withoutAxes, `world axes toggle drew nothing: ${JSON.stringify(overlayPixels)}`);
   assert.ok(overlayPixels.withoutAxes > overlayPixels.withoutEither, `platform axes toggle drew nothing: ${JSON.stringify(overlayPixels)}`);
   assert.equal(overlayPixels.restored, overlayPixels.withoutAxes);
+  assert.ok(overlayPixels.withoutGrid < overlayPixels.restored, `ground grid toggle drew nothing: ${JSON.stringify(overlayPixels)}`);
+  assert.equal(overlayPixels.gridRestored, overlayPixels.restored);
 
   const downloadPromise = page.waitForEvent('download');
   await page.locator('#simDownload').click();
@@ -88,7 +91,7 @@ try {
   assert.equal(exported.simulator.options.rodLengthTolerance, 0.01);
   assert.equal(exported.simulator.requested.z, 100);
   assert.equal(exported.simulator.accepted.z, 0);
-  assert.deepEqual(exported.simulator.overlays, { servoArcs: false, jointCones: false, requestedGhost: true,
+  assert.deepEqual(exported.simulator.overlays, { groundGrid: true, servoArcs: false, jointCones: false, workspaceBox: true, requestedGhost: true,
     platformAxes: true, worldAxes: false });
   await page.locator('#optimizeTab').click();
   await page.locator('#referenceLayoutInput').fill(JSON.stringify(exported));
