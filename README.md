@@ -4,15 +4,15 @@ A browser-based prototype for exploring six-servo Stewart platform geometries. S
 
 ## Run the application
 
-From the repository root:
+With Node.js 22 or newer, from the repository root (no package installation needed):
 
 ```sh
-python -m http.server 8000 --bind 127.0.0.1
+npm run dev
 ```
 
-Open [localhost:8000](http://localhost:8000). If that port is occupied, choose another port. Serve the directory over HTTP; opening index.html as a local file is not the supported workflow because modules and the sample JSON use browser loading rules.
+Open the printed local URL. If port 8000 is occupied, use `npm run dev -- --port 8001`; port 0 selects a free port. The server binds only to 127.0.0.1. Any static HTTP server also works, including `python -m http.server 8000 --bind 127.0.0.1`. Opening index.html as a local file is not supported because modules and sample JSON use browser loading rules.
 
-1. The supplied [sample requirements](Additional_Repo_Stuff/examples/Sample_Requirements.json) load automatically.
+1. The supplied [sample requirements](./examples/sample-requirements.json) load automatically.
 2. Edit the JSON and/or controls. Explicit control overrides win; untouched controls follow edited JSON defaults. Load Sample Requirements resets the controls.
 3. Start with population **12**, generations **5**, and the automatically populated 3-point ranges. The sample performs 72 candidate evaluations: 52,488 workspace poses and at most 4,680 home/cycle poses, for a total budget of **57,168**.
 4. Run Optimization. Progress updates during evaluation. Cancel stops an active sweep and retains only the last completed population, explicitly labelled partial.
@@ -33,28 +33,38 @@ The root app has no layout importer, integrated 3D viewer, workspace/Pareto plot
 
 ## Reference
 
-- [Requirements, defaults, units and validation](docs/REQUIREMENTS.md)
-- [Cycle demand model and assumptions](docs/CYCLE_MODEL.md)
-- [Metrics and exported fields](docs/RESULTS.md)
-- [Current architecture and reproduction guide](OPTIMIZER_REPRODUCTION.md)
-- [Quick start](Additional_Repo_Stuff/docs/Stewart_Optimizer_Quick_Start.md)
-- [Archived interactive simulator](Raw%20Information/Stuff%20from%20Old%20Project/README.md)
+- [Requirements, defaults, units and validation](./docs/REQUIREMENTS.md)
+- [Cycle demand model and assumptions](./docs/CYCLE_MODEL.md)
+- [Metrics and exported fields](./docs/RESULTS.md)
+- [Current architecture and reproduction guide](./docs/architecture.md)
+- [Quick start](./docs/quick-start.md)
+- [Archived interactive simulator](./archive/simulator/README.md)
 
 ## Source layout
 
 | File | Responsibility |
 | --- | --- |
-| index.html | Controls, JSON input/output, run/cancel lifecycle |
-| requirements.js | Input normalization, validation and grid defaults |
-| optimizer.js | Candidate generation, NSGA-II, work budget and export |
-| workspace.js | Pose constraints, workspace aggregation, progress and cancellation |
-| cycle.js | Sampled trajectory, force/moment equilibrium, torque and speed |
-| math.js | Vectors, rotations, range construction and singular-value estimates |
-| tests/ | Node regression checks, including execution of the UI script in a DOM harness |
-| Raw Information/Stuff from Old Project/ | Independent archived simulator and its optional build tooling |
+| index.html, styles/ | Page markup and appearance |
+| src/main.js, src/ui/ | Initialization, controls, tooltips, run/cancel and downloads |
+| src/model/ | Requirements, single-pose constraints and cycle demand |
+| src/workspace/ | Workspace sweep, scheduling and statistics |
+| src/optimization/ | Run lifecycle, layout operators, NSGA-II, scoring and work budget |
+| src/io/ | Sample loading, result selection and serialization |
+| src/math.js | Vectors, rotations, ranges and singular-value estimates |
+| examples/ | Runnable sample requirements |
+| tests/ | Checks grouped by responsibility; UI modules imported into a DOM harness |
+| scripts/ | Local server and complete-sample smoke check |
+| docs/ | Current architecture, usage and model references |
+| archive/ | Independent simulator and historical research materials |
+
+The small root JavaScript files preserve original import paths. New code should import from `src/`; see [API compatibility](docs/architecture.md#api-compatibility).
 
 ## Verification
 
-Install Node.js 22 or newer, then run `npm test` (or `node --test`). The root tests need no package installation. They exercise requirements, UI overrides, feasibility/export metadata, bounded execution, cancellation, cycle force balance and speed derivatives, and the shipped legacy bundle API. There is no hosted CI workflow in this repository.
+Run `npm test` (or `node --test`). The root tests need no package installation. They exercise requirements, UI overrides, feasibility/export metadata, bounded execution, cancellation, selection, cycle force balance and speed derivatives, reference numerical outputs, the development server and the shipped legacy bundle API. There is no hosted CI workflow in this repository.
+
+Run `npm run smoke` for a complete default sample: it verifies 72 candidate evaluations, a 57,168-pose budget, completed progress and a valid JSON export. It checks execution rather than requiring a particular stochastic coverage score or machine-dependent timing.
+
+The optional `npm run legacy:build` delegates to the archived simulator's build. First install its locked development dependencies with `npm --prefix archive/simulator ci`; the active app has no build step or runtime dependencies.
 
 For browser verification, run the sample, confirm changing progress and responsive controls, cancel a longer run, and inspect/download JSON. The archived simulator README provides its separate canvas/animation smoke check and bundle rebuild instructions. These checks do not replace validation against known mechanisms or hardware.

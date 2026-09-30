@@ -25,7 +25,7 @@ The three feasibility flags report sampled workspace satisfaction, home-pose sat
 | limit_margin | Product of nonnegative ball-angle headroom and violation-free pose fraction, clipped to [0,1] |
 | fatigue | (mean maximum joint-angle utilization + mean servo-span utilization) * frequency * stroke in meters; a relative heuristic, not service life or a material fatigue model |
 
-For the geometric proxies, each row uses a normalized base-to-platform vector and its cross product with the platform point in world coordinates. Translational and rotational columns mix scales (coordinates in mm), so these values depend on scale/origin conventions and are not calibrated rotary-actuator stiffness. The home metric keeps singular values above 1e-9; workspace means omit samples with minimum singular value <= 1e-8. Singular cases can therefore be understated; these scores are not proof of singularity avoidance. The cycle model uses actual rod directions and a separate equilibrium calculation, detailed in [CYCLE_MODEL.md](CYCLE_MODEL.md).
+For the geometric proxies, each row uses a normalized base-to-platform vector and its cross product with the platform point in world coordinates. Translational and rotational columns mix scales (coordinates in mm), so these values depend on scale/origin conventions and are not calibrated rotary-actuator stiffness. The home metric keeps singular values above 1e-9; workspace means omit samples with minimum singular value <= 1e-8. Singular cases can therefore be understated; these scores are not proof of singularity avoidance. The cycle model uses actual rod directions and a separate equilibrium calculation, detailed in [CYCLE_MODEL.md](./CYCLE_MODEL.md).
 
 ## Downloaded layout
 

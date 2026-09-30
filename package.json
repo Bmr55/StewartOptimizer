@@ -2,6 +2,13 @@
   "name": "stewart-optimizer",
   "private": true,
   "type": "module",
-  "scripts": { "test": "node --test" },
-  "engines": { "node": ">=22" }
+  "scripts": {
+    "dev": "node scripts/serve.mjs",
+    "test": "node --test",
+    "smoke": "node scripts/smoke.mjs",
+    "legacy:build": "npm --prefix archive/simulator run build"
+  },
+  "engines": {
+    "node": ">=22"
+  }
 }

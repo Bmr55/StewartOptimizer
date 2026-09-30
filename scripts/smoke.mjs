@@ -1,0 +1,25 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { Optimizer } from '../src/optimization/optimizer.js';
+import { parseRequirements } from '../src/model/requirements.js';
+
+const text = await readFile(new URL('../examples/sample-requirements.json', import.meta.url), 'utf8');
+const { normalized, workspace } = parseRequirements(text);
+let progress;
+const optimizer = new Optimizer(normalized, { ranges: workspace, onProgress: value => { progress = value; } });
+const work = optimizer.estimateWork();
+assert.equal(work.totalPoses, 57168);
+const outcome = await optimizer.run();
+assert.equal(outcome.status, 'completed');
+assert.equal(outcome.completedEvaluations, work.evaluations);
+assert.equal(outcome.completedGenerations, 5);
+assert.equal(progress.completed, progress.total);
+assert.equal(optimizer.fitness.length, 12);
+assert.ok(optimizer.pareto.length > 0);
+const exported = JSON.parse(optimizer.exportBest());
+assert.equal(exported.base_anchors.length, 6);
+assert.equal(exported.run.partial, false);
+assert.ok(Number.isFinite(exported.metadata.coverage));
+assert.ok(exported.metadata.coverage >= 0 && exported.metadata.coverage <= 100);
+assert.equal(exported.workspace_counts.reachable + exported.workspace_counts.unreachable, work.workspacePosesPerLayout);
+console.log(`Sample completed: ${outcome.completedEvaluations} candidates, ${work.totalPoses} budgeted poses; JSON export verified.`);
