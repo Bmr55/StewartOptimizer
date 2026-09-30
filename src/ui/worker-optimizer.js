@@ -142,10 +142,14 @@ export class WorkerOptimizer extends Optimizer {
             catch (error) { reject(error); }
             break;
           }
-          case 'error':
-            if (!started || message.phase === 'startup') failStartup(new Error(message.message));
-            else failRuntime(message.message, message.snapshot, message.summary);
+          case 'error': {
+            // The shipped worker always sends a string; a foreign or corrupt
+            // reply must still produce readable text rather than [object Object].
+            const text = errorText(message.message, 'The optimization worker reported an error.');
+            if (!started || message.phase === 'startup') failStartup(new Error(text));
+            else failRuntime(text, message.snapshot, message.summary);
             break;
+          }
         }
       };
       try {

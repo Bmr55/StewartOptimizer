@@ -344,6 +344,24 @@ test('a runtime error with a corrupt final snapshot still reports the worker mes
   assert.equal(opt.running, false);
 });
 
+test('an error reply whose message is not a string still gives readable failure text', async () => {
+  const runtime = idleWorker();
+  runtime.reply({ type: 'started', runId: runtime.runId });
+  runtime.reply({ type: 'error', runId: runtime.runId, phase: 'runtime', message: { code: 7 } });
+  const outcome = await runtime.pending;
+  assert.equal(outcome.status, 'failed');
+  assert.equal(outcome.error, 'The optimization worker reported an error.');
+  const startup = idleWorker();
+  startup.reply({ type: 'error', runId: startup.runId, phase: 'startup', name: 'TypeError', message: undefined });
+  await assert.rejects(startup.pending, error => error instanceof WorkerStartupError
+    && error.message === 'The optimization worker reported an error.');
+  const shipped = idleWorker();
+  shipped.reply({ type: 'error', runId: shipped.runId, phase: 'startup', name: 'TypeError',
+    message: 'start settings must be an object with a requirements object.' });
+  await assert.rejects(shipped.pending, error => error instanceof WorkerStartupError
+    && error.message === 'start settings must be an object with a requirements object.');
+});
+
 test('an empty onerror and a worker factory that returns nothing give readable startup failures', async () => {
   const { opt, pending, worker } = idleWorker();
   worker().onerror(undefined);
