@@ -63,6 +63,30 @@ test('imported asymmetric reference and condition limit replay across worker and
   assert.equal(browser.fitness.some(candidate => candidate.layout.seedOrigin === 'reference'), true);
 });
 
+test('advisory and enforced servo ratings retain per-servo sources and worker/headless results', async () => {
+  const { normalized, workspace } = parseRequirements(sampleText);
+  for (const policy of ['advisory', 'enforced']) {
+    const options = { populationSize: 4, generations: 1, ranges: workspace,
+      sampling: { strategy: 'halton', sampleCount: 256 }, seed: 91,
+      servoRatings: { servo_torque_rating_nm: 0.000001, servo_speed_rating_deg_s: 180,
+        per_servo_ratings: [{ torque_nm: 2 }, null, null, null, null, null],
+        servo_rating_policy: policy } };
+    const headless = new Optimizer(normalized, options);
+    const { workerFactory } = connectedWorker();
+    const browser = new WorkerOptimizer(normalized, options, { workerFactory });
+    assert.equal((await headless.start()).status, 'completed');
+    assert.equal((await browser.start()).status, 'completed');
+    assert.deepEqual(browser.fitness, headless.fitness);
+    assert.deepEqual(browser.pareto, headless.pareto);
+    assert.deepEqual(JSON.parse(browser.exportBest()), JSON.parse(headless.exportBest()));
+    assert.deepEqual(browser.effectiveSettings().servoRatings, headless.effectiveSettings().servoRatings);
+    assert.deepEqual(browser.effectiveSettings().effectiveServoRatings,
+      headless.effectiveSettings().effectiveServoRatings);
+    assert.equal(browser.effectiveSettings().effectiveServoRatings.perServo[0].source.torque, 'override');
+    assert.equal(browser.effectiveSettings().servoRatingPolicy, policy);
+  }
+});
+
 test('worker adapter rejects stale run messages and keeps only complete-population checkpoints', async () => {
   let worker;
   const opt = new WorkerOptimizer({}, { populationSize: 4, generations: 1 }, {
@@ -128,11 +152,13 @@ test('worker cancellation keeps the last complete population and supports a fres
     return worker;
   };
   opt = new WorkerOptimizer(normalized, { populationSize: 4, generations: 2, ranges: workspace,
-    sampling: { strategy: 'halton', sampleCount: 256 } }, { workerFactory });
+    sampling: { strategy: 'halton', sampleCount: 256 },
+    servoRatings: { servo_torque_rating_nm: 1, servo_rating_policy: 'advisory' } }, { workerFactory });
   const outcome = await opt.start();
   assert.equal(outcome.status, 'cancelled');
   assert.equal(outcome.partialResults, true);
   assert.equal(opt.fitness.length, 4);
+  assert.equal(opt.fitness[0].servoCapacity.policy, 'advisory');
   assert.equal(opt.generation, 0);
   assert.equal(opt.running, false);
   assert.equal(JSON.parse(opt.exportBest()).run.partial, true);
@@ -154,9 +180,10 @@ test('bounded progress contains summaries rather than layout or population paylo
 
 test('worker reconstruction retains reference seed and later engineering options', () => {
   const reference = { id: 12, base_anchors: [[1, 2, 3]] };
-  const ratings = [{ torque_nm: 3, speed_deg_s: 80 }];
+  const ratings = { servo_torque_rating_nm: 3, per_servo_ratings: [{ speed_deg_s: 80 }] };
   const options = optionsFromEffectiveSettings({ bounds: { x: { min: 0, max: 0, step: 1 } },
-    reference_layout: reference, conditionLimit: 900, servoRatings: ratings });
+    reference_layout: reference, conditionLimit: 900, servoRatings: ratings,
+    effectiveServoRatings: { policy: 'enforced' } });
   assert.deepEqual(options.ranges, options.bounds);
   assert.deepEqual(options.referenceLayout, reference);
   assert.equal(options.conditionLimit, 900);
