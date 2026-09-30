@@ -51,6 +51,7 @@ function layoutToJSON(layout, metrics = {}) {
     home_height: layout.homeHeight,
     metadata: {
       coverage: metrics.coverage ?? null,
+      relaxed_coverage: metrics.relaxedCoverage ?? null,
       dexterity: metrics.dexterity ?? null,
       stiffness: metrics.stiffness ?? null,
       torque: metrics.torque ?? null,
@@ -60,6 +61,9 @@ function layoutToJSON(layout, metrics = {}) {
       limit_margin: metrics.limitMargin ?? null,
       fatigue: metrics.fatigue ?? null,
     },
+    feasibility: metrics.feasibility ?? null,
+    constraint_policy: metrics.workspace?.constraintPolicy ?? null,
+    workspace_counts: metrics.workspace?.counts ?? null,
     workspace_stats: metrics.workspace?.stats ?? null,
   };
 }
@@ -76,7 +80,7 @@ export class Optimizer {
     mutationRate = 0.35,
     designSpace = {},
     ballJointLimitDeg,
-    ballJointClamp = true,
+    ballJointClamp = false,
   } = {}) {
     this.requirements = requirements;
     this.populationSize = Math.max(4, populationSize);
@@ -237,6 +241,7 @@ export class Optimizer {
     });
 
     const coverage = Number.isFinite(workspaceResult.coverage) ? workspaceResult.coverage : 0;
+    const relaxedCoverage = workspaceResult.relaxedCoverage ?? coverage;
     const stats = workspaceResult.stats || {};
 
     const homeResult = evaluatePose(layout, {
@@ -281,6 +286,7 @@ export class Optimizer {
     const fatigue = this.computeFatigue(stats);
     const objectives = [
       coverage,
+      this.ballJointClamp ? relaxedCoverage : coverage,
       dexterity,
       stiffnessScore,
       loadBalance,
@@ -295,6 +301,12 @@ export class Optimizer {
       layout,
       workspace: workspaceResult,
       coverage,
+      relaxedCoverage,
+      feasibility: {
+        sampledWorkspaceSatisfied: coverage === 100,
+        homePoseSatisfied: homeResult.reachable,
+        scope: 'Sampled poses under the modeled geometry, servo, rod and ball-joint constraints only',
+      },
       dexterity,
       stiffness: stiffnessScore,
       torque,

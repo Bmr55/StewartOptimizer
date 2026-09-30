@@ -324,10 +324,10 @@
                     <input type="number" id="ballJointLimit" value="52" min="0" max="180">
                 </label>
                 <label class="field checkbox-field">
-                    <input type="checkbox" id="ballJointClamp" checked>
+                    <input type="checkbox" id="ballJointClamp">
                     <div class="field-header">
-                        <span>Clamp ball joints during evaluation</span>
-                        <button type="button" class="info-button" data-info="When enabled, poses that exceed the ball joint angle are counted but clamped so the optimizer can still gauge performance. Disable to treat them as unreachable.">ⓘ</button>
+                        <span>Explore beyond ball-joint limits (soft constraints)</span>
+                        <button type="button" class="info-button" data-info="Explore joint-limit violations using a separate relaxed score. Feasible coverage always excludes violations; no geometry is clamped.">ⓘ</button>
                     </div>
                 </label>
             </div>
@@ -488,6 +488,7 @@
             return JSON.stringify({
                 metrics: {
                     coverage: evaluation.coverage,
+                    relaxedCoverage: evaluation.relaxedCoverage,
                     dexterity: evaluation.dexterity,
                     stiffness: evaluation.stiffness,
                     torque: evaluation.torque,
@@ -506,6 +507,8 @@
                     servo_range: evaluation.layout.servoRangeRad.map((rad) => rad * 180 / Math.PI),
                     home_height: evaluation.layout.homeHeight,
                 },
+                feasibility: evaluation.feasibility,
+                constraint_policy: evaluation.workspace?.constraintPolicy,
                 workspace_stats: evaluation.workspace?.stats,
                 workspace_counts: evaluation.workspace?.counts,
                 workspace_samples: evaluation.workspace?.samples,
@@ -560,7 +563,7 @@
                 const pareto = currentOptimizer.pareto && currentOptimizer.pareto.length ? currentOptimizer.pareto : currentOptimizer.fitness;
                 const best = pareto.slice().sort((a, b) => b.coverage - a.coverage)[0];
                 resultOutput.value = serializeBest(best);
-                showStatus(`Optimization complete. Pareto front contains ${currentOptimizer.pareto.length || pareto.length} layouts.`);
+                showStatus(`Optimization complete. Feasible coverage: ${best?.coverage ?? 0}%. Pareto front contains ${currentOptimizer.pareto.length || pareto.length} layouts. Coverage applies only to sampled poses and modeled constraints.`);
             } catch (error) {
                 console.error(error);
                 showStatus(error.message, true);

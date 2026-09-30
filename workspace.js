@@ -65,7 +65,7 @@ export function evaluatePose(layout, pose, options = {}) {
   ensureLayout(layout);
   const {
     ballJointLimitDeg = 45,
-    ballJointClamp = true,
+    ballJointClamp = false,
     servoRangeRad = layout.servoRangeRad || [-Math.PI / 2, Math.PI / 2],
     rodLengthTolerance = 0.5,
     recordLegData = false,
@@ -173,7 +173,8 @@ export function evaluatePose(layout, pose, options = {}) {
   }
 
   return {
-    reachable,
+    reachable: reachable && violations.length === 0,
+    relaxedReachable: reachable,
     violations,
     servoAngles,
     rodLengths,
@@ -192,7 +193,7 @@ export async function computeWorkspace(layout, ranges = {}, options = {}) {
   ensureLayout(layout);
   const {
     ballJointLimitDeg = 45,
-    ballJointClamp = true,
+    ballJointClamp = false,
     payload = 0,
     stroke = 0,
     frequency = 0,
@@ -275,6 +276,7 @@ export async function computeWorkspace(layout, ranges = {}, options = {}) {
     };
   }
 
+  let relaxedReachableCount = 0;
   let reachableCount = 0;
   let unreachableCount = 0;
   let violationPoseCount = 0;
@@ -297,6 +299,7 @@ export async function computeWorkspace(layout, ranges = {}, options = {}) {
               });
               const hasViolations = Array.isArray(result.violations) && result.violations.length > 0;
 
+              if (result.relaxedReachable) relaxedReachableCount += 1;
               if (result.reachable) {
                 reachableCount += 1;
                 reachableSeen += 1;
@@ -369,6 +372,7 @@ export async function computeWorkspace(layout, ranges = {}, options = {}) {
   }
 
   const coverage = (reachableCount / totalPoses) * 100;
+  const relaxedCoverage = (relaxedReachableCount / totalPoses) * 100;
 
   const servoUsage = servoRanges.map((range) => {
     if (range.min === Infinity || range.max === -Infinity) return 0;
@@ -377,8 +381,7 @@ export async function computeWorkspace(layout, ranges = {}, options = {}) {
   const servoUsageAvg = average(servoUsage);
   const servoUsagePeak = Math.max(0, ...servoUsage);
 
-  const violationTotal = Object.values(violationCounts).reduce((acc, value) => acc + value, 0);
-  const violationRate = totalPoses > 0 ? Math.min(violationTotal / totalPoses, 1) : 0;
+  const violationRate = totalPoses > 0 ? violationPoseCount / totalPoses : 0;
 
   const stats = {
     reachableCount,
@@ -397,6 +400,8 @@ export async function computeWorkspace(layout, ranges = {}, options = {}) {
 
   return {
     coverage,
+    relaxedCoverage,
+    constraintPolicy: { mode: ballJointClamp ? 'soft-ball-joint' : 'strict', ballJointLimitDeg },
     total: totalPoses,
     reachable: reachableSamples,
     unreachable: unreachableSamples,
@@ -406,6 +411,7 @@ export async function computeWorkspace(layout, ranges = {}, options = {}) {
     frequency,
     stats,
     counts: {
+      relaxedReachable: relaxedReachableCount,
       reachable: reachableCount,
       unreachable: unreachableCount,
       violationPoses: violationPoseCount,
