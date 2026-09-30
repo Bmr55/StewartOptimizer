@@ -15,6 +15,23 @@ import { initialPopulation, referenceBoundsConflicts, seedComposition } from './
 
 // Owns run state and population lifecycle. Numerical work and browser I/O live elsewhere.
 export class Optimizer {
+  static fromReplay(input, { onProgress } = {}) {
+    const { sourceRun } = importLayout(input);
+    const settings = sourceRun?.effective_settings;
+    if (!settings || typeof settings !== 'object' || Array.isArray(settings)) {
+      throw new TypeError('run.effective_settings is required to replay an exported result.');
+    }
+    if (settings.randomAlgorithm !== RANDOM_ALGORITHM) {
+      throw new RangeError(`run.effective_settings.randomAlgorithm must be ${RANDOM_ALGORITHM}.`);
+    }
+    return new Optimizer(settings.requirements ?? {}, {
+      ...settings,
+      ranges: settings.bounds,
+      referenceLayout: settings.reference_layout ?? null,
+      onProgress,
+    });
+  }
+
   constructor(requirements = {}, {
     populationSize = 12,
     generations = 5,
@@ -183,6 +200,7 @@ export class Optimizer {
       child.seedOrigin = 'offspring';
       delete child.referenceDiagnostics;
       delete child.servoRangeDeg;
+      delete child.migration;
       offspring.push(child);
     }
     return offspring;
@@ -225,7 +243,9 @@ export class Optimizer {
       if (layout.seedOrigin === 'reference') {
         result.referenceDiagnostics = this.referenceDiagnostics;
         if (this.referenceDiagnostics.boundsConflicts.length) {
-          result.feasibility.failedCategories = ['geometry'];
+          result.feasibility.failedCategories = [...new Set([
+            ...(result.feasibility.failedCategories ?? []), 'geometry',
+          ])];
           result.feasibility.passing = false;
         }
         this.referenceEvaluation = result;

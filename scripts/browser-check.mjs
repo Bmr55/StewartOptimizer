@@ -34,7 +34,15 @@ try {
   assert.equal(downloaded.id, Number(selected));
   assert.equal(downloaded.schema_version, 2);
   assert.equal(downloaded.feasibility.passing, !downloaded.diagnostic);
-  console.log('Browser result selection, chart axes, and selected JSON export passed.');
+  await page.locator('#referenceLayoutInput').fill(JSON.stringify(downloaded));
+  await page.locator('#runOptimization').click();
+  await page.waitForFunction(() => document.querySelector('#optStatus').textContent.includes('Optimization complete'), null, { timeout: 30000 });
+  assert.match(await candidateSelect.innerText(), /Exact reference/);
+  await candidateSelect.selectOption('1');
+  const imported = JSON.parse(await page.locator('#resultOutput').inputValue()).result.layout;
+  for (const field of ['base_anchors', 'platform_anchors', 'beta_angles', 'horn_length',
+    'rod_length', 'servo_range', 'home_height']) assert.deepEqual(imported[field], downloaded[field]);
+  console.log('Browser result selection, chart axes, selected JSON export, and reference import passed.');
 } finally {
   await browser?.close();
   await new Promise(resolve => server.close(resolve));

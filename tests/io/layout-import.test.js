@@ -109,7 +109,19 @@ test('diagnostic reference remains selectable and exports original geometry afte
   source.home_height = 600;
   const optimizer = new Optimizer({}, { referenceLayout: source, populationSize: 4,
     generations: 2, ranges: {}, homeHeightBounds: [100, 200] });
+  const evaluatedLayouts = [];
+  const evaluate = optimizer.evaluateLayout.bind(optimizer);
+  optimizer.evaluateLayout = layout => {
+    evaluatedLayouts.push(layout);
+    return evaluate(layout);
+  };
   await optimizer.run();
+  for (const layout of evaluatedLayouts.filter(item => item.seedOrigin !== 'reference')) {
+    assert.ok(layout.homeHeight >= 100 && layout.homeHeight <= 200);
+    assert.ok(layout.hornLength >= 30 && layout.hornLength <= 120);
+    assert.ok(layout.rodLength >= 160 && layout.rodLength <= 420);
+    assert.deepEqual(layout.servoRangeRad, optimizer.servoRangeRad);
+  }
   const reference = optimizer.fitness.find(result => result.layout.seedOrigin === 'reference');
   assert.ok(reference);
   assert.equal(reference.feasibility.passing, false);
@@ -125,4 +137,25 @@ test('diagnostic reference remains selectable and exports original geometry afte
   assert.ok(exported.reference_diagnostics.boundsConflicts.length);
   assert.notEqual(exported.metadata.coverage, source.metadata.coverage);
   assert.equal(exported.migration.upgraded, true);
+});
+
+test('asymmetric reference run replays from exported effective settings and reimports without changing geometry', async () => {
+  const source = asymmetric();
+  const settings = { referenceLayout: source, populationSize: 4, generations: 1, seed: 73,
+    sampling: { strategy: 'halton', sampleCount: 16 },
+    ranges: { x: { min: -2, max: 2, step: 1 } },
+    lowerBallJointLimitDeg: 70, upperBallJointLimitDeg: 80 };
+  const original = new Optimizer({}, settings);
+  await original.run();
+  const exported = JSON.parse(original.exportBest());
+  assert.deepEqual(exported.run.effective_settings.seed_composition,
+    { reference: 1, variations: 2, fresh: 1 });
+  assert.deepEqual(exported.run.effective_settings.reference_layout.base_anchors, source.base_anchors);
+  assert.deepEqual(importLayout(exported).layout.baseAnchors, exported.base_anchors);
+  const replay = Optimizer.fromReplay(exported);
+  await replay.run();
+  assert.deepEqual(JSON.parse(replay.exportBest()), exported);
+  const displayedReplay = Optimizer.fromReplay({ run: exported.run, result: { layout: exported } });
+  assert.deepEqual(displayedReplay.effectiveSettings(), original.effectiveSettings());
+  assert.throws(() => Optimizer.fromReplay(source), /run.effective_settings/);
 });
