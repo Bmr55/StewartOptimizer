@@ -17,18 +17,31 @@ The p5/quaternion/Stewart scripts belong only to the [archived simulator](../arc
 | `src/ui/optimizer-worker.js`, `worker-runtime.js`, `worker-protocol.js` | Module worker entry, run lifecycle and serializable message shapes |
 | `src/ui/run-dashboard.js` | Live bounded metrics, 10 Hz UI cap and run-state transitions |
 | `src/ui/results-view.js` | Shared retained-candidate chart and selection |
-| `src/ui/controls.js` | Workspace inputs and preservation of explicit overrides |
+| `src/ui/controls.js` | Workspace inputs, sampling/seed/cycle presets and preservation of explicit overrides |
+| `src/ui/servo-ratings-controls.js` | Shared and per-servo rating fields with override preservation |
+| `src/ui/local-workspace.js` | Capture, validation and restore of the browser-local workspace save |
 | `src/ui/tooltips.js`, `download.js` | Browser-only interactions |
 | `src/simulator/controller.js` | Copied active layout, requested/accepted poses, animation and trace state |
 | `src/simulator/renderer.js`, `view.js` | Native WebGL2 scene and camera/input handling |
 | `src/simulator/geometry-editor.js`, `geometry-controls.js` | Explicit or parametric editable layout copies |
 | `src/simulator/diagnostics.js` | Evaluator-driven per-leg joint/rod diagnostics and effective limits |
+| `src/contracts.js` | Schema/model versions, topology names, metric keys with JSON names, units and directions, failure categories |
 | `src/model/requirements.js` | Parsing, normalization and physical input validation |
-| `src/model/pose.js` | Single-pose inverse kinematics and constraints |
-| `src/model/cycle.js` | Trajectory sampling and actual-rod force balance |
-| `src/workspace/sweep.js` | Grid iteration, yields, abort checks and sweep progress |
+| `src/model/trajectory.js`, `mass-properties.js` | Legacy and supplied sinusoidal trajectories with Euler-rate conversion; rigid-body mass, inertia and external wrench |
+| `src/model/kinematics.js`, `pose.js` | Horn frame, servo-angle solve, and single-pose inverse kinematics with all constraints |
+| `src/model/mounting.js` | Derived or supplied lower/upper socket directions and legacy migration |
+| `src/model/conditioning.js` | Dimensionless rotary Jacobian, one-sided SVD, numerical and engineering condition checks |
+| `src/model/cycle.js`, `cycle-sampling.js` | Newton-Euler rod-force balance, servo rate/acceleration, uniform and adaptive time schedules, periodic weights |
+| `src/model/load-sharing.js` | Streamed rod-force CV statistics and actuator utilization |
+| `src/model/servo-ratings.js` | Rating normalization, envelopes, RMS/duration windows and capacity status |
+| `src/model/compliance.js` | Physical Cartesian stiffness model and test-wrench predictions |
+| `src/workspace/sampling.js` | Halton/grid pose generation, size estimate and the per-layout limit |
+| `src/workspace/sweep.js` | Sweep iteration, yields, abort checks, progress and optional payload-support checks |
 | `src/workspace/statistics.js` | Running metrics, counters and reservoir samples |
+| `src/workspace/payload-support.js` | Static holding-torque outcomes and capacity-qualified coverage |
 | `src/optimization/optimizer.js` | Run state and population lifecycle |
+| `src/optimization/objectives.js` | Compact, Full and replay-only objective sets |
+| `src/optimization/random.js` | Seeded `mulberry32-v1` generator |
 | `src/optimization/layout-operators.js` | Generation, finalization, mutation and crossover |
 | `src/optimization/reference-seeding.js` | Imported-reference composition, bounds checks and exact seed retention |
 | `src/optimization/topology.js` | Symmetric anchor generators and declared-topology validation |
@@ -38,6 +51,7 @@ The p5/quaternion/Stewart scripts belong only to the [archived simulator](../arc
 | `src/io/results.js` | Best-candidate selection and both output formats |
 | `src/io/sample-requirements.js` | Fetching the bundled example |
 | `src/io/layout-import.js` | Reference-layout parsing, field validation and mounting migration |
+| `src/io/cad.js` | Home-pose construction skeleton, Fusion script and coordinate CSV |
 | `src/math.js` | Shared numerical primitives |
 
 The UI depends on the optimizer; the optimizer composes search and evaluation functions. The simulator controller, cycle and workspace evaluation all depend on the same pose evaluator. The renderer reads accepted pose geometry and never solves constraints. Numerical modules never import the UI or manipulate the DOM. Abort signals and progress callbacks cross these boundaries explicitly. NSGA-II intentionally updates evaluation rank/crowding fields; layout mutation and crossover clone their inputs. See the [active simulator guide](./SIMULATOR.md).
@@ -87,15 +101,15 @@ Reject degenerate/invalid geometry or a servo angle outside its range. Reconstru
 
 ## Evolution and execution
 
-The initial population and each generation's offspring are evaluated. Non-dominated sorting, crowding distance, tournament selection, crossover and probabilistic mutation form an NSGA-II search. Compact (default) uses coverage, conditioning quality, cycle torque and speed demand; Full adds dexterity, stiffness proxy, load-balance proxy, limit margin and fatigue proxy. All diagnostic metrics remain available in either set. Invalid cycle demand receives the worst demand objective. The UI exposes a recorded seed and mutation rate for replay.
+The initial population and each generation's offspring are evaluated. Non-dominated sorting, crowding distance, tournament selection, crossover and probabilistic mutation form an NSGA-II search. Compact (default) uses coverage, conditioning quality, cycle torque and speed demand; Full adds dexterity, the stiffness proxy (or physical stiffness when `stiffness_model.use_as_objective` is set), solved rod-force load sharing, limit margin and the fatigue proxy. The earlier Full set with the directional load-balance proxy survives only as the replay-only `full-v1`. All diagnostic metrics remain available in either set. Dominance is constraint-first: passing candidates precede diagnostics, and diagnostics compare by failed-category count, coverage and demand before objectives are consulted. Invalid cycle demand receives the worst demand objective. The UI exposes a recorded seed and mutation rate for replay.
 
 Preflight counts samples arithmetically before allocating range arrays. It rejects more than 100,000 workspace poses per layout or 1,000,000 total budgeted pose evaluations per run. Total work is:
 
 ```text
-population * (generations + 1) * (workspace poses + cycle phases + 1 home pose)
+population * (generations + 1) * (workspace poses + payload checks + cycle budget + 1 home pose)
 ```
 
-Cycle phases are 64 for moving cycles and 1 for stationary cycles. The default sample budgets 72 * (1,024 + 64 + 1) = 78,408 checks; early cycle failure can perform fewer actual checks. Progress distinguishes actual completed work from the budget and includes approximate elapsed/remaining time.
+The cycle budget is the sampling policy's maximum: 256 for the default adaptive policy, 1,024 for the fine preset, 64 for the fixed legacy schedule, and 1 for a stationary cycle. Payload checks equal the workspace pose count when `workspace_payload_support` is enabled and are otherwise zero. The default sample budgets 72 * (1,024 + 256 + 1) = 92,232 checks (78,408 with the legacy schedule); convergence or early cycle failure can perform fewer actual checks. Progress distinguishes actual completed work from the budget and includes approximate elapsed/remaining time.
 
 Workspace sweeps yield to the event loop before starting and every 256 poses. Statistics use running means; reservoir samples cap retained example poses at 200/class. A run's AbortController is checked during evaluation and after each yield. Cycle checks are bounded and observe the same signal. The browser creates one module worker per run; the headless API still runs directly. See [worker protocol](./WORKER_PROTOCOL.md).
 

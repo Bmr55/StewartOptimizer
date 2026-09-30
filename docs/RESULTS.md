@@ -10,7 +10,20 @@ Strict mode is the default. In optional soft-ball-joint mode, `metadata.relaxed_
 
 `constraint_policy` records mode, effective lower and upper ball-joint limits, the mandatory reciprocal cutoff, and the optional engineering `conditionLimit`. `workspace_counts` includes reachable, unreachable, relaxedReachable and violationPoses. Counts cover every sampled workspace pose; stored example poses are reservoir samples capped at 200 per class. `workspace_stats.violationCounts` counts observed violations by type, `jointViolationCounts` separates lower and upper failures, and `conditioningCounts` separates numerical, engineering, and unavailable failures. Evaluation may stop at the first hard geometry or servo failure, but checks both sockets for every structurally valid leg. `violationRate` counts poses with any violation, not the number of individual leg failures.
 
-The three feasibility flags report sampled workspace satisfaction, home-pose satisfaction and cycle satisfaction independently. They describe the implemented checks only. The candidate browser includes every retained candidate, including diagnostic failures and coincident chart points. Passing candidates rank ahead of diagnostics. Diagnostics rank by fewer failed categories, then greater feasible coverage, then lower available torque/speed demand. Initial selection among passing candidates is lowest torque, then speed, then better conditioning; with no passing candidate, it uses diagnostic order. The X/Y chart defaults to torque versus speed and can use other available metrics. The keyboard-accessible candidate list changes the displayed and downloaded layout. A new run clears the prior selection.
+The three feasibility flags report sampled workspace satisfaction, home-pose satisfaction and cycle satisfaction independently. They describe the implemented checks only. `feasibility.failedCategories` lists every failed category from `FAILURE_CATEGORIES` in `src/contracts.js`, and `passing` is true only when that list is empty:
+
+| Category | Added when |
+| --- | --- |
+| `home` | The home pose is not reachable |
+| `workspace` | Sampled coverage is below 100% |
+| `cycle` | The cycle evaluation is invalid (violated or unavailable) |
+| `conditioning` | A numerical singularity, engineering limit or unavailable conditioning occurs at home, in the sweep or on the cycle |
+| `cycle_convergence` | Adaptive cycle sampling was budget-limited under the enforced inconclusive policy |
+| `servo_capacity` | Enforced servo ratings are exceeded or unavailable |
+| `payload_support` | Enforced static payload support is exceeded, partially rated or unavailable |
+| `geometry` | The exact imported reference lies outside the effective search bounds |
+
+`joint` is declared in the contract list for compatibility but is never produced; socket-limit failures surface through `home`, `workspace` or `cycle`. Diagnostic candidates stay in the population, chart, list and exports with their categories. The candidate browser includes every retained candidate, including diagnostic failures and coincident chart points. Passing candidates rank ahead of diagnostics. Diagnostics rank by fewer failed categories, then greater feasible coverage, then lower available torque/speed demand. Initial selection among passing candidates is lowest torque, then speed, then better conditioning; with no passing candidate, it uses diagnostic order. The X/Y chart defaults to torque versus speed and can use other available metrics. The keyboard-accessible candidate list changes the displayed and downloaded layout. A new run clears the prior selection.
 
 ## Static payload support across the workspace
 

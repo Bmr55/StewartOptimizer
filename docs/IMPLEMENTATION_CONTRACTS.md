@@ -1,5 +1,12 @@
 # Shared implementation contracts for issue #36
 
+> **Status:** planning baseline written before the #21–#34 workstreams landed.
+> Later work (#54–#59) added trajectories, adaptive cycle sampling, servo
+> envelopes, load sharing, compliance and payload support beyond this list. For
+> the implemented behavior, read [FEATURES.md](./FEATURES.md) and
+> [architecture.md](./architecture.md); this file is kept as the record of the
+> shared names and boundaries those streams agreed on.
+
 These contracts are the integration baseline for children #21–#34. Extend the
 existing modules and fields. `src/contracts.js` owns version numbers, topology
 names, metric names, directions, units, and failure categories. Changes to these
