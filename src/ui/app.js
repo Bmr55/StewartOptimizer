@@ -1,9 +1,12 @@
-import { parseRequirements, loadDefaultRequirements as loadSample } from '../../requirements.js';
-import { Optimizer as DefaultOptimizer } from '../../optimizer.js';
+import { selectBest, displayResult } from '../io/results.js';
+import { download } from './download.js';
+import { parseRequirements } from '../model/requirements.js';
+import { loadDefaultRequirements as loadSample } from '../io/sample-requirements.js';
+import { Optimizer as DefaultOptimizer } from '../optimization/optimizer.js';
 import { createControls } from './controls.js';
 import { installTooltips } from './tooltips.js';
 
-export function createApp({ document, window, Optimizer = DefaultOptimizer, loadDefaultRequirements = loadSample }) {
+export function createApp({ document, window, Optimizer = DefaultOptimizer, loadDefaultRequirements = loadSample, downloadFile = download }) {
     const requirementsInput = document.getElementById('requirementsInput');
     const statusEl = document.getElementById('optStatus');
     const resultOutput = document.getElementById('resultOutput');
@@ -16,39 +19,6 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, load
     function showStatus(message, isError = false) {
         statusEl.textContent = message;
         statusEl.classList.toggle('error', isError);
-    }
-
-    function serializeBest(evaluation) {
-        if (!evaluation) return '';
-        return JSON.stringify({
-            metrics: {
-                coverage: evaluation.coverage,
-                relaxedCoverage: evaluation.relaxedCoverage,
-                dexterity: evaluation.dexterity,
-                stiffness: evaluation.stiffness,
-                torque: evaluation.torque,
-                speedDemand: evaluation.speedDemand,
-                loadBalance: evaluation.loadBalance,
-                isotropy: evaluation.isotropy,
-                limitMargin: evaluation.limitMargin,
-                fatigue: evaluation.fatigue,
-            },
-            layout: {
-                base_anchors: evaluation.layout.baseAnchors,
-                platform_anchors: evaluation.layout.platformAnchors,
-                beta_angles: evaluation.layout.betaAngles,
-                horn_length: evaluation.layout.hornLength,
-                rod_length: evaluation.layout.rodLength,
-                servo_range: evaluation.layout.servoRangeRad.map((rad) => rad * 180 / Math.PI),
-                home_height: evaluation.layout.homeHeight,
-            },
-            cycle: evaluation.cycle,
-            feasibility: evaluation.feasibility,
-            constraint_policy: evaluation.workspace?.constraintPolicy,
-            workspace_stats: evaluation.workspace?.stats,
-            workspace_counts: evaluation.workspace?.counts,
-            workspace_samples: evaluation.workspace?.samples,
-        }, null, 2);
     }
 
     document.getElementById('loadSampleRequirements').addEventListener('click', async () => {
@@ -114,8 +84,8 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, load
             const outcome = await currentOptimizer.start();
 
             const pareto = currentOptimizer.pareto && currentOptimizer.pareto.length ? currentOptimizer.pareto : currentOptimizer.fitness;
-            const best = pareto.slice().sort((a, b) => b.coverage - a.coverage)[0];
-            resultOutput.value = best ? JSON.stringify({ run: outcome, result: JSON.parse(serializeBest(best)) }, null, 2) : '';
+            const best = selectBest(currentOptimizer.pareto, currentOptimizer.fitness);
+            resultOutput.value = best ? JSON.stringify({ run: outcome, result: displayResult(best) }, null, 2) : '';
             if (outcome.status === 'cancelled') {
                 showStatus(best ? 'Optimization cancelled. Showing partial results from the last completed population.' : 'Optimization cancelled before a population completed.');
                 return;
@@ -135,7 +105,8 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, load
                 showStatus('Run the optimization before exporting.', true);
                 return;
             }
-            currentOptimizer.exportBest();
+            const data = currentOptimizer.exportBest();
+            if (data !== undefined) downloadFile(data, 'optimized_layout.json', 'application/json', document);
         } catch (error) {
             console.error(error);
             showStatus(error.message, true);
