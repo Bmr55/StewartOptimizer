@@ -31,6 +31,6 @@ The generated script uses Autodesk's documented [construction point API](https:/
 and [internal unit convention](https://help.autodesk.com/cloudhelp/ENU/Fusion-360-API/files/Units_UM.htm).
 
 Automated checks verify coordinates, horn/rod lengths, names, gating, and
-script structure. Issue #31 also requires a successful live Fusion import with
-recorded application version, fixture, observed coordinates, and evidence
-before it can be closed.
+script structure. The script has not yet been verified by a recorded live
+import into Fusion; that verification is tracked in issue #31, so treat the
+generated geometry as unconfirmed until it is done.

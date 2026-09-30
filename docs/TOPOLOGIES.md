@@ -13,7 +13,25 @@ For rectangular layouts, `base_radius` and `platform_radius` are the distance fr
 
 `beta_pair_offset` is optional for compatibility: an omitted value means zero and reproduces the old horn directions exactly. Imported references retain their coordinates and directions, including singular legacy designs. Generated variations may evolve the offset; importing does not silently repair it. Crossover bounds coupled radii and pair gaps before constructing offspring, so an out-of-bounds diagnostic reference cannot create an invalid intermediate gap/radius combination.
 
-The default base radius remains 90–160 mm and platform radius 40–120 mm. The headless `designSpace` option can change these, `pairGapBounds`, `rectangularAspectBounds`, and the horn/rod length bounds. Effective parameters and generated Free anchor radii are kept within configured bounds during generation, mutation, crossover, and finalization. The default horn bounds are 30–120 mm in the direct API and 30–110 mm when omitted from parsed requirements; rod bounds are 160–420 mm in both. Explicit requirement horn/rod bounds retain their existing precedence.
+The default base radius remains 90–160 mm and platform radius 40–120 mm. The headless `designSpace` option can change these, `pairGapBounds`, `rectangularAspectBounds`, and the horn/rod length bounds; the browser UI exposes none of them. Effective parameters and generated Free anchor radii are kept within configured bounds during generation, mutation, crossover, and finalization. The default horn bounds are 30–120 mm in the direct API and 30–110 mm when omitted from parsed requirements; rod bounds are 160–420 mm in both. Explicit requirement horn/rod bounds retain their existing precedence.
+
+## Design-space constants and operators
+
+`DEFAULT_DESIGN_SPACE` in `src/optimization/layout-operators.js` fixes the remaining search constants:
+
+| Constant | Default | Role |
+| --- | --- | --- |
+| `pairGapBounds` | [12, 45] mm | C3 pair gap. Each plate's ceiling is also capped at 1.2 × that plate's radius, and C3 radii are floored at the minimum gap / 1.2 so a gap always fits. |
+| `rectangularAspectBounds` | [0.6, 1.4] | Rectangular width/depth ratio |
+| `betaJitterRad` | 20° | Range of the random shared `beta_offset` for new parametric layouts; Gaussian scale for new Free beta angles |
+| `anchorJitter`, `platformJitter` | 6 mm | Gaussian mutation scale for base/platform radii and pair gaps, and for Free anchor X/Y |
+| `baseZJitter` | 2 mm | Free base-anchor Z range at generation, mutation scale and finalization clamp |
+| `mutationHorn`, `mutationRod`, `mutationHeight` | 4, 6, 15 mm | Gaussian mutation scales for the shared lengths and home height |
+| `mutationAngle` | 4° | Gaussian mutation scale for plate orientations, `beta_offset`, `beta_pair_offset` and Free beta angles; rectangular aspects mutate with a fixed 0.05 scale |
+
+New Free layouts place base anchors on a hexagon at a random start angle with 3° Gaussian jitter, platform anchors offset by 30° with the same jitter, base Z within `baseZJitter`, and beta angles tangent to each base ray plus `betaJitterRad` noise. New parametric layouts draw radii, orientations (full circle), `beta_offset`, gaps and aspects uniformly within their bounds.
+
+Mutation perturbs every parameter (or every Free anchor coordinate and beta angle) with Gaussian noise at the scales above, then the shared lengths and home height, and re-finalizes. Crossover copies parent A, then for parametric layouts takes each topology parameter from either parent with equal probability and re-bounds the coupled radius/gap choices before regenerating anchors; for Free layouts it takes legs from a random split index onward from parent B. Horn and rod lengths are averaged and home height comes from either parent. Each offspring is mutated with probability `mutationRate`. Parents with different topologies cannot be crossed.
 
 Home height is a separate variable. It is sampled, inherited, and mutated independently of rods and horns. The default bounds are **50–450 mm**, configurable as `home_height_bounds_mm` in requirements, by the two UI controls, or as `homeHeightBounds` in the headless constructor. An explicit constructor/UI value wins over requirements; requirements win over `designSpace.homeHeightBounds`. Finalization only clamps height to these bounds. Feasibility evaluation reports whether the chosen height permits a home pose; it does not replace the chosen value with a derived height.
 

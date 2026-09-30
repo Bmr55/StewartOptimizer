@@ -27,8 +27,10 @@ and diagnostics should use these calls rather than duplicating the evaluator.
 `setAnimation(pattern, playing, settings)` and `tick(deltaSeconds, settings)`
 support wobble, ping-pong, rotation, tilt, and helical motion. An invalid
 animation frame pauses playback and leaves its request and failure visible.
-Markers and bounded accepted-position traces are controlled by `setMarkers`,
-`setTraces`, and `clearTrace`.
+Markers and bounded accepted-position traces (the most recent 300 accepted
+platform-origin positions) are controlled by `setMarkers`, `setTraces`, and
+`clearTrace`. Animation patterns advance at most 0.1 s of simulated time per
+frame, scaled by the speed multiplier (0.1 to 5 in the UI).
 
 ## Mechanical geometry controls
 
@@ -71,12 +73,17 @@ candidate selection.
 
 The native WebGL2 renderer reads only the accepted evaluator geometry: base
 anchors, solved horn tips, actual rods, platform points, servo orientation
-angles and platform frame. Orbit camera is the initial mouse mode. Moving the
-platform by pointer requires selecting **Move platform**. Numeric controls and
-sliders request six-axis poses; keyboard arrows move X/Y, Page Up/Down moves Z,
-W/S and A/D tilt, and Q/E rotates about Z. An optional gamepad maps analog
-sticks to translation/tilt and shoulder/trigger buttons to Z/yaw. Pose requests
-do not change anchor coordinates.
+angles and platform frame. Orbit camera is the initial mouse mode: dragging changes yaw and pitch, the
+wheel zooms between 80 and 2,500 units, and **Reset camera** restores the
+default view. Moving the platform by pointer requires selecting **Move
+platform**, which converts drag distance to X/Y requests. Numeric controls and
+sliders request six-axis poses; sliders span ±50 mm and ±30°, while the numeric
+fields accept any finite value. Keyboard arrows move X/Y, Page Up/Down moves Z,
+W/S tilts about X, A/D tilts about Y, and Q/E rotates about Z, each by 1 mm or
+1° per press (Shift doubles the step); keys are ignored while a field has focus
+or the Simulate tab is hidden. An optional gamepad maps the left stick to X/Y,
+the right stick to tilt, the triggers to Z and the shoulder buttons to yaw with
+a 0.15 dead zone. Pose requests do not change anchor coordinates.
 
 **Use geometry as optimizer reference** copies the active layout and a replay
 snapshot to the optimizer's reference JSON field. **Load optimizer reference**
