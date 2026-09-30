@@ -1,20 +1,22 @@
 import { computeCycleDemand } from '../model/cycle.js';
 import { evaluatePose } from '../model/pose.js';
 import { resolveMounting } from '../model/mounting.js';
+import { validateConditionLimit, NUMERICAL_RECIPROCAL_CUTOFF } from '../model/conditioning.js';
 import { computeWorkspace } from '../workspace/sweep.js';
-import { clamp, singularValues, degToRad } from '../math.js';
-
-const EPS = 1e-9;
+import { failureCategories } from '../io/results.js';
+import { MODEL_VERSION } from '../contracts.js';
+import { clamp, degToRad } from '../math.js';
 
 export async function evaluateLayout(layout, options) {
   const { ranges, signal, onProgress, payload, stroke, frequency, ballJointLimitDeg, ballJointClamp,
     lowerBallJointLimitDeg, upperBallJointLimitDeg, sampling, random, onPoseWork } = options;
+  const conditionLimit = validateConditionLimit(options.conditionLimit);
   const mounting = resolveMounting(layout).mounting;
   layout.mounting = mounting;
   const workspaceResult = await computeWorkspace(layout, ranges, {
     signal, onProgress,
     payload, stroke, frequency, ballJointLimitDeg, lowerBallJointLimitDeg,
-    upperBallJointLimitDeg, ballJointClamp, mounting, sampling, random,
+    upperBallJointLimitDeg, ballJointClamp, mounting, sampling, random, conditionLimit,
   });
 
   const coverage = Number.isFinite(workspaceResult.coverage) ? workspaceResult.coverage : 0;
@@ -30,24 +32,18 @@ export async function evaluateLayout(layout, options) {
     rz: 0,
   }, {
     ballJointLimitDeg, lowerBallJointLimitDeg, upperBallJointLimitDeg, ballJointClamp, mounting,
+    conditionLimit,
     servoRangeRad: layout.servoRangeRad,
     recordLegData: true,
   });
   onPoseWork?.();
 
-  let dexterity = 0;
-  let stiffness = 0;
-  let condition = Infinity;
-  if (homeResult.reachable && homeResult.jacobianRows.length === 6) {
-    const sv = singularValues(homeResult.jacobianRows);
-    const sigmaMax = Math.max(...sv, EPS);
-    const sigmaMin = sv.filter((v) => v > EPS).reduce((min, val) => Math.min(min, val), Infinity);
-    if (sigmaMax > EPS && sigmaMin < Infinity) {
-      dexterity = sigmaMin / sigmaMax;
-      stiffness = sigmaMin;
-      condition = sigmaMax / sigmaMin;
-    }
-  }
+  const dexterity = homeResult.reachable ? homeResult.conditioning.reciprocal : null;
+  const stiffness = homeResult.reachable ? homeResult.conditioning.sigmaMin : null;
+  const condition = homeResult.conditioning.condition;
+  const conditioningQuality = [dexterity, stats.worstReciprocal]
+    .filter(Number.isFinite).reduce((worst, value) => Math.min(worst, value), Infinity);
+  const availableQuality = Number.isFinite(conditioningQuality) ? conditioningQuality : null;
 
   const cycle = evaluateCycle(layout, { ...options, mounting, onPose: onPoseWork });
   const torque = cycle.torqueNm;
@@ -70,8 +66,8 @@ export async function evaluateLayout(layout, options) {
   const objectives = [
     coverage,
     ballJointClamp ? relaxedCoverage : coverage,
-    dexterity,
-    stiffnessScore,
+    dexterity ?? -Infinity,
+    stiffnessScore ?? -Infinity,
     loadBalance,
     isotropy,
     limitMargin,
@@ -80,20 +76,38 @@ export async function evaluateLayout(layout, options) {
     -fatigue,
   ];
 
+  const feasibility = {
+    cycleSatisfied: cycle.valid,
+    sampledWorkspaceSatisfied: coverage === 100,
+    homePoseSatisfied: homeResult.reachable,
+    conditionSatisfied: !homeResult.violations.some(v => ['numericalSingularity', 'conditionLimit'].includes(v.type))
+      && !(stats.conditioningCounts?.numericalSingularity || stats.conditioningCounts?.engineeringLimit
+        || stats.conditioningCounts?.unavailable)
+      && !cycle.violations?.some(v => ['numericalSingularity', 'conditionLimit'].includes(v.type)),
+    scope: 'Sampled poses under the modeled geometry, servo, rod, ball-joint and conditioning constraints',
+  };
+  feasibility.failedCategories = failureCategories({ feasibility, cycle });
+  feasibility.passing = feasibility.failedCategories.length === 0;
+
   return {
     layout,
     workspace: workspaceResult,
     coverage,
     relaxedCoverage,
     cycle,
-    feasibility: {
-      cycleSatisfied: cycle.valid,
-      sampledWorkspaceSatisfied: coverage === 100,
-      homePoseSatisfied: homeResult.reachable,
-      scope: 'Sampled poses under the modeled geometry, servo, rod and ball-joint constraints only',
-    },
+    feasibility,
     dexterity,
     stiffness: stiffnessScore,
+    conditioningQuality: availableQuality,
+    conditioning: {
+      modelVersion: MODEL_VERSION,
+      home: homeResult.conditioning,
+      workspace: { worstReciprocal: stats.worstReciprocal ?? null,
+        worstCondition: stats.worstCondition ?? null, counts: stats.conditioningCounts ?? null },
+      cycle: cycle.conditioning ?? null,
+      limit: conditionLimit,
+      numericalThreshold: NUMERICAL_RECIPROCAL_CUTOFF,
+    },
     torque,
     speedDemand,
     loadBalance,
@@ -109,10 +123,10 @@ export async function evaluateLayout(layout, options) {
 }
 
 export function evaluateCycle(layout, { payload, stroke, frequency, cycleAxis, ballJointLimitDeg,
-  lowerBallJointLimitDeg, upperBallJointLimitDeg, mounting, signal, onPose }) {
+  lowerBallJointLimitDeg, upperBallJointLimitDeg, conditionLimit, mounting, signal, onPose }) {
   return computeCycleDemand(layout, { mass: payload, stroke,
     frequency, axis: cycleAxis, ballJointLimitDeg, lowerBallJointLimitDeg,
-    upperBallJointLimitDeg, mounting, signal, onPose });
+    upperBallJointLimitDeg, conditionLimit, mounting, signal, onPose });
 }
 
 export function computeFatigue(stats, { ballJointLimitDeg, lowerBallJointLimitDeg,

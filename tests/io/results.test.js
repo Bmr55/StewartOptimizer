@@ -3,11 +3,11 @@ import assert from 'node:assert/strict';
 import { Optimizer } from '../../src/optimization/optimizer.js';
 import { displayResult, selectBest } from '../../src/io/results.js';
 import { loadUI } from '../ui/helpers.js';
-import { jointFixture } from '../fixtures/layout.js';
+import { asymmetricJointFixture } from '../fixtures/layout.js';
 
 test('headless export and display retain their documented fields and partial status', async () => {
   const opt = new Optimizer({}, {ballJointLimitDeg:100});
-  const result = await opt.evaluateLayout(jointFixture());
+  const result = await opt.evaluateLayout(asymmetricJointFixture());
   opt.fitness = [result];
   opt.runStatus = 'cancelled';
   const exported = JSON.parse(opt.exportBest());
@@ -23,7 +23,10 @@ test('headless export and display retain their documented fields and partial sta
   assert.equal(exported.model_version, 2);
   assert.ok(display.workspace_samples);
   assert.equal('workspace_samples' in exported, false);
-  const second = {...result,coverage:0};
+  const second = {...result,coverage:0, feasibility: {
+    ...result.feasibility, sampledWorkspaceSatisfied: false,
+    failedCategories: ['workspace'], passing: false,
+  }};
   assert.equal(selectBest([second], [result]), result);
   assert.equal(selectBest([], [second,result]), result);
 });

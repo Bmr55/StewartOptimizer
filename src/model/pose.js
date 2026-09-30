@@ -1,7 +1,9 @@
 import { degToRad, rotationMatrixFromEuler, rotateVector, vectorAdd, vectorSub,
-  vectorMagnitude, vectorNormalize, vectorCross, vectorDot, clamp } from '../math.js';
+  vectorMagnitude, vectorNormalize, vectorDot, clamp } from '../math.js';
 import { computeHornTip, hornLocalToWorld, solveServoAngle } from './kinematics.js';
 import { resolveMounting } from './mounting.js';
+import { assessPoseConditioning, validateConditionLimit,
+  NUMERICAL_RECIPROCAL_CUTOFF } from './conditioning.js';
 
 export function ensureLayout(layout) {
   if (!layout) throw new Error('Layout is required for workspace evaluation.');
@@ -34,7 +36,9 @@ export function evaluatePose(layout, pose = {}, options = {}) {
     servoRangeRad = layout.servoRangeRad || [-Math.PI / 2, Math.PI / 2],
     rodLengthTolerance = 0.5,
     recordLegData = false,
+    conditionLimit = null,
   } = options;
+  validateConditionLimit(conditionLimit);
   const mounting = options.mounting ?? resolveMounting(layout).mounting;
   const jointLimits = {
     lower: degToRad(lowerBallJointLimitDeg),
@@ -48,10 +52,11 @@ export function evaluatePose(layout, pose = {}, options = {}) {
   const translated = [translation[0], translation[1], translation[2] + (layout.homeHeight || 0)];
   const rotationMatrix = rotationMatrixFromEuler(rotation[0], rotation[1], rotation[2]);
 
-  const servoAngles = [], rodLengths = [], legDirections = [], jacobianRows = [];
+  const servoAngles = [], rodLengths = [], legDirections = [];
   const hornTips = recordLegData ? [] : null;
   const rodVectors = recordLegData ? [] : null;
   const platformPoints = recordLegData ? [] : null;
+  const conditionRodVectors = [], conditionPlatformPoints = [];
   const ballJointAngles = [];
   const jointAngles = { lower: [], upper: [] };
   const violations = [];
@@ -61,6 +66,7 @@ export function evaluatePose(layout, pose = {}, options = {}) {
     const base = layout.baseAnchors[i];
     const beta = layout.betaAngles[i];
     const q = vectorAdd(translated, rotateVector(rotationMatrix, layout.platformAnchors[i]));
+    conditionPlatformPoints.push(q);
     if (recordLegData) platformPoints.push(q);
 
     const solved = solveServoAngle(base, q, layout.hornLength, layout.rodLength, beta);
@@ -79,6 +85,7 @@ export function evaluatePose(layout, pose = {}, options = {}) {
 
     const hornTip = computeHornTip(base, layout.hornLength, beta, alpha);
     const rodVector = vectorSub(q, hornTip);
+    conditionRodVectors.push(rodVector);
     const rodLength = vectorMagnitude(rodVector);
     rodLengths.push(rodLength);
     if (Math.abs(rodLength - layout.rodLength) > rodLengthTolerance) {
@@ -110,7 +117,6 @@ export function evaluatePose(layout, pose = {}, options = {}) {
 
     const legDirection = vectorNormalize(vectorSub(q, base));
     legDirections.push(legDirection);
-    jacobianRows.push([...legDirection, ...vectorCross(q, legDirection)]);
     if (recordLegData) {
       hornTips.push(hornTip);
       rodVectors.push(rodVector);
@@ -118,14 +124,29 @@ export function evaluatePose(layout, pose = {}, options = {}) {
   }
 
   const jointViolation = violations.some(v => v.type === 'ballJoint');
+  const conditioning = assessPoseConditioning(conditionPlatformPoints, conditionRodVectors,
+    servoAngles, layout.betaAngles, layout.hornLength, conditionLimit);
+  if (structurallyReachable && conditioning.numericalSingularity) {
+    violations.push({ type: 'numericalSingularity', reason: conditioning.reason,
+      leg: conditioning.leg, reciprocal: conditioning.reciprocal,
+      condition: conditioning.condition, threshold: NUMERICAL_RECIPROCAL_CUTOFF });
+  } else if (structurallyReachable && conditioning.engineeringFailure) {
+    violations.push({ type: 'conditionLimit', condition: conditioning.condition,
+      reciprocal: conditioning.reciprocal, limit: conditionLimit });
+  }
+  const mechanicallyReachable = structurallyReachable && !jointViolation;
   return {
-    reachable: structurallyReachable && violations.length === 0,
-    relaxedReachable: structurallyReachable && (!jointViolation || ballJointClamp),
+    reachable: mechanicallyReachable && conditioning.satisfied,
+    relaxedReachable: structurallyReachable && (!jointViolation || ballJointClamp)
+      && conditioning.satisfied,
+    geometricallyReachable: structurallyReachable,
+    mechanicallyReachable,
     violations,
     servoAngles,
     rodLengths,
     legDirections,
-    jacobianRows,
+    jacobianRows: conditioning.jacobianRows ?? [],
+    conditioning,
     hornTips,
     rodVectors,
     platformPoints,

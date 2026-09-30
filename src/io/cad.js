@@ -25,7 +25,8 @@ function validHome(evaluation) {
     recordLegData: true,
   });
   const layout = evaluation.layout;
-  if (!result.reachable || !Array.isArray(result.hornTips) || result.hornTips.length !== 6
+  if (!(result.geometricallyReachable ?? result.reachable)
+      || !Array.isArray(result.hornTips) || result.hornTips.length !== 6
       || !Array.isArray(result.platformPoints) || result.platformPoints.length !== 6
       || !layout.baseAnchors?.every(finitePoint) || !result.hornTips.every(finitePoint)
       || !result.platformPoints.every(finitePoint)) {

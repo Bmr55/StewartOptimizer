@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { jointFixture } from '../fixtures/layout.js';
+import { jointFixture, asymmetricJointFixture } from '../fixtures/layout.js';
 import { evaluatePose } from '../../src/model/pose.js';
 import { computeWorkspace } from '../../src/workspace/sweep.js';
 import { computeCycleDemand } from '../../src/model/cycle.js';
@@ -10,7 +10,7 @@ import { resolveMounting } from '../../src/model/mounting.js';
 const close = (a, b, tolerance = 1e-6) => assert.ok(Math.abs(a - b) <= tolerance, `${a} != ${b}`);
 
 function withFlippedSocket(joint) {
-  const layout = jointFixture();
+  const layout = asymmetricJointFixture();
   const mounting = resolveMounting(layout).mounting;
   mounting[joint][0] = { source: 'supplied',
     direction: mounting[joint][0].direction.map(value => -value) };
@@ -21,7 +21,7 @@ function withFlippedSocket(joint) {
 test('both home sockets point toward their opposite rod endpoints', () => {
   const layout = jointFixture();
   const result = evaluatePose(layout, {}, { ballJointLimitDeg: 0, recordLegData: true });
-  assert.equal(result.reachable, true);
+  assert.equal(result.mechanicallyReachable, true);
   assert.equal(result.jointAngles.lower.length, 6);
   for (let leg = 0; leg < 6; leg++) {
     close(result.jointAngles.lower[leg], 0);
@@ -67,7 +67,7 @@ test('upper and lower failures are independently reported with leg, joint, and l
 });
 
 test('joint-angle limit is inclusive at the boundary and independent per socket', () => {
-  const layout = jointFixture();
+  const layout = asymmetricJointFixture();
   const mounting = resolveMounting(layout).mounting;
   const direction = mounting.lower[0].direction;
   const perpendicular = [-direction[1], direction[0], 0];
@@ -85,7 +85,7 @@ test('joint-angle limit is inclusive at the boundary and independent per socket'
 });
 
 test('effective per-socket limits carry through workspace and cycle checks', async () => {
-  const layout = jointFixture();
+  const layout = asymmetricJointFixture();
   const mounting = resolveMounting(layout).mounting;
   mounting.lower[0] = { source: 'supplied', direction: [1, 0, 0] };
   layout.mounting = mounting;

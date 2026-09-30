@@ -1,6 +1,4 @@
-import { singularValues, average, standardDeviation } from '../math.js';
-
-const EPS = 1e-8;
+import { average, standardDeviation } from '../math.js';
 
 function runningMean() {
   let count = 0;
@@ -25,6 +23,10 @@ export function createWorkspaceStatistics({ totalPoses, sampleLimit = 200, viola
   const lowerJointMax = new Array(6).fill(0);
   const upperJointMax = new Array(6).fill(0);
   const jointViolationCounts = { lower: 0, upper: 0 };
+  const conditioningCounts = { valid: 0, numericalSingularity: 0,
+    engineeringLimit: 0, unavailable: 0 };
+  let worstReciprocal = null;
+  let worstCondition = null;
 
   const recordSample = (collection, limit, seenCount, sample) => {
     if (limit <= 0) return;
@@ -59,22 +61,25 @@ export function createWorkspaceStatistics({ totalPoses, sampleLimit = 200, viola
       }
     }
 
+    if (result.geometricallyReachable) {
+      if (!result.conditioning?.available) conditioningCounts.unavailable++;
+      else if (result.conditioning.numericalSingularity) conditioningCounts.numericalSingularity++;
+      else if (result.conditioning.engineeringFailure) conditioningCounts.engineeringLimit++;
+      else conditioningCounts.valid++;
+    }
+
     if (result.relaxedReachable) relaxedReachableCount += 1;
     if (result.reachable) {
       reachableCount += 1;
       reachableSeen += 1;
       recordSample(reachableSamples, normalizedSampleLimit, reachableSeen, { pose });
 
-      if (result.jacobianRows.length === 6) {
-        const sv = singularValues(result.jacobianRows);
-        if (sv.length) {
-          const sigmaMax = Math.max(...sv);
-          const sigmaMin = Math.min(...sv);
-          if (Number.isFinite(sigmaMax) && Number.isFinite(sigmaMin) && sigmaMax > EPS && sigmaMin > EPS) {
-            isotropySamples.add(sigmaMin / sigmaMax);
-            stiffnessSamples.add(sigmaMin);
-          }
-        }
+      if (result.conditioning?.satisfied) {
+        const { reciprocal, condition, sigmaMin } = result.conditioning;
+        isotropySamples.add(reciprocal);
+        stiffnessSamples.add(sigmaMin);
+        worstReciprocal = worstReciprocal == null ? reciprocal : Math.min(worstReciprocal, reciprocal);
+        worstCondition = worstCondition == null ? condition : Math.max(worstCondition, condition);
       }
 
       if (result.legDirections.length === 6) {
@@ -146,6 +151,9 @@ export function createWorkspaceStatistics({ totalPoses, sampleLimit = 200, viola
       ballJointOverallMax: Math.max(0, ...ballJointMax),
       ballJointAverage: ballJointSamples.value(),
       jointViolationCounts,
+      conditioningCounts,
+      worstReciprocal,
+      worstCondition,
       violationCounts,
       violationRate,
     };

@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import { evaluatePose, computeWorkspace } from '../../workspace.js';
 import { Optimizer } from '../../optimizer.js';
 import { resolveMounting } from '../../src/model/mounting.js';
-import { jointFixture } from '../fixtures/layout.js';
+import { asymmetricJointFixture } from '../fixtures/layout.js';
 
 function lowerFailureLayout() {
-  const layout = jointFixture();
+  const layout = asymmetricJointFixture();
   const mounting = resolveMounting(layout).mounting;
   mounting.lower[0] = {
     direction: mounting.lower[0].direction.map(component => -component), source: 'supplied',

@@ -1,5 +1,6 @@
 import { ensureLayout, evaluatePose } from '../model/pose.js';
 import { resolveMounting } from '../model/mounting.js';
+import { validateConditionLimit } from '../model/conditioning.js';
 import { createWorkspaceStatistics } from './statistics.js';
 import { createRandom } from '../optimization/random.js';
 import { estimateWorkspaceSize, normalizeSampling, workspacePoses } from './sampling.js';
@@ -14,6 +15,7 @@ export async function computeWorkspace(layout, ranges = {}, options = {}) {
     ballJointLimitDeg = 45,
     lowerBallJointLimitDeg = ballJointLimitDeg,
     upperBallJointLimitDeg = ballJointLimitDeg,
+    conditionLimit = null,
     ballJointClamp = false,
     payload = 0,
     stroke = 0,
@@ -27,6 +29,7 @@ export async function computeWorkspace(layout, ranges = {}, options = {}) {
   } = options;
 
   signal?.throwIfAborted();
+  validateConditionLimit(conditionLimit);
   const mounting = options.mounting ?? resolveMounting(layout).mounting;
   const effectiveSampling = normalizeSampling(sampling);
   const totalPoses = estimateWorkspaceSize(ranges, effectiveSampling);
@@ -41,7 +44,7 @@ export async function computeWorkspace(layout, ranges = {}, options = {}) {
   for (const pose of workspacePoses(ranges, effectiveSampling)) {
     const result = evaluatePose(layout, pose, {
       ballJointLimitDeg, lowerBallJointLimitDeg, upperBallJointLimitDeg, ballJointClamp,
-      mounting, servoRangeRad: layout.servoRangeRad, recordLegData: false,
+      conditionLimit, mounting, servoRangeRad: layout.servoRangeRad, recordLegData: false,
     });
     statistics.add(pose, result);
     completed++;
@@ -56,7 +59,8 @@ export async function computeWorkspace(layout, ranges = {}, options = {}) {
   return {
     ...statistics.finish(),
     constraintPolicy: { mode: ballJointClamp ? 'soft-ball-joint' : 'strict', ballJointLimitDeg,
-      lowerBallJointLimitDeg, upperBallJointLimitDeg },
+      lowerBallJointLimitDeg, upperBallJointLimitDeg, conditionLimit,
+      numericalReciprocalCutoff: 1e-10 },
     sampling: effectiveSampling,
     payload, stroke, frequency,
   };
