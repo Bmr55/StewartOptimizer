@@ -220,7 +220,7 @@ test('optimizer budgets, exports and replays a rotational rigid-body cycle', asy
   const settings = { populationSize: 4, generations: 1, ranges: { x: { min: 0, max: 0, step: 1 } },
     sampling: { strategy: 'grid' }, seed: 7 };
   const optimizer = new Optimizer(requirements, settings);
-  assert.equal(optimizer.estimateWork().cyclePosesPerLayout, 64, 'rotation-only cycles are not stationary');
+  assert.equal(optimizer.estimateWork().cyclePosesPerLayout, 256, 'rotation-only cycles are not stationary');
   await optimizer.run();
   const exported = JSON.parse(optimizer.exportBest());
   assert.equal(exported.run.effective_settings.cycleModel.massProperties.mode, 'rigid-body');

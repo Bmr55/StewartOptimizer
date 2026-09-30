@@ -59,9 +59,11 @@ test('run budgets include workspace, home, cycle, and reject excess before evalu
     populationSize: 4, generations: 1, sampling: { strategy: 'halton', sampleCount: 256 },
   });
   assert.deepEqual(opt.estimateWork(), {
-    posesPerLayout: 321, workspacePosesPerLayout: 256, cyclePosesPerLayout: 64,
-    evaluations: 8, totalPoses: 2568,
+    posesPerLayout: 513, workspacePosesPerLayout: 256, cyclePosesPerLayout: 256,
+    evaluations: 8, totalPoses: 4104,
   });
+  assert.equal(new Optimizer({ cycle_mm: 10, frequency_hz: 2 }, { populationSize: 4, generations: 1,
+    cycleSampling: { strategy: 'uniform', samples: 64 } }).estimateWork().cyclePosesPerLayout, 64);
   assert.throws(() => new Optimizer({}, { sampling: { strategy: 'halton', sampleCount: 4096 },
     populationSize: 100, generations: 3 }).estimateWork(), /1,000,000/);
   assert.throws(() => estimateWorkspaceSize({}, { strategy: 'halton', sampleCount: 100001 }), /100,000/);

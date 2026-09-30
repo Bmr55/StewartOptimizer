@@ -152,6 +152,14 @@
                     </select>
                 </label>
                 <label class="field">
+                    <div class="field-header"><span>Cycle sampling</span><button type="button" class="info-button" data-info="Adaptive sampling inspects every interval of the 64-phase grid and bisects intervals with the largest estimated unresolved demand, conditioning, joint and servo variation. A cycle that exhausts its budget first is inconclusive and fails feasibility. Sampled convergence is not a guarantee of continuous feasibility." aria-label="More information"></button></div>
+                    <select id="optCycleSampling">
+                        <option value="adaptive" selected>Adaptive: up to 256 samples, 0.5% (default)</option>
+                        <option value="adaptive-fine">Adaptive: up to 1,024 samples, 0.1%</option>
+                        <option value="uniform-64">Fixed 64 phases (legacy)</option>
+                    </select>
+                </label>
+                <label class="field">
                     <div class="field-header"><span>Run seed</span><button type="button" class="info-button" data-info="The seed controls Halton sequence start, candidate evolution, and retained example poses. Reuse it to replay the same settings." aria-label="More information"></button></div>
                     <input type="number" id="optSeed" value="1" min="1" max="4294967295" step="1">
                     <button type="button" id="randomizeSeed">Randomize</button>

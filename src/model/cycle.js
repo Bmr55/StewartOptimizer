@@ -5,8 +5,8 @@ import { vectorNormalize, vectorCross, vectorDot, vectorScale, vectorAdd, vector
 import { GRAVITY, massPropertiesDescription, normalizeMassProperties } from './mass-properties.js';
 import { isStationary, legacyTrajectory, trajectoryIdentity, trajectoryState } from './trajectory.js';
 import { CYCLE_MODEL_VERSION } from '../contracts.js';
+import { LEGACY_CYCLE_SAMPLING, normalizeCycleSampling } from './cycle-sampling.js';
 
-export const LEGACY_CYCLE_SAMPLES = 64;
 const TRANSMISSION_CUTOFF = 1e-10;
 
 // Partial-pivot elimination; a singular equilibrium is not a zero-demand design.
@@ -119,7 +119,8 @@ export function evaluateDynamicPose(layout, state, massProperties, options = {})
   return { valid: true, torque: signedTorque.map(Math.abs), speed: signedSpeed.map(Math.abs),
     signedTorque, signedSpeed, servoAcceleration, rodForces,
     requiredForce: wrench.force, requiredMoment: wrench.moment, equilibrium,
-    motionJacobian: motion.rows, conditioning: result.conditioning, rotationMatrix: result.rotationMatrix };
+    motionJacobian: motion.rows, conditioning: result.conditioning, rotationMatrix: result.rotationMatrix,
+    servoAngles: result.servoAngles, jointAngles: result.jointAngles, jointLimits: result.jointLimits };
 }
 
 // Compatibility wrapper for a translational state with a centered point mass.
@@ -128,67 +129,163 @@ export function evaluateCyclePose(layout, pose, velocity, acceleration, mass, op
     normalizeMassProperties({ mass_kg: mass }), options);
 }
 
-export function cycleModelDescription(massProperties, samples) {
-  return `${samples}-sample rigid-rod Newton-Euler force balance; ${massPropertiesDescription(massProperties)}; `
+export function cycleModelDescription(massProperties, sampling) {
+  const schedule = sampling.strategy === 'adaptive' ? `adaptive ${sampling.evaluatedSamples}-sample`
+    : `${sampling.evaluatedSamples}-sample`;
+  return `${schedule} rigid-rod Newton-Euler force balance; ${massPropertiesDescription(massProperties)}; `
     + 'gravity along -Z; ideal massless rods/horns and joints; actuator inertia/friction omitted';
 }
 
+// Quantities whose unresolved variation drives refinement: signed torque and speed,
+// reciprocal conditioning, both socket angles and servo angles (31 values).
+function refinementValues(result) {
+  return [...result.signedTorque, ...result.signedSpeed, result.conditioning.reciprocal,
+    ...result.jointAngles.lower, ...result.jointAngles.upper, ...result.servoAngles];
+}
+
+function refinementScales(samples, jointLimits, servoSpan) {
+  let torque = 0, speed = 0, reciprocal = Infinity;
+  for (const sample of samples) {
+    for (let i = 0; i < 6; i++) {
+      torque = Math.max(torque, Math.abs(sample.values[i]));
+      speed = Math.max(speed, Math.abs(sample.values[6 + i]));
+    }
+    reciprocal = Math.min(reciprocal, sample.values[12]);
+  }
+  // A zero group (for example no payload) has no demand to resolve.
+  const group = value => value > 1e-12 ? value : Infinity;
+  return [...new Array(6).fill(group(torque)), ...new Array(6).fill(group(speed)), Math.max(reciprocal, 1e-3),
+    ...new Array(6).fill(Math.max(jointLimits.lower, 1e-3)), ...new Array(6).fill(Math.max(jointLimits.upper, 1e-3)),
+    ...new Array(6).fill(Math.max(servoSpan, 1e-3))];
+}
+
+const normalizedEstimate = (estimate, scales) =>
+  estimate.reduce((worst, value, i) => Math.max(worst, value / scales[i]), 0);
+
 export function computeCycleDemand(layout, { mass = 0, stroke = 0, frequency = 0, axis = 'z',
-  trajectory, massProperties, trajectorySource,
+  trajectory, massProperties, trajectorySource, sampling = LEGACY_CYCLE_SAMPLING,
   ballJointLimitDeg = 52, lowerBallJointLimitDeg = ballJointLimitDeg,
   upperBallJointLimitDeg = ballJointLimitDeg, conditionLimit = null,
   mounting, signal, onPose } = {}) {
   const effectiveTrajectory = trajectory ?? legacyTrajectory({ stroke, frequency, axis });
   const effectiveMass = massProperties ?? normalizeMassProperties({ mass_kg: mass });
+  const policy = normalizeCycleSampling(sampling);
   const legacyAxis = trajectory ? null : axis;
   const stationary = isStationary(effectiveTrajectory);
-  const samples = stationary ? 1 : LEGACY_CYCLE_SAMPLES;
   const period = stationary ? 0 : 1 / effectiveTrajectory.frequency_hz;
-  const torque = new Array(6).fill(0), speed = new Array(6).fill(0), acceleration = new Array(6).fill(0);
-  const limiting = { torque: null, speed: null, acceleration: null };
-  let worstCondition = null, worstReciprocal = null;
   const effectiveMounting = mounting ?? resolveMounting(layout).mounting;
+  const servoRange = layout.servoRangeRad || [-Math.PI / 2, Math.PI / 2];
   const identity = {
     trajectory: effectiveTrajectory, trajectoryId: trajectoryIdentity(effectiveTrajectory),
     trajectorySource: trajectorySource ?? (trajectory ? 'supplied' : 'legacy-cycle'),
     massModel: effectiveMass.mode, modelVersion: CYCLE_MODEL_VERSION,
   };
-  for (let i = 0; i < samples; i++) {
+  let evaluated = 0, jointLimits = null;
+  let conditionTrack = { worstCondition: null, worstReciprocal: null };
+  const samplingSummary = (status, extra = {}) => ({ ...policy, status, evaluatedSamples: evaluated,
+    converged: status === 'converged' ? true : status === 'budget-limited' ? false : null, ...extra });
+  const failure = (time, state, result) => {
+    // An observed modeled violation differs from an unavailable (singular or nonfinite) calculation.
+    const status = result.violations?.length ? 'violated' : 'unavailable';
+    return { valid: false, axis: legacyAxis, samples: evaluated, failedSample: evaluated - 1, failedTime: time,
+      failedPose: state.pose, reason: result.reason, violations: result.violations ?? [],
+      conditioning: { ...conditionTrack, failedPose: result.conditioning ?? null, conditionLimit },
+      sampling: samplingSummary(status), ...identity,
+      torqueNm: null, speedRadPerSec: null, accelerationRadPerSec2: null };
+  };
+  const evaluateAt = time => {
     signal?.throwIfAborted();
-    const time = period * i / samples;
     const state = trajectoryState(effectiveTrajectory, time);
     const result = evaluateDynamicPose(layout, state, effectiveMass, {
       ballJointLimitDeg, lowerBallJointLimitDeg, upperBallJointLimitDeg,
       conditionLimit, mounting: effectiveMounting,
     });
+    evaluated++;
     onPose?.();
-    if (!result.valid) return { valid: false, axis: legacyAxis, samples, failedSample: i, failedTime: time,
-      failedPose: state.pose, reason: result.reason, violations: result.violations ?? [],
-      conditioning: { worstCondition, worstReciprocal, failedPose: result.conditioning ?? null,
-        conditionLimit },
-      ...identity,
-      torqueNm: null, speedRadPerSec: null, accelerationRadPerSec2: null };
+    if (!result.valid) return { failure: failure(time, state, result) };
+    jointLimits ??= result.jointLimits;
     const current = result.conditioning;
-    worstCondition = worstCondition == null ? current.condition : Math.max(worstCondition, current.condition);
-    worstReciprocal = worstReciprocal == null ? current.reciprocal
-      : Math.min(worstReciprocal, current.reciprocal);
+    conditionTrack = {
+      worstCondition: conditionTrack.worstCondition == null ? current.condition
+        : Math.max(conditionTrack.worstCondition, current.condition),
+      worstReciprocal: conditionTrack.worstReciprocal == null ? current.reciprocal
+        : Math.min(conditionTrack.worstReciprocal, current.reciprocal),
+    };
+    return { sample: { time, result, values: refinementValues(result) } };
+  };
+
+  const samples = [];
+  let status, maxUnresolved = null;
+  const initial = stationary ? 1 : policy.strategy === 'uniform' ? policy.samples : policy.initialSamples;
+  for (let i = 0; i < initial; i++) {
+    const outcome = evaluateAt(period * i / initial);
+    if (outcome.failure) return outcome.failure;
+    samples.push(outcome.sample);
+  }
+  if (stationary) status = 'stationary';
+  else if (policy.strategy === 'uniform') status = 'fixed';
+  else {
+    const bisect = interval => {
+      const end = interval.b.time + (interval.wrap ? period : 0);
+      const outcome = evaluateAt((interval.a.time + end) / 2);
+      if (outcome.failure) return outcome;
+      const mid = outcome.sample;
+      samples.push(mid);
+      // Midpoint departure from linear interpolation; each half of a smooth
+      // interval is estimated to leave one quarter of it unresolved.
+      const estimate = mid.values.map((value, i) =>
+        Math.abs(value - (interval.a.values[i] + interval.b.values[i]) / 2) / 4);
+      return { children: [{ a: interval.a, b: mid, wrap: false, estimate },
+        { a: mid, b: interval.b, wrap: interval.wrap, estimate }] };
+    };
+    // Intervals stay in time order; the last wraps to the first sample one period later.
+    // Every initial interval interior is inspected before convergence is judged.
+    let intervals = [];
+    for (let i = 0; i < initial; i++) {
+      const outcome = bisect({ a: samples[i], b: samples[(i + 1) % initial], wrap: i === initial - 1 });
+      if (outcome.failure) return outcome.failure;
+      intervals.push(...outcome.children);
+    }
+    const servoSpan = Math.abs(servoRange[1] - servoRange[0]);
+    for (;;) {
+      const scales = refinementScales(samples, jointLimits, servoSpan);
+      let worstIndex = 0, worst = -Infinity;
+      intervals.forEach((interval, i) => {
+        const value = normalizedEstimate(interval.estimate, scales);
+        if (value > worst) { worst = value; worstIndex = i; }
+      });
+      maxUnresolved = worst;
+      if (worst <= policy.tolerance) { status = 'converged'; break; }
+      if (samples.length >= policy.maxSamples) { status = 'budget-limited'; break; }
+      const outcome = bisect(intervals[worstIndex]);
+      if (outcome.failure) return outcome.failure;
+      intervals = [...intervals.slice(0, worstIndex), ...outcome.children, ...intervals.slice(worstIndex + 1)];
+    }
+  }
+
+  samples.sort((a, b) => a.time - b.time);
+  const torque = new Array(6).fill(0), speed = new Array(6).fill(0), acceleration = new Array(6).fill(0);
+  const limiting = { torque: null, speed: null, acceleration: null };
+  samples.forEach(({ time, result }, index) => {
     for (let leg = 0; leg < 6; leg++) {
       for (const [key, peaks, signed] of [['torque', torque, result.signedTorque],
         ['speed', speed, result.signedSpeed], ['acceleration', acceleration, result.servoAcceleration]]) {
         const magnitude = Math.abs(signed[leg]);
         if (magnitude > peaks[leg]) peaks[leg] = magnitude;
         if (!limiting[key] || magnitude > Math.abs(limiting[key].value)) {
-          limiting[key] = { servo: leg + 1, sample: i, time, value: signed[leg] };
+          limiting[key] = { servo: leg + 1, sample: index, time, value: signed[leg] };
         }
       }
     }
-  }
-  return { valid: true, axis: legacyAxis, samples, periodS: period,
+  });
+  const samplingResult = samplingSummary(status, { maxUnresolved });
+  return { valid: true, axis: legacyAxis, samples: evaluated, periodS: period,
     torqueNm: Math.max(...torque), speedRadPerSec: Math.max(...speed),
     accelerationRadPerSec2: Math.max(...acceleration),
     perServoTorqueNm: torque, perServoSpeedRadPerSec: speed, perServoAccelerationRadPerSec2: acceleration,
     limiting,
-    conditioning: { worstCondition, worstReciprocal, conditionLimit },
+    conditioning: { ...conditionTrack, conditionLimit },
+    sampling: samplingResult,
     ...identity,
-    model: cycleModelDescription(effectiveMass, samples) };
+    model: cycleModelDescription(effectiveMass, samplingResult) };
 }

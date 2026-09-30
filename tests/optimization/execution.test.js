@@ -9,8 +9,10 @@ import { sampleText } from '../ui/helpers.js';
 test('default sample has a practical bounded budget', () => {
   const { normalized, workspace } = parseRequirements(sampleText);
   assert.equal(estimateWorkspaceSize(workspace), 729);
-  assert.equal(new Optimizer(normalized, { ranges: workspace }).estimateWork().totalPoses, 78408);
-  assert.equal(new Optimizer(normalized, { ranges: workspace, sampling: { strategy: 'grid' } }).estimateWork().totalPoses, 57168);
+  assert.equal(new Optimizer(normalized, { ranges: workspace }).estimateWork().totalPoses, 92232);
+  assert.equal(new Optimizer(normalized, { ranges: workspace, sampling: { strategy: 'grid' } }).estimateWork().totalPoses, 70992);
+  assert.equal(new Optimizer(normalized, { ranges: workspace,
+    cycleSampling: { strategy: 'uniform', samples: 64 } }).estimateWork().totalPoses, 78408);
   assert.throws(() => new Optimizer(normalized, { ranges: workspace, generations: 10000 }).estimateWork(), /1,000,000/);
   assert.throws(() => estimateWorkspaceSize({ x: { min: 0, max: 1e9, step: 0.001 } }), /100,000/);
   assert.throws(() => estimateWorkspaceSize({ x: { min: 2, max: 1, step: 1 } }), /Sweep ranges/);

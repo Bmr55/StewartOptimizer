@@ -135,7 +135,9 @@ export function createResultsView(document, onSelect, ChartClass = globalThis.Ch
       : '';
     const cycle = selected.cycle;
     const cycleText = cycle?.trajectoryId ? ` Cycle ${cycle.trajectorySource === 'supplied' ? 'trajectory' : 'single-axis'} ${cycle.trajectoryId}; ${cycle.massModel === 'rigid-body' ? 'rigid-body mass properties' : 'legacy centered point mass'}.` : '';
-    summary.textContent = `Candidate ${selectedId}: ${isPassing(selected) ? 'passing' : `diagnostic (${failures.join(', ') || 'requirements failed'})`}. Feasible sampled coverage ${printable(selected.coverage)}%. Home ${flags.homePoseSatisfied ? 'pass' : 'fail'}; workspace ${flags.sampledWorkspaceSatisfied ? 'pass' : 'fail'}; cycle ${flags.cycleSatisfied ? 'pass' : 'fail'}. Torque ${printable(selected.torque)} N m; speed ${printable(selected.speedDemand)} rad/s.${cycleText}${capacityText}${details}`;
+    const sampled = cycle?.sampling;
+    const samplingText = sampled ? ` Cycle sampling ${sampled.status} after ${sampled.evaluatedSamples} samples${sampled.status === 'budget-limited' ? ' (inconclusive)' : ''}.` : '';
+    summary.textContent = `Candidate ${selectedId}: ${isPassing(selected) ? 'passing' : `diagnostic (${failures.join(', ') || 'requirements failed'})`}. Feasible sampled coverage ${printable(selected.coverage)}%. Home ${flags.homePoseSatisfied ? 'pass' : 'fail'}; workspace ${flags.sampledWorkspaceSatisfied ? 'pass' : 'fail'}; cycle ${flags.cycleSatisfied ? 'pass' : 'fail'}. Torque ${printable(selected.torque)} N m; speed ${printable(selected.speedDemand)} rad/s.${cycleText}${samplingText}${capacityText}${details}`;
   }
 
   function choose(id) {
