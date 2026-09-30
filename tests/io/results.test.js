@@ -36,7 +36,7 @@ test('UI passes headless export data to its browser download adapter', async () 
   class HeadlessOptimizer extends Optimizer {}
   const element = await loadUI(HeadlessOptimizer, {downloadFile: data => { downloaded = JSON.parse(data); }});
   await element('runOptimization').handlers.click();
-  element('exportBestLayout').handlers.click();
+  element('downloadSelected').handlers.click();
   assert.equal(downloaded.run.status, 'completed');
   assert.equal(downloaded.base_anchors.length, 6);
   assert.equal(downloaded.metadata.coverage, JSON.parse(element('resultOutput').value).result.metrics.coverage);

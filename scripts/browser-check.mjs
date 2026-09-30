@@ -27,7 +27,20 @@ try {
   assert.equal(await requirementsGuide.locator('tbody tr').count(), 16);
   assert.equal(await page.locator('a[href="./docs/REQUIREMENTS.md"]').count(), 0);
   await requirementsGuide.locator('summary').click();
+  const optimizationPanel = page.locator('#optimizationParameters');
+  assert.equal(await optimizationPanel.getAttribute('open'), null);
+  assert.equal(await page.locator('#optPopulation').isVisible(), false);
+  await page.locator('.optimization-info').click();
+  assert.equal(await optimizationPanel.getAttribute('open'), null);
+  assert.match(await page.locator('.info-popup.visible').innerText(), /genetic algorithm/i);
+  await page.locator('.optimization-info').click();
+  await optimizationPanel.locator('summary').click();
+  assert.equal(await page.locator('#optPopulation').isVisible(), true);
   await page.locator('#optPopulation').fill('4');
+  await optimizationPanel.locator('summary').click();
+  assert.equal(await page.locator('#optPopulation').isVisible(), false);
+  await optimizationPanel.locator('summary').click();
+  assert.equal(await page.locator('#optPopulation').inputValue(), '4');
   await page.locator('#optGenerations').fill('1');
   await page.locator('#optObjectiveSet').selectOption('full');
   await page.locator('#optMutationRate').fill('0');
@@ -82,7 +95,7 @@ try {
   await candidateSelect.selectOption(selected);
 
   const downloadPromise = page.waitForEvent('download');
-  await page.locator('#exportBestLayout').click();
+  await page.locator('#downloadSelected').click();
   const downloaded = JSON.parse(await readFile(await (await downloadPromise).path(), 'utf8'));
   assert.equal(downloaded.id, Number(selected));
   assert.equal(downloaded.schema_version, 2);
@@ -95,6 +108,29 @@ try {
   assert.equal(downloaded.run.effective_settings.effectiveServoRatings.perServo[1].torqueNm, 0.000001);
   assert.equal(downloaded.servo_capacity.policy, 'advisory');
   assert.match(await page.locator('#candidateSummary').textContent(), /Servo capacity .+ \(advisory(?: warning)?\)/);
+  const formatSelect = page.locator('#downloadFormat');
+  assert.deepEqual(await formatSelect.locator('option').evaluateAll(nodes => nodes.map(node => node.value)),
+    ['json', 'fusion', 'csv']);
+  await formatSelect.selectOption('fusion');
+  if (!(await page.locator('#downloadSelected').isEnabled())) {
+    for (const id of options) {
+      await candidateSelect.selectOption(id);
+      if (await page.locator('#downloadSelected').isEnabled()) break;
+    }
+  }
+  assert.equal(await page.locator('#downloadSelected').isEnabled(), true);
+  const fusionDownload = page.waitForEvent('download');
+  await page.locator('#downloadSelected').click();
+  const fusionFile = await fusionDownload;
+  assert.equal(fusionFile.suggestedFilename(), 'stewart_construction.py');
+  assert.match(await readFile(await fusionFile.path(), 'utf8'), /import adsk\.core, adsk\.fusion/);
+  await formatSelect.selectOption('csv');
+  const csvDownload = page.waitForEvent('download');
+  await page.locator('#downloadSelected').click();
+  const csvFile = await csvDownload;
+  assert.equal(csvFile.suggestedFilename(), 'stewart_coordinates.csv');
+  assert.match(await readFile(await csvFile.path(), 'utf8'), /^candidate_id,name,kind,frame,x_mm,y_mm,z_mm/);
+  await formatSelect.selectOption('json');
   await page.locator('#referenceLayoutInput').fill(JSON.stringify(downloaded));
   await page.locator('#runOptimization').click();
   await page.waitForFunction(() => document.querySelector('#optStatus').textContent.includes('Optimization complete'), null, { timeout: 30000 });
@@ -120,6 +156,7 @@ try {
   await fallbackPage.route('**/src/ui/optimizer-worker.js', route => route.abort());
   await fallbackPage.goto(`http://127.0.0.1:${server.address().port}/`);
   await fallbackPage.waitForFunction(() => document.querySelector('#requirementsInput').value.includes('mass_kg'));
+  await fallbackPage.locator('#optimizationParameters summary').click();
   await fallbackPage.locator('#optPopulation').fill('4');
   await fallbackPage.locator('#optGenerations').fill('1');
   await fallbackPage.locator('#optSampling').selectOption('256');
@@ -147,6 +184,7 @@ try {
   }));
   await errorPage.goto(`http://127.0.0.1:${server.address().port}/`);
   await errorPage.waitForFunction(() => document.querySelector('#requirementsInput').value.includes('mass_kg'));
+  await errorPage.locator('#optimizationParameters summary').click();
   await errorPage.locator('#optPopulation').fill('4');
   await errorPage.locator('#optGenerations').fill('1');
   await errorPage.locator('#optSampling').selectOption('256');
@@ -155,7 +193,7 @@ try {
   assert.equal(await errorPage.locator('#runPhase').textContent(), 'failed · partial results');
   assert.equal(await errorPage.locator('#runCandidates').textContent(), '4 / 8');
   assert.match(await errorPage.locator('#runBestCandidate').textContent(), /#\d+ ·/);
-  assert.equal(await errorPage.locator('#exportBestLayout').isEnabled(), true);
+  assert.equal(await errorPage.locator('#downloadSelected').isEnabled(), true);
 
   const stalePage = await browser.newPage();
   await stalePage.route('**/src/ui/optimizer-worker.js', route => route.fulfill({
@@ -182,6 +220,7 @@ try {
   }));
   await stalePage.goto(`http://127.0.0.1:${server.address().port}/`);
   await stalePage.waitForFunction(() => document.querySelector('#requirementsInput').value.includes('mass_kg'));
+  await stalePage.locator('#optimizationParameters summary').click();
   await stalePage.locator('#optPopulation').fill('4');
   await stalePage.locator('#optGenerations').fill('1');
   await stalePage.locator('#optSampling').selectOption('256');

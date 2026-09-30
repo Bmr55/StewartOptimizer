@@ -55,7 +55,11 @@
             <div class="button-row">
                 <button id="loadSampleRequirements">Load Sample Requirements</button>
                 <button id="clearRequirements">Clear</button>
+                <button type="button" id="saveLocalWorkspace">Save in browser</button>
+                <button type="button" id="restoreLocalWorkspace">Restore saved workspace</button>
+                <button type="button" id="deleteLocalWorkspace">Delete browser save</button>
             </div>
+            <p class="field-help">The browser save stores these inputs and the current simulator layout on this device. It restores automatically when you reopen the app. Optimization results must be rerun.</p>
             <label class="field">
                 <div class="field-header">
                     <span>Requirements JSON</span>
@@ -87,11 +91,11 @@
             </div>
         </section>
 
-        <section>
-            <div class="section-title">
-                <h2>Optimization Parameters</h2>
-                <button type="button" class="info-button" data-info="These settings control the genetic algorithm that searches for good layouts. More generations and a larger population improve search depth but take longer to compute." aria-label="More information"></button>
-            </div>
+        <section class="optimization-section">
+            <details class="optimization-panel" id="optimizationParameters">
+                <summary class="section-title optimization-summary">
+                    <h2>Optimization Parameters</h2>
+                </summary>
             <div class="grid">
                 <label class="field">
                     <div class="field-header"><span>Layout Topology</span></div>
@@ -213,17 +217,24 @@
                 <label for="servoTorque5">5</label><input type="number" id="servoTorque5" step="any" placeholder="Shared"><input type="number" id="servoSpeed5" step="any" placeholder="Shared">
                 <label for="servoTorque6">6</label><input type="number" id="servoTorque6" step="any" placeholder="Shared"><input type="number" id="servoSpeed6" step="any" placeholder="Shared">
             </div>
+            </details>
+            <button type="button" class="info-button optimization-info" data-info="These settings control the genetic algorithm that searches for good layouts. More generations and a larger population improve search depth but take longer to compute." aria-label="More information"></button>
         </section>
 
         <section>
             <h2>Execution</h2>
-            <div class="button-row">
+            <div class="button-row execution-actions">
                 <button class="primary" id="runOptimization">Run Optimization</button>
                 <button id="cancelOptimization" disabled>Cancel</button>
                 <button id="runMainThreadFallback" hidden disabled>Run on main thread</button>
-                <button id="exportBestLayout" disabled>Download Layout JSON</button>
-                <button id="exportFusionScript" disabled>Download Fusion Script</button>
-                <button id="exportCoordinateCsv" disabled>Download Coordinates CSV</button>
+                <label class="field execution-download-format">Format
+                    <select id="downloadFormat" aria-label="Download format" disabled>
+                        <option value="json">Layout JSON</option>
+                        <option value="fusion">Fusion Script</option>
+                        <option value="csv">Coordinates CSV</option>
+                    </select>
+                </label>
+                <button id="downloadSelected" disabled>Download</button>
             </div>
             <div id="optStatus" class="status">Idle</div>
             <div class="run-dashboard" id="runDashboard" aria-label="Live run metrics">

@@ -18,6 +18,7 @@ export async function loadUI(Optimizer, options = {}) {
   };
   const document = { getElementById: element, createElement: () => element('popup'),
     body: { appendChild() {} }, addEventListener() {} };
+  element('downloadFormat').value = 'json';
   const app = createApp({ document, window: { addEventListener() {} },
     Optimizer, ChartClass: FakeChart, loadDefaultRequirements: async () => sampleText, ...options });
   await app.ready;

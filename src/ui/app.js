@@ -16,6 +16,8 @@ import { createSimulatorController, ANIMATION_PATTERNS } from '../simulator/cont
 import { createSimulatorView } from '../simulator/view.js';
 import { createGeometryControls } from '../simulator/geometry-controls.js';
 import { mountSimulatorDiagnostics } from '../simulator/diagnostics.js';
+import { LOCAL_WORKSPACE_KEY, captureLocalWorkspace, parseLocalWorkspace,
+    applyLocalWorkspace } from './local-workspace.js';
 
 function simulatorOptions(settings = {}, layout = {}) {
     return {
@@ -45,6 +47,8 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
     let runReferenceNote = '';
     const dashboard = createRunDashboard(document, { now });
     const fallbackButton = document.getElementById('runMainThreadFallback');
+    const downloadFormat = document.getElementById('downloadFormat');
+    const downloadButton = document.getElementById('downloadSelected');
     function offerFallback(available) {
         fallbackButton.hidden = !available;
         fallbackButton.disabled = !available;
@@ -164,21 +168,28 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
         }
     });
 
+    function updateDownloadControls(running) {
+        const selected = currentOptimizer?.getSelectedCandidate?.();
+        const hasResult = Boolean(selected || currentOptimizer?.fitness?.length);
+        downloadFormat.disabled = running || !hasResult;
+        downloadButton.disabled = running || !hasResult
+            || (downloadFormat.value !== 'json' && !canExportCad(selected));
+    }
+
     function setRunning(running) {
         ratingControls.setDisabled(running);
         for (const id of ['runOptimization', 'loadSampleRequirements', 'clearRequirements',
             'optSampling', 'optSeed', 'randomizeSeed', 'optPopulation', 'optGenerations',
-            'optObjectiveSet', 'optMutationRate', 'clearReferenceLayout', 'referenceLayoutFile']) {
+            'optObjectiveSet', 'optMutationRate', 'clearReferenceLayout', 'referenceLayoutFile',
+            'saveLocalWorkspace', 'restoreLocalWorkspace', 'deleteLocalWorkspace']) {
             document.getElementById(id).disabled = running;
         }
         document.getElementById('cancelOptimization').disabled = !running;
         if (running) fallbackButton.disabled = true;
-        document.getElementById('exportBestLayout').disabled = running
-            || !(currentOptimizer?.getSelectedCandidate?.() || currentOptimizer?.fitness?.length);
-        const cadAvailable = !running && canExportCad(currentOptimizer?.getSelectedCandidate?.());
-        document.getElementById('exportFusionScript').disabled = !cadAvailable;
-        document.getElementById('exportCoordinateCsv').disabled = !cadAvailable;
+        updateDownloadControls(running);
     }
+
+    downloadFormat.addEventListener('change', () => updateDownloadControls(Boolean(currentOptimizer?.running)));
 
     document.getElementById('cancelOptimization').addEventListener('click', () => {
         currentOptimizer?.stop();
@@ -332,7 +343,7 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
         }
     });
 
-    document.getElementById('exportBestLayout').addEventListener('click', () => {
+    function exportLayout() {
         try {
             if (!currentOptimizer) {
                 showStatus('Run the optimization before exporting.', true);
@@ -344,7 +355,7 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
             console.error(error);
             showStatus(error.message, true);
         }
-    });
+    }
 
     function simulatorJSON() {
         const state = simulatorController.getState();
@@ -366,36 +377,85 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
         try { downloadFile(simulatorJSON(), 'stewart_simulator.json', 'application/json', document); }
         catch (error) { showStatus(error.message, true); }
     });
+    function loadSimulatorLayout(parsed, activate = true) {
+        const { layout, sourceRun } = importLayout(parsed);
+        layout.id = parsed.id ?? parsed.layout?.id ?? parsed.result?.layout?.id ?? null;
+        simulatorRun = sourceRun;
+        const saved = parsed.simulator;
+        simulatorController.loadLayout(layout, { source: { kind: 'import', candidateId: layout.id ?? null },
+            options: saved?.options ?? simulatorOptions(sourceRun?.effective_settings, layout) });
+        simCandidateSelect.innerHTML = `<option value="">Imported reference</option>${simCandidateSelect.innerHTML}`;
+        simCandidateSelect.value = '';
+        if (saved?.accepted) simulatorController.requestPose(saved.accepted, { source: 'replay' });
+        if (saved?.requested) simulatorController.requestPose(saved.requested, { source: 'replay' });
+        if (saved?.camera) simulatorView.setCamera(saved.camera);
+        if (saved?.animation) {
+            const pattern = saved.animation.pattern !== 'none' && ANIMATION_PATTERNS.includes(saved.animation.pattern)
+                ? saved.animation.pattern : 'wobble';
+            const speed = saved.animation.speed || 1;
+            document.getElementById('simPattern').value = pattern;
+            document.getElementById('simSpeed').value = String(speed);
+            simulatorController.setAnimation(pattern, false, { speed });
+        }
+        if (saved?.pointerMode) document.getElementById('simPointerMode').value = saved.pointerMode;
+        if (saved?.markers !== undefined) simulatorController.setMarkers(saved.markers);
+        if (saved?.tracesEnabled !== undefined) simulatorController.setTraces(saved.tracesEnabled);
+        document.getElementById('simDownload').disabled = false;
+        if (activate) setTab('simulate');
+    }
     document.getElementById('simLoadReference').addEventListener('click', () => {
         try {
             const raw = referenceLayoutInput.value.trim();
             if (!raw) throw new Error('Provide reference layout JSON in Optimize first.');
-            const parsed = JSON.parse(raw);
-            const { layout, sourceRun } = importLayout(parsed);
-            layout.id = parsed.id ?? parsed.layout?.id ?? parsed.result?.layout?.id ?? null;
-            simulatorRun = sourceRun;
-            const saved = parsed.simulator;
-            simulatorController.loadLayout(layout, { source: { kind: 'import', candidateId: layout.id ?? null },
-                options: saved?.options ?? simulatorOptions(sourceRun?.effective_settings, layout) });
-            simCandidateSelect.innerHTML = `<option value="">Imported reference</option>${simCandidateSelect.innerHTML}`;
-            simCandidateSelect.value = '';
-            if (saved?.accepted) simulatorController.requestPose(saved.accepted, { source: 'replay' });
-            if (saved?.requested) simulatorController.requestPose(saved.requested, { source: 'replay' });
-            if (saved?.camera) simulatorView.setCamera(saved.camera);
-            if (saved?.animation) {
-                const pattern = saved.animation.pattern !== 'none' && ANIMATION_PATTERNS.includes(saved.animation.pattern)
-                    ? saved.animation.pattern : 'wobble';
-                const speed = saved.animation.speed || 1;
-                document.getElementById('simPattern').value = pattern;
-                document.getElementById('simSpeed').value = String(speed);
-                simulatorController.setAnimation(pattern, false, { speed });
-            }
-            if (saved?.pointerMode) document.getElementById('simPointerMode').value = saved.pointerMode;
-            if (saved?.markers !== undefined) simulatorController.setMarkers(saved.markers);
-            if (saved?.tracesEnabled !== undefined) simulatorController.setTraces(saved.tracesEnabled);
-            document.getElementById('simDownload').disabled = false;
-            setTab('simulate');
+            loadSimulatorLayout(JSON.parse(raw));
         } catch (error) { showStatus(error.message, true); setTab('optimize'); }
+    });
+
+    function restoreLocalWorkspace(raw) {
+        const saved = parseLocalWorkspace(raw);
+        if (saved.simulator) importLayout(saved.simulator);
+        currentOptimizer = null;
+        lastOutcome = null;
+        simulatorRun = null;
+        offerFallback(false);
+        simulatorController.clear();
+        clearSimulatorSelection();
+        document.getElementById('simDownload').disabled = true;
+        resultsView.clear();
+        resultOutput.value = '';
+        dashboard.reset();
+        if (saved.inputs.requirementsInput.trim()) {
+            try { populate(parseRequirements(saved.inputs.requirementsInput)); }
+            catch { /* Preserve unfinished requirements text and saved control values. */ }
+        }
+        applyLocalWorkspace(document, saved);
+        if (saved.simulator) loadSimulatorLayout(saved.simulator, false);
+        setRunning(false);
+        showStatus(saved.simulator
+            ? 'Local workspace restored. The saved layout is ready in Simulate; rerun optimization for candidate results.'
+            : 'Local workspace restored. Run optimization to regenerate results.');
+    }
+
+    document.getElementById('saveLocalWorkspace').addEventListener('click', () => {
+        try {
+            const simulator = simulatorController.getState().layout ? JSON.parse(simulatorJSON()) : null;
+            window.localStorage.setItem(LOCAL_WORKSPACE_KEY,
+                JSON.stringify(captureLocalWorkspace(document, simulator)));
+            showStatus('Workspace saved in this browser.');
+        } catch (error) { showStatus(`Could not save in this browser: ${error.message}`, true); }
+    });
+    document.getElementById('restoreLocalWorkspace').addEventListener('click', () => {
+        try {
+            const raw = window.localStorage.getItem(LOCAL_WORKSPACE_KEY);
+            if (!raw) throw new Error('No browser save exists.');
+            restoreLocalWorkspace(raw);
+        } catch (error) { showStatus(`Could not restore browser save: ${error.message}`, true); }
+    });
+    document.getElementById('deleteLocalWorkspace').addEventListener('click', () => {
+        try {
+            window.localStorage.removeItem(LOCAL_WORKSPACE_KEY);
+            showStatus('Browser save deleted.');
+        } catch (error) { showStatus(`Could not delete browser save: ${error.message}`, true); }
     });
 
     function exportCad(format) {
@@ -415,8 +475,10 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
         }
     }
 
-    document.getElementById('exportFusionScript').addEventListener('click', () => exportCad('fusion'));
-    document.getElementById('exportCoordinateCsv').addEventListener('click', () => exportCad('csv'));
+    downloadButton.addEventListener('click', () => {
+        if (downloadFormat.value === 'json') exportLayout();
+        else if (downloadFormat.value === 'fusion' || downloadFormat.value === 'csv') exportCad(downloadFormat.value);
+    });
 
     const ready = loadDefaultRequirements()
         .then((json) => {
@@ -427,6 +489,14 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
         .catch((error) => {
             console.error(error);
             showStatus(error.message, true);
+        })
+        .then(() => {
+            try {
+                const saved = window.localStorage?.getItem(LOCAL_WORKSPACE_KEY);
+                if (saved) restoreLocalWorkspace(saved);
+            } catch (error) {
+                showStatus(`Could not restore browser save: ${error.message}`, true);
+            }
         });
     return { ready, simulatorController, simulatorView, geometryControls, simulatorDiagnostics, setTab };
 }
