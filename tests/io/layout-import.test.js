@@ -160,6 +160,24 @@ test('asymmetric reference run replays from exported effective settings and reim
   assert.throws(() => Optimizer.fromReplay(source), /run.effective_settings/);
 });
 
+test('a locked servo range runs, exports, replays and reimports', async () => {
+  const settings = { populationSize: 4, generations: 1, seed: 5, ranges: {}, sampling: { strategy: 'grid' } };
+  const original = new Optimizer({ servo_travel_bounds_deg: [0, 0] }, settings);
+  await original.run();
+  const exported = JSON.parse(original.exportBest());
+  assert.deepEqual(exported.servo_range, [0, 0]);
+  assert.deepEqual(exported.run.effective_settings.servoRangeDeg, [0, 0]);
+  const imported = importLayout(exported);
+  assert.deepEqual(imported.layout.servoRangeRad, [0, 0]);
+  assert.deepEqual(importLayout({ run: exported.run, result: { layout: exported } }).layout.servoRangeRad, [0, 0]);
+  const replay = Optimizer.fromReplay(exported);
+  await replay.run();
+  assert.deepEqual(JSON.parse(replay.exportBest()), exported);
+  const asReference = new Optimizer({ servo_travel_bounds_deg: [0, 0] }, { ...settings, referenceLayout: exported });
+  assert.deepEqual(asReference.referenceDiagnostics.boundsConflicts, []);
+  assert.throws(() => importLayout({ ...exported, servo_range: [1, 0] }), /servo_range must contain two finite bounds with max >= min/);
+});
+
 test('free-topology parameters must be an object, are copied, and version errors show the offending value', () => {
   const plain = asymmetric();
   for (const parameters of ['garbage', 42, true, [1, 2]]) {

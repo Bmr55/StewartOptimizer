@@ -64,8 +64,8 @@ export function editGeometry(source, edit) {
     case 'servoRange': {
       const bounds = edit.degrees;
       if (!Array.isArray(bounds) || bounds.length !== 2 || !bounds.every(Number.isFinite)
-          || bounds[1] <= bounds[0]) {
-        throw new RangeError('servoRange must have finite minimum and maximum degrees, with max > min.');
+          || bounds[1] < bounds[0]) {
+        throw new RangeError('servoRange must have finite minimum and maximum degrees, with max >= min.');
       }
       layout.servoRangeRad = bounds.map(degToRad);
       delete layout.servoRangeDeg;
