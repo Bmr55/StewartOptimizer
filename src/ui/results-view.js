@@ -65,7 +65,11 @@ export function createResultsView(document, onSelect) {
     }
     const flags = selected.feasibility || {};
     const failures = failureCategories(selected);
-    summary.textContent = `Candidate ${selectedId}: ${isPassing(selected) ? 'passing' : `diagnostic (${failures.join(', ') || 'requirements failed'})`}. Feasible sampled coverage ${printable(selected.coverage)}%. Home ${flags.homePoseSatisfied ? 'pass' : 'fail'}; workspace ${flags.sampledWorkspaceSatisfied ? 'pass' : 'fail'}; cycle ${flags.cycleSatisfied ? 'pass' : 'fail'}. Torque ${printable(selected.torque)} N m; speed ${printable(selected.speedDemand)} rad/s.`;
+    const reference = selected.layout.seedOrigin === 'reference' ? selected.referenceDiagnostics : null;
+    const details = reference
+      ? ` Exact reference. Bounds conflicts: ${reference.boundsConflicts.map(item => item.field).join(', ') || 'none'}. Home violations: ${reference.homePoseViolations.map(item => `${item.type} leg ${item.leg + 1}`).join(', ') || 'none'}.`
+      : '';
+    summary.textContent = `Candidate ${selectedId}: ${isPassing(selected) ? 'passing' : `diagnostic (${failures.join(', ') || 'requirements failed'})`}. Feasible sampled coverage ${printable(selected.coverage)}%. Home ${flags.homePoseSatisfied ? 'pass' : 'fail'}; workspace ${flags.sampledWorkspaceSatisfied ? 'pass' : 'fail'}; cycle ${flags.cycleSatisfied ? 'pass' : 'fail'}. Torque ${printable(selected.torque)} N m; speed ${printable(selected.speedDemand)} rad/s.${details}`;
   }
 
   function choose(id) {
@@ -92,7 +96,8 @@ export function createResultsView(document, onSelect) {
       candidateSelect.innerHTML = candidates.map(candidate => {
         const id = escapeHtml(candidate.layout.id);
         const state = isPassing(candidate) ? 'passing' : `diagnostic: ${failureCategories(candidate).join(', ')}`;
-        return `<option value="${id}">Candidate ${id} — ${escapeHtml(state)}</option>`;
+        const prefix = candidate.layout.seedOrigin === 'reference' ? 'Exact reference' : `Candidate ${id}`;
+        return `<option value="${id}">${escapeHtml(prefix)} — ${escapeHtml(state)}</option>`;
       }).join('');
       candidateSelect.disabled = !candidates.length;
       candidateSelect.value = selectedId === null ? '' : String(selectedId);

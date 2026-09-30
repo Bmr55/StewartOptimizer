@@ -236,6 +236,10 @@ button.primary:hover {
     min-height: 180px;
 }
 
+#referenceLayoutInput {
+    min-height: 110px;
+}
+
 .result-browser {
     display: grid;
     gap: 12px;

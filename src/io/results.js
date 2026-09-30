@@ -71,6 +71,8 @@ export function layoutToJSON(layout, toDegrees = radToDeg) {
     schema_version: SCHEMA_VERSION,
     model_version: MODEL_VERSION,
     id: layout.id ?? null,
+    seed_origin: layout.seedOrigin ?? null,
+    reference_diagnostics: layout.referenceDiagnostics ?? null,
     topology: layout.topology ?? 'free',
     topology_parameters: layout.topologyParameters ?? null,
     mounting: layout.mounting ?? null,
@@ -80,7 +82,7 @@ export function layoutToJSON(layout, toDegrees = radToDeg) {
     beta_angles: layout.betaAngles.slice(),
     horn_length: layout.hornLength,
     rod_length: layout.rodLength,
-    servo_range: layout.servoRangeRad.map(toDegrees),
+    servo_range: layout.servoRangeDeg?.slice() ?? layout.servoRangeRad.map(toDegrees),
     home_height: layout.homeHeight,
   };
 }
@@ -101,6 +103,7 @@ export function displayResult(evaluation) {
   return {
     id: evaluation.layout?.id ?? null,
     diagnostic: !isPassing(evaluation),
+    reference_diagnostics: evaluation.referenceDiagnostics ?? null,
     metrics: metricValues(evaluation),
     layout: layoutToJSON(evaluation.layout, rad => rad * 180 / Math.PI),
     cycle: evaluation.cycle,
@@ -116,6 +119,7 @@ export function exportResult(evaluation, run) {
   return {
     ...layoutToJSON(evaluation.layout),
     diagnostic: !isPassing(evaluation),
+    reference_diagnostics: evaluation.referenceDiagnostics ?? null,
     metadata: metricValues(evaluation, true),
     cycle: evaluation.cycle ?? null,
     feasibility: resultFeasibility(evaluation),

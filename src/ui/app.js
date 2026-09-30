@@ -10,6 +10,7 @@ import { buildConstructionSkeleton, canExportCad, skeletonToCSV, skeletonToFusio
 
 export function createApp({ document, window, Optimizer = DefaultOptimizer, loadDefaultRequirements = loadSample, downloadFile = download }) {
     const requirementsInput = document.getElementById('requirementsInput');
+    const referenceLayoutInput = document.getElementById('referenceLayoutInput');
     const statusEl = document.getElementById('optStatus');
     const resultOutput = document.getElementById('resultOutput');
     const ballJointClampCheckbox = document.getElementById('ballJointClamp');
@@ -61,8 +62,26 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, load
         } catch (error) { showStatus(error.message, true); }
     });
 
+    document.getElementById('clearReferenceLayout').addEventListener('click', () => {
+        referenceLayoutInput.value = '';
+        document.getElementById('referenceLayoutFile').value = '';
+        showStatus('Reference layout cleared.');
+    });
+
+    document.getElementById('referenceLayoutFile').addEventListener('change', async event => {
+        const file = event.target?.files?.[0];
+        if (!file) return;
+        try {
+            referenceLayoutInput.value = await file.text();
+            showStatus(`Reference layout loaded: ${file.name}.`);
+        } catch (error) {
+            showStatus(`Could not read reference layout: ${error.message}`, true);
+        }
+    });
+
     function setRunning(running) {
-        for (const id of ['runOptimization', 'loadSampleRequirements', 'clearRequirements', 'optSampling', 'optSeed', 'randomizeSeed']) {
+        for (const id of ['runOptimization', 'loadSampleRequirements', 'clearRequirements',
+            'optSampling', 'optSeed', 'randomizeSeed', 'clearReferenceLayout', 'referenceLayoutFile']) {
             document.getElementById(id).disabled = running;
         }
         document.getElementById('cancelOptimization').disabled = !running;
@@ -99,6 +118,7 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, load
                 populationSize,
                 ranges,
                 topology: document.getElementById('optTopology').value || 'c3_paired',
+                referenceLayout: referenceLayoutInput.value.trim() || null,
                 homeHeightBounds: readHomeHeightBounds(),
                 sampling,
                 seed,
@@ -108,12 +128,18 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, load
                     `Generation ${generation}: ${completed.toLocaleString()} / ${total.toLocaleString()} pose evaluations (${(100 * completed / total).toFixed(1)}%).`
                 ),
             });
+            if (currentOptimizer.topology) document.getElementById('optTopology').value = currentOptimizer.topology;
 
             resultOutput.value = '';
             lastOutcome = null;
             resultsView.clear();
             const work = currentOptimizer.estimateWork();
-            showStatus(`Optimization starting: ${work.totalPoses.toLocaleString()} pose evaluations.`);
+            const reference = currentOptimizer.referenceDiagnostics;
+            const migrationNote = currentOptimizer.referenceLayout?.migration?.note;
+            const referenceNote = reference
+                ? ` Reference: ${reference.boundsConflicts.length} search-bounds conflict(s); home pose ${reference.homePoseSatisfied ? 'valid' : 'invalid'}.${migrationNote ? ` ${migrationNote}` : ''}`
+                : '';
+            showStatus(`Optimization starting: ${work.totalPoses.toLocaleString()} pose evaluations.${referenceNote}`);
             setRunning(true);
             const outcome = await currentOptimizer.start();
             if (thisRun !== runSerial) return;
@@ -121,14 +147,15 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, load
             const pareto = currentOptimizer.pareto && currentOptimizer.pareto.length ? currentOptimizer.pareto : currentOptimizer.fitness;
             const best = currentOptimizer.getSelectedCandidate?.()
                 ?? selectBest(currentOptimizer.pareto, currentOptimizer.fitness);
-            lastOutcome = { ...outcome, effective_settings: currentOptimizer.effectiveSettings?.() };
+            lastOutcome = { ...outcome,
+                effective_settings: currentOptimizer.effectiveSettings?.() ?? null };
             resultsView.render(currentOptimizer.fitness, best?.layout.id);
             resultOutput.value = best ? JSON.stringify({ run: lastOutcome, result: displayResult(best) }, null, 2) : '';
             if (outcome.status === 'cancelled') {
                 showStatus(best ? 'Optimization cancelled. Showing partial results from the last completed population.' : 'Optimization cancelled before a population completed.');
                 return;
             }
-            showStatus(`Optimization complete. Feasible coverage: ${best?.coverage ?? 0}%. Pareto front contains ${currentOptimizer.pareto.length || pareto.length} layouts. Coverage applies only to sampled poses and modeled constraints.`);
+            showStatus(`Optimization complete. Feasible coverage: ${best?.coverage ?? 0}%. Pareto front contains ${currentOptimizer.pareto.length || pareto.length} layouts. Coverage applies only to sampled poses and modeled constraints.${referenceNote}`);
         } catch (error) {
             if (thisRun !== runSerial) return;
             console.error(error);
