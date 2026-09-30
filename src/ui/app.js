@@ -6,6 +6,7 @@ import { Optimizer as DefaultOptimizer } from '../optimization/optimizer.js';
 import { createControls } from './controls.js';
 import { installTooltips } from './tooltips.js';
 import { createResultsView } from './results-view.js';
+import { buildConstructionSkeleton, canExportCad, skeletonToCSV, skeletonToFusionScript } from '../io/cad.js';
 
 export function createApp({ document, window, Optimizer = DefaultOptimizer, loadDefaultRequirements = loadSample, downloadFile = download }) {
     const requirementsInput = document.getElementById('requirementsInput');
@@ -22,6 +23,7 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, load
         if (!currentOptimizer || currentOptimizer.running) return;
         currentOptimizer.selectCandidate(candidate.layout.id);
         resultOutput.value = JSON.stringify({ run: lastOutcome, result: displayResult(candidate) }, null, 2);
+        setRunning(false);
     });
     resultsView.clear();
 
@@ -59,6 +61,9 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, load
         document.getElementById('cancelOptimization').disabled = !running;
         document.getElementById('exportBestLayout').disabled = running
             || !(currentOptimizer?.getSelectedCandidate?.() || currentOptimizer?.fitness?.length);
+        const cadAvailable = !running && canExportCad(currentOptimizer?.getSelectedCandidate?.());
+        document.getElementById('exportFusionScript').disabled = !cadAvailable;
+        document.getElementById('exportCoordinateCsv').disabled = !cadAvailable;
     }
 
     document.getElementById('cancelOptimization').addEventListener('click', () => {
@@ -136,6 +141,26 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, load
             showStatus(error.message, true);
         }
     });
+
+    function exportCad(format) {
+        try {
+            const selected = currentOptimizer?.getSelectedCandidate?.();
+            if (!selected) throw new Error('Select a completed candidate before CAD export.');
+            const run = JSON.parse(currentOptimizer.exportBest()).run;
+            const skeleton = buildConstructionSkeleton(selected, run);
+            if (format === 'fusion') {
+                downloadFile(skeletonToFusionScript(skeleton), 'stewart_construction.py', 'text/x-python', document);
+            } else {
+                downloadFile(skeletonToCSV(skeleton), 'stewart_coordinates.csv', 'text/csv', document);
+            }
+            if (skeleton.diagnostic) showStatus(`CAD construction geometry exported for diagnostic candidate ${skeleton.candidateId}; failed categories: ${skeleton.failedCategories.join(', ')}.`);
+        } catch (error) {
+            showStatus(error.message, true);
+        }
+    }
+
+    document.getElementById('exportFusionScript').addEventListener('click', () => exportCad('fusion'));
+    document.getElementById('exportCoordinateCsv').addEventListener('click', () => exportCad('csv'));
 
     const ready = loadDefaultRequirements()
         .then((json) => {
