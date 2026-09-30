@@ -9,11 +9,33 @@ import { actuatorUtilization } from '../model/load-sharing.js';
 import { evaluateCompliance } from '../model/compliance.js';
 import { computeWorkspace } from '../workspace/sweep.js';
 import { failureCategories } from '../io/results.js';
-import { MODEL_VERSION } from '../contracts.js';
+import { DEFAULT_BALL_JOINT_LIMIT_DEG, MODEL_VERSION } from '../contracts.js';
+import { trajectorySummary } from '../model/trajectory.js';
 import { clamp, degToRad } from '../math.js';
 import { objectiveValues } from './objectives.js';
 
-export async function evaluateLayout(layout, options) {
+// Direct callers may omit the limits and the cycle identity that the Optimizer
+// always supplies; resolve them once so every stage, the limit margin and the
+// fatigue proxy share the same values.
+export function resolveEvaluationOptions(options) {
+  const ballJointLimitDeg = options.ballJointLimitDeg ?? DEFAULT_BALL_JOINT_LIMIT_DEG;
+  const trajectorySource = options.trajectorySource ?? (options.trajectory ? 'supplied' : 'legacy-cycle');
+  if (trajectorySource === 'supplied' && !options.trajectory) {
+    throw new TypeError("trajectorySource 'supplied' requires a trajectory.");
+  }
+  const summary = trajectorySource === 'supplied' ? trajectorySummary(options.trajectory) : null;
+  return { ...options,
+    ballJointLimitDeg,
+    lowerBallJointLimitDeg: options.lowerBallJointLimitDeg ?? ballJointLimitDeg,
+    upperBallJointLimitDeg: options.upperBallJointLimitDeg ?? ballJointLimitDeg,
+    trajectorySource,
+    stroke: options.stroke ?? summary?.stroke,
+    frequency: options.frequency ?? summary?.frequency,
+  };
+}
+
+export async function evaluateLayout(layout, rawOptions) {
+  const options = resolveEvaluationOptions(rawOptions);
   const { ranges, signal, onProgress, payload, stroke, frequency, ballJointLimitDeg, ballJointClamp,
     lowerBallJointLimitDeg, upperBallJointLimitDeg, sampling, random, onPoseWork } = options;
   const conditionLimit = validateConditionLimit(options.conditionLimit);
@@ -72,7 +94,7 @@ export async function evaluateLayout(layout, options) {
   const isotropy = stats.averageIsotropy ?? 0;
   const stiffnessScore = stats.averageStiffness > 0 ? stats.averageStiffness : stiffness;
   const marginFor = (maxAngle, limitDeg) => {
-    const limit = degToRad(limitDeg ?? ballJointLimitDeg ?? 0);
+    const limit = degToRad(limitDeg);
     if (!Number.isFinite(maxAngle)) return 0;
     return limit > 0 ? 1 - maxAngle / limit : (maxAngle <= 1e-6 ? 1 : 0);
   };
@@ -149,9 +171,10 @@ export async function evaluateLayout(layout, options) {
   };
 }
 
-export function evaluateCycle(layout, { payload, stroke, frequency, cycleAxis, trajectory, trajectorySource,
-  massProperties, cycleSampling, servoRatings, ballJointLimitDeg,
-  lowerBallJointLimitDeg, upperBallJointLimitDeg, conditionLimit, mounting, signal, onPose }) {
+export function evaluateCycle(layout, rawOptions) {
+  const { payload, stroke, frequency, cycleAxis, trajectory, trajectorySource,
+    massProperties, cycleSampling, servoRatings, ballJointLimitDeg,
+    lowerBallJointLimitDeg, upperBallJointLimitDeg, conditionLimit, mounting, signal, onPose } = resolveEvaluationOptions(rawOptions);
   // A legacy-cycle trajectory keeps the single-axis identity in exported results.
   const supplied = trajectorySource === 'supplied' ? trajectory : undefined;
   return computeCycleDemand(layout, { mass: payload, stroke,
@@ -161,13 +184,12 @@ export function evaluateCycle(layout, { payload, stroke, frequency, cycleAxis, t
     upperBallJointLimitDeg, conditionLimit, mounting, signal, onPose });
 }
 
-export function computeFatigue(stats, { ballJointLimitDeg, lowerBallJointLimitDeg,
-  upperBallJointLimitDeg, servoRangeRad, stroke, frequency }) {
+export function computeFatigue(stats, rawOptions) {
   if (!stats) return 0;
+  const { lowerBallJointLimitDeg, upperBallJointLimitDeg, servoRangeRad, stroke, frequency } = resolveEvaluationOptions(rawOptions);
   const ballJointAvg = Number.isFinite(stats.ballJointAverage) ? stats.ballJointAverage : 0;
   const servoAvg = Number.isFinite(stats.servoUsageAvg) ? stats.servoUsageAvg : 0;
-  const ballLimit = degToRad(Math.min(lowerBallJointLimitDeg ?? ballJointLimitDeg ?? 0,
-    upperBallJointLimitDeg ?? ballJointLimitDeg ?? 0));
+  const ballLimit = degToRad(Math.min(lowerBallJointLimitDeg, upperBallJointLimitDeg));
   const ballRatio = ballLimit > 0 ? ballJointAvg / ballLimit : 0;
   const servoSpan = Math.abs(servoRangeRad[1] - servoRangeRad[0]) || Math.PI;
   const servoDuty = servoSpan > 0 ? servoAvg / servoSpan : 0;

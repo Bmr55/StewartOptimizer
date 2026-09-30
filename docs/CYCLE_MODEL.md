@@ -7,7 +7,7 @@ Model identity: `cycle-newton-euler-v1` (`cycle.modelVersion`), independent of t
 A cycle is a periodic trajectory about the home pose. Two inputs are accepted:
 
 - **Legacy single-axis cycle** (`cycle_mm`, `frequency_hz`, `cycle_axis`): peak-to-peak translation along x, y or z. It is exactly the sinusoid with amplitude `cycle_mm / 2`, zero phase. Results report `trajectorySource: "legacy-cycle"` and keep `axis`.
-- **Supplied trajectory** (`payload.trajectory`): a common-frequency multi-axis sinusoid. Each component names an axis (`x`, `y`, `z` with `amplitude_mm`; `rx`, `ry`, `rz` with `amplitude_deg`) and an optional `phase_deg`. Component value is `A sin(2 pi f t + phase)`. It replaces the legacy fields; supplying both is an error. Results report `trajectorySource: "supplied"` and `axis: null`.
+- **Supplied trajectory** (`payload.trajectory`): a common-frequency multi-axis sinusoid. Each component names an axis (`x`, `y`, `z` with `amplitude_mm`; `rx`, `ry`, `rz` with `amplitude_deg`) and an optional `phase_deg`. Component value is `A sin(2 pi f t + phase)`. It replaces the legacy fields; supplying both is an error. Results report `trajectorySource: "supplied"` and `axis: null`. A direct `evaluateLayout` or `evaluateCycle` caller that passes `trajectory` without `trajectorySource` gets the supplied trajectory, not a stationary legacy cycle.
 
 `trajectoryId` is a canonical text identity, for example `sinusoid-v1:f=2Hz;z:15mm@0deg`, recorded in the result and in `run.effective_settings.cycleModel`. Zero frequency or all-zero amplitudes evaluate one stationary home pose (`sampling.status: "stationary"`).
 

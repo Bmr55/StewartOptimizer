@@ -182,7 +182,7 @@ All stochastic choices use a seeded `mulberry32-v1` generator. The run seed driv
 
 ## 4. Candidate evaluation model
 
-`evaluateLayout` (`src/optimization/evaluate-layout.js`) runs four stages per candidate and assembles metrics, feasibility flags and objectives.
+`evaluateLayout` (`src/optimization/evaluate-layout.js`) runs four stages per candidate and assembles metrics, feasibility flags and objectives. Direct callers may omit what the `Optimizer` always supplies: a missing ball-joint limit resolves to the shared 45° default for the sweep, home pose, cycle, limit margin and fatigue alike; a `trajectory` passed without `trajectorySource` is treated as `supplied` (and `stroke`/`frequency` derive from it when omitted), while `trajectorySource: 'supplied'` without a trajectory is rejected.
 
 ### Workspace sweep
 

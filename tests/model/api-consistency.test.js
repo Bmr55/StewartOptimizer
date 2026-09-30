@@ -9,6 +9,8 @@ import { parseRequirements } from '../../src/model/requirements.js';
 import { computeWorkspace } from '../../src/workspace/sweep.js';
 import { normalizeSampling } from '../../src/workspace/sampling.js';
 import { Optimizer } from '../../src/optimization/optimizer.js';
+import { computeFatigue, evaluateCycle, evaluateLayout } from '../../src/optimization/evaluate-layout.js';
+import { normalizeTrajectory } from '../../src/model/trajectory.js';
 import { pairedFixture } from '../fixtures/layout.js';
 import { resolveMounting } from '../../src/model/mounting.js';
 import { vectorCross, vectorNormalize } from '../../src/math.js';
@@ -88,4 +90,43 @@ test('inertia_kg_m2 object form rejects null entries and defaults omitted produc
     assert.throws(() => normalizeMassProperties({ mass_kg: 1, inertia_kg_m2: { ...base.inertia_kg_m2, [key]: '0.1' } }),
       /finite/);
   }
+});
+
+const directOptions = extra => ({ ranges: { rx: { min: -10, max: 10, step: 10 } }, sampling: { strategy: 'grid' },
+  payload: 2, stroke: 10, frequency: 1, servoRangeRad: [-Math.PI, Math.PI], ...extra });
+
+test('evaluateLayout limit margin and fatigue use the shared ball-joint default when the caller omits it', async () => {
+  const implicit = await evaluateLayout(pairedFixture(), directOptions());
+  const explicit = await evaluateLayout(pairedFixture(), directOptions({ ballJointLimitDeg: DEFAULT_BALL_JOINT_LIMIT_DEG }));
+  const wide = await evaluateLayout(pairedFixture(), directOptions({ ballJointLimitDeg: 90 }));
+  assert.equal(implicit.coverage, 100);
+  assert.equal(implicit.workspace.constraintPolicy.ballJointLimitDeg, DEFAULT_BALL_JOINT_LIMIT_DEG);
+  const worstSocket = Math.max(...implicit.workspace.stats.lowerJointMax, ...implicit.workspace.stats.upperJointMax);
+  assert.ok(worstSocket > 0);
+  assert.ok(Math.abs(implicit.limitMargin - (1 - worstSocket / degToRad(DEFAULT_BALL_JOINT_LIMIT_DEG))) < 1e-12);
+  assert.equal(implicit.limitMargin, explicit.limitMargin);
+  assert.ok(implicit.fatigue > 0, 'fatigue ball-ratio term must not collapse to a 0-degree limit');
+  assert.equal(implicit.fatigue, explicit.fatigue);
+  assert.notEqual(implicit.fatigue, wide.fatigue);
+  const stats = implicit.workspace.stats;
+  assert.equal(computeFatigue(stats, directOptions()), computeFatigue(stats, directOptions({ ballJointLimitDeg: 45 })));
+});
+
+test('evaluateLayout honours a supplied trajectory without an explicit trajectorySource', async () => {
+  const trajectory = normalizeTrajectory({ frequency_hz: 2, components: [{ axis: 'z', amplitude_mm: 5 }] });
+  const base = { ranges: {}, sampling: { strategy: 'grid' }, payload: 2, servoRangeRad: [-Math.PI, Math.PI], ballJointLimitDeg: 180 };
+  const inferred = await evaluateLayout(pairedFixture(), { ...base, trajectory });
+  const declared = await evaluateLayout(pairedFixture(), { ...base, trajectory, trajectorySource: 'supplied', stroke: 10, frequency: 2 });
+  assert.equal(inferred.cycle.trajectorySource, 'supplied');
+  assert.match(inferred.cycle.trajectoryId, /f=2Hz/);
+  assert.ok(inferred.cycle.speedDemand > 0 || inferred.cycle.speedRadPerSec > 0);
+  assert.deepEqual(inferred.cycle, declared.cycle);
+  assert.equal(inferred.fatigue, declared.fatigue);
+  // The optimizer's legacy identity is unchanged: a legacy-cycle trajectory keeps the axis.
+  const legacy = evaluateCycle(pairedFixture(), { ...base, trajectory, trajectorySource: 'legacy-cycle',
+    stroke: 10, frequency: 2, cycleAxis: 'z' });
+  assert.equal(legacy.trajectorySource, 'legacy-cycle');
+  assert.equal(legacy.axis, 'z');
+  assert.throws(() => evaluateCycle(pairedFixture(), { ...base, trajectorySource: 'supplied', stroke: 0, frequency: 0 }),
+    /requires a trajectory/);
 });

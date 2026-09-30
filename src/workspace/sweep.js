@@ -6,6 +6,7 @@ import { createRandom } from '../optimization/random.js';
 import { estimateWorkspaceSize, normalizeSampling, workspacePoses } from './sampling.js';
 import { createPayloadSupportStatistics } from './payload-support.js';
 import { dynamicsAtPose, staticState } from '../model/cycle.js';
+import { DEFAULT_BALL_JOINT_LIMIT_DEG } from '../contracts.js';
 
 export { MAX_WORKSPACE_POSES, estimateWorkspaceSize } from './sampling.js';
 
@@ -14,7 +15,7 @@ export const yieldToEventLoop = () => new Promise(resolve => setTimeout(resolve,
 export async function computeWorkspace(layout, ranges = {}, options = {}) {
   ensureLayout(layout);
   const {
-    ballJointLimitDeg = 45,
+    ballJointLimitDeg = DEFAULT_BALL_JOINT_LIMIT_DEG,
     lowerBallJointLimitDeg = ballJointLimitDeg,
     upperBallJointLimitDeg = ballJointLimitDeg,
     conditionLimit = null,
