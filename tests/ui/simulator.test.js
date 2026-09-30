@@ -8,7 +8,9 @@ import { resolveMounting } from '../../src/model/mounting.js';
 import { createGeometryEditor } from '../../src/simulator/geometry-editor.js';
 import { DEFAULT_BALL_JOINT_LIMIT_DEG } from '../../src/contracts.js';
 import { NUMERICAL_RECIPROCAL_CUTOFF } from '../../src/model/conditioning.js';
-import { OVERLAY_DEFAULTS } from '../../src/simulator/scene.js';
+import { buildSceneGeometry, OVERLAY_DEFAULTS, SCENE_COLORS } from '../../src/simulator/scene.js';
+
+const plainLines = lines => JSON.parse(JSON.stringify(lines));
 
 const source = { ...asymmetricJointFixture(), id: 19, topology: 'free', topologyParameters: {} };
 // Evaluated candidates carry their resolved mounting, as evaluateLayout leaves it.
@@ -301,4 +303,54 @@ test('overlay toggles round-trip through the optimizer reference, simulator JSON
   assert.deepEqual(restored.app.simulatorController.getState().overlays, { ...OVERLAY_DEFAULTS, platformAxes: false });
   assert.equal(restored('simOverlayPlatformAxes').checked, false);
   assert.equal(restored('simOverlayWorldAxes').checked, true);
+});
+
+// The run's workspace ranges as `effective_settings.bounds` carries them: mm and degrees.
+const SAMPLE_BOUNDS = { x: { min: -40, max: 40, step: 40 }, y: { min: -40, max: 40, step: 40 },
+  z: { min: -20, max: 40, step: 30 }, rx: { min: -12, max: 12, step: 12 }, ry: { min: -12, max: 12, step: 12 },
+  rz: { min: -8, max: 8, step: 8 } };
+class RangedOptimizer extends FixtureOptimizer {
+  effectiveSettings() { return { ...super.effectiveSettings(), bounds: SAMPLE_BOUNDS }; }
+}
+const boxEdges = state => buildSceneGeometry(state).lines.filter(line => line.color === SCENE_COLORS.workspace);
+
+test('a candidate draws its run workspace box, which simulator JSON carries; JSON without ranges draws none', async () => {
+  const element = await loadUI(RangedOptimizer);
+  await element('runOptimization').handlers.click();
+  const controller = element.app.simulatorController;
+  let state = controller.getState();
+  assert.deepEqual(state.workspaceRanges.z, { min: -20, max: 40 });
+  assert.ok(Math.abs(state.workspaceRanges.rx.max - 12 * Math.PI / 180) < 1e-15);
+  const edges = boxEdges(state);
+  assert.equal(edges.length, 12);
+  const home = state.layout.homeHeight;
+  assert.ok(edges.some(edge => edge.from.join() === [-40, -40, home - 20].join()));
+  assert.ok(edges.some(edge => edge.to.join() === [40, 40, home + 40].join()));
+  element('simUseReference').handlers.click();
+  const transfer = JSON.parse(element('referenceLayoutInput').value);
+  const withoutSteps = Object.fromEntries(Object.entries(SAMPLE_BOUNDS).map(([axis, { min, max }]) => [axis, { min, max }]));
+  assert.deepEqual(transfer.simulator.workspaceRanges, withoutSteps);
+
+  // A fresh page with no run restores the same box from the saved block.
+  const fresh = await loadUI(FixtureOptimizer);
+  const load = document => {
+    fresh('referenceLayoutInput').value = JSON.stringify(document);
+    fresh('simLoadReference').handlers.click();
+    return fresh.app.simulatorController.getState();
+  };
+  assert.deepEqual(plainLines(boxEdges(load(transfer))), plainLines(edges));
+  // Without the block, the run's bounds stand in; without either, there is no box and no error.
+  const { workspaceRanges, ...simulator } = transfer.simulator;
+  assert.equal(boxEdges(load({ ...transfer, simulator })).length, 12);
+  const { run, ...bare } = transfer;
+  const status = fresh('optStatus').textContent;
+  state = load({ ...bare, simulator });
+  assert.equal(state.workspaceRanges, null);
+  assert.deepEqual(boxEdges(state), []);
+  assert.match(fresh('simCandidateSummary').textContent, /import/);
+  assert.equal(fresh('optStatus').textContent, status, 'the load reported an error');
+  state = load(layoutToJSON(asymmetricJointFixture()));
+  assert.equal(state.workspaceRanges, null);
+  assert.equal(JSON.parse((fresh('simUseReference').handlers.click(), fresh('referenceLayoutInput').value))
+    .simulator.workspaceRanges, null);
 });

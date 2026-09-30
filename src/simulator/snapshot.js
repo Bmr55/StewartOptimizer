@@ -1,5 +1,6 @@
+import { degToRad, radToDeg } from '../math.js';
 import { evaluatePose } from '../model/pose.js';
-import { ANIMATION_PATTERNS, HOME_POSE, normalizePose } from './controller.js';
+import { ANIMATION_PATTERNS, HOME_POSE, normalizePose, normalizeWorkspaceRanges } from './controller.js';
 import { parseOverlays } from './scene.js';
 import { parseCamera } from './view.js';
 
@@ -19,11 +20,30 @@ function pose(value, field) {
   catch (error) { throw new (error.constructor)(`${field}: ${error.message}`); }
 }
 
+const ROTATION_AXES = new Set(['rx', 'ry', 'rz']);
+const convertRanges = (ranges, convert) => ranges && Object.fromEntries(Object.entries(ranges).map(([axis, { min, max }]) =>
+  [axis, ROTATION_AXES.has(axis) ? { min: convert(min), max: convert(max) } : { min, max }]));
+
+// Workspace ranges as user-facing JSON writes them (a run's
+// `effective_settings.bounds`, `simulator.workspaceRanges`): mm, and degrees
+// for rotations. Returns the controller's mm and radians, or null for none.
+export function parseWorkspaceRanges(value, field = 'workspaceRanges') {
+  return convertRanges(normalizeWorkspaceRanges(value, field), degToRad);
+}
+
+// The inverse, for simulator JSON. Degrees print with at most 12 significant
+// digits so a 12° range reads 12 after the radian round trip.
+export function workspaceRangesToJSON(ranges) {
+  return convertRanges(ranges, value => Number(radToDeg(value).toPrecision(12))) ?? null;
+}
+
 // Validates the `simulator` block of simulator JSON (Load optimizer reference,
 // browser-save restore) before any of it is applied, so a rejected file leaves
 // the current layout, pose, camera and animation untouched. `fallbackOptions`
-// are used, and checked, when the block carries no options.
-export function parseSimulatorSnapshot(saved, layout, fallbackOptions) {
+// are used, and checked, when the block carries no options. `fallbackRanges`
+// (the source run's bounds, user units) stand in for missing workspace ranges;
+// ranges that do not parse there only mean no box, never a rejected file.
+export function parseSimulatorSnapshot(saved, layout, fallbackOptions, fallbackRanges = null) {
   const block = saved == null ? {} : plainObject(saved, 'simulator');
   let options;
   if (block.options == null) options = { ...fallbackOptions };
@@ -40,7 +60,13 @@ export function parseSimulatorSnapshot(saved, layout, fallbackOptions) {
 
   const result = { options, requested: pose(block.requested, 'simulator.requested'),
     accepted: pose(block.accepted, 'simulator.accepted'), camera: null, animation: null,
-    markers: null, tracesEnabled: null, overlays: null, pointerMode: null };
+    markers: null, tracesEnabled: null, overlays: null, pointerMode: null, workspaceRanges: null };
+  if (block.workspaceRanges != null) {
+    result.workspaceRanges = parseWorkspaceRanges(block.workspaceRanges, 'simulator.workspaceRanges');
+  } else {
+    try { result.workspaceRanges = parseWorkspaceRanges(fallbackRanges); }
+    catch { result.workspaceRanges = null; }
+  }
   if (block.camera != null) result.camera = parseCamera(block.camera, 'simulator.camera');
   if (block.animation != null) {
     const animation = plainObject(block.animation, 'simulator.animation');

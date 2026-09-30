@@ -235,3 +235,36 @@ test('overlay toggles start at their defaults, patch by name and reject unknown 
   assert.equal(state.overlays.worldAxes, false);
   assert.equal(controller.setOverlays({}).overlays.worldAxes, false);
 });
+
+test('workspace ranges load with a layout, survive a reload without them and are validated first', () => {
+  const controller = createSimulatorController();
+  const ranges = { x: { min: -40, max: 40, step: 5 }, y: { min: -40, max: 40 }, z: { min: -20, max: 40 },
+    rx: { min: -0.2, max: 0.2 } };
+  assert.equal(controller.getState().workspaceRanges, null);
+  let state = controller.loadLayout(asymmetricJointFixture(), { options: settings, workspaceRanges: ranges });
+  const kept = { x: { min: -40, max: 40 }, y: { min: -40, max: 40 }, z: { min: -20, max: 40 }, rx: { min: -0.2, max: 0.2 } };
+  assert.deepEqual(state.workspaceRanges, kept, 'step and missing axes are dropped');
+  state.workspaceRanges.x.min = 0;
+  assert.equal(controller.getState().workspaceRanges.x.min, -40, 'state exposed the live ranges');
+  // A reload without the option (a geometry edit) keeps them; null removes them.
+  assert.deepEqual(controller.loadLayout(asymmetricJointFixture(), { options: settings }).workspaceRanges, kept);
+  const cases = [['x', /workspaceRanges must be an object/], [{ x: 3 }, /workspaceRanges.x must be an object/],
+    [{ z: { min: 5, max: 1 } }, /workspaceRanges.z must have finite min and max/],
+    [{ y: { min: '1', max: 2 } }, /workspaceRanges.y must have finite min and max/],
+    [{ rz: { min: 0, max: Infinity } }, /workspaceRanges.rz must have finite min and max/]];
+  for (const [bad, expected] of cases) {
+    assert.throws(() => controller.loadLayout({ ...asymmetricJointFixture(), homeHeight: 205 },
+      { options: settings, workspaceRanges: bad }), expected);
+    assert.throws(() => controller.setWorkspaceRanges(bad), expected);
+  }
+  state = controller.getState();
+  assert.notEqual(state.layout.homeHeight, 205, 'a rejected load replaced the layout');
+  assert.deepEqual(state.workspaceRanges, kept);
+  assert.equal(controller.setWorkspaceRanges({ z: { min: 0, max: 0 } }).workspaceRanges.z.max, 0);
+  assert.equal(controller.setWorkspaceRanges({}).workspaceRanges, null, 'a map with no axes is none');
+  controller.setWorkspaceRanges(ranges);
+  assert.equal(controller.loadLayout(asymmetricJointFixture(), { options: settings, workspaceRanges: null })
+    .workspaceRanges, null);
+  controller.setWorkspaceRanges(ranges);
+  assert.equal(controller.clear().workspaceRanges, null);
+});

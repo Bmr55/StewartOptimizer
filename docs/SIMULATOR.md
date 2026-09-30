@@ -35,6 +35,17 @@ names left out of the patch keep their state, and an unknown name or a
 non-boolean value throws without changing anything. Animation patterns advance at most 0.1 s of simulated time per
 frame, scaled by the speed multiplier (0.1 to 5 in the UI).
 
+The requirement workspace ranges drawn by the **Workspace box** overlay are
+controller state, `workspaceRanges` in `getState()`: one `{ min, max }` per
+pose axis about home, millimetres for X/Y/Z and radians for Rx/Ry/Rz, or
+`null` for none. `loadLayout(layout, { workspaceRanges })` replaces them in the
+same validated load (`null` removes them); a load that leaves the option out
+keeps the current ranges, so a geometry edit keeps the box.
+`setWorkspaceRanges(ranges)` replaces them on their own, and `clear()` removes
+them. Axes may be left out; each given axis needs finite `min <= max`, `step`
+and other keys are dropped, and invalid ranges throw with the axis named
+before anything changes.
+
 ## Mechanical geometry controls
 
 `createGeometryControls({ document, container, controller })` mounts the active
@@ -128,7 +139,7 @@ a 0.15 dead zone. Pose requests do not change anchor coordinates.
 snapshot to the optimizer's reference JSON field. **Load optimizer reference**
 can restore that layout and saved requested/accepted poses. **Download simulator
 JSON** saves the same geometry plus run settings, simulator options, pose,
-camera, animation, markers, traces, overlay toggles and input mode. The shared importer validates
+camera, animation, markers, traces, overlay toggles, workspace ranges and input mode. The shared importer validates
 the layout and ignores old scores; every pose is checked again by the current
 evaluator. The `simulator` block is validated as a whole before anything is
 applied: `options` (only the known keys are kept; limits, servo bounds,
@@ -137,7 +148,7 @@ tolerance, condition limit and the clamp flag must have the right type),
 distance 10 to 2,500, three-coordinate target), `animation.speed` (positive),
 `markers`, `tracesEnabled`, `overlays` (each known overlay name true or false;
 unknown names are dropped, and a file without the block keeps the current
-toggles) and `pointerMode` (`orbit` or `platform`). A rejected
+toggles), `workspaceRanges` (see below) and `pointerMode` (`orbit` or `platform`). A rejected
 file or browser save reports the offending `simulator.` field and leaves the
 current layout, pose, camera, animation and, for a browser save, the optimizer
 inputs untouched. If WebGL2 is unavailable, the simulator names the missing capability
@@ -152,21 +163,34 @@ Loaded animations remain paused. A saved idle (`none`) or unrecognized pattern
 selects Wobble as the playable default, so Play works after a save/load before
 the first animation has been started.
 
+`simulator.workspaceRanges` holds the ranges the workspace box draws, in the
+units of the requirements and of a run's `effective_settings.bounds`: X/Y/Z in
+millimetres and Rx/Ry/Rz in degrees, one `{ min, max }` per axis (`step` is
+dropped), or `null` for none. Degrees are written with at most 12 significant
+digits, so a 12° range saves as 12 after the radian round trip. Selecting an
+optimizer candidate takes the ranges from the current run's
+`effective_settings.bounds`. Loading simulator JSON takes them from the block,
+else from the file's `run.effective_settings.bounds`, else there are none and no
+box is drawn; a malformed saved block rejects the file naming the axis, while
+malformed run bounds only mean no box.
+
 ## Scene builders and overlays
 
 `buildSceneGeometry(state)` in `src/simulator/scene.js` (re-exported by the
 renderer) concatenates the output of an ordered list of builders,
 `SCENE_BUILDERS`. Each builder is `(state, layout, solved) => { lines, points }`,
 where `solved` is the accepted assessment or `null`, so builders only draw data
-the evaluator already produced. The list order is the draw order: `base`
-(base polygon, servo direction stubs and base markers), `platform` (platform
-polygon), `legs` (horns, rods and their markers), `servoArcs`, `jointCones`,
-`requestedGhost`, `platformAxes`, `worldAxes` and `trace`. Markers and traces keep their own controls.
+the evaluator already produced. The list order is the draw order: `groundGrid`,
+`base` (base polygon, servo direction stubs and base markers), `platform`
+(platform polygon), `legs` (horns, rods and their markers), `servoArcs`,
+`jointCones`, `workspaceBox`, `requestedGhost`, `platformAxes`, `worldAxes` and
+`trace`. Markers and traces keep their own controls.
 
 A builder with an `overlay` key is drawn only when that key is on in
 `state.overlays`. `OVERLAY_DEFAULTS` lists every toggleable overlay and its
-default; today these are **Servo arcs** (`servoArcs`), **Joint cones**
-(`jointCones`), **Rejected pose ghost** (`requestedGhost`), **Platform axes**
+default; today these are **Ground grid** (`groundGrid`), **Servo arcs**
+(`servoArcs`), **Joint cones** (`jointCones`), **Workspace box**
+(`workspaceBox`), **Rejected pose ghost** (`requestedGhost`), **Platform axes**
 (`platformAxes`) and **World axes** (`worldAxes`), all on. With only the two
 axis overlays on, the scene matches the original single-function renderer line
 for line (a frozen fixture in `tests/fixtures/scene-geometry.json` checks this). The Simulate tab shows one checkbox per overlay in the
@@ -174,6 +198,22 @@ for line (a frozen fixture in `tests/fixtures/scene-geometry.json` checks this).
 example `simOverlayWorldAxes`). A new overlay adds one builder, one default,
 one checkbox and a paragraph here; new overlays default off unless their
 issue says otherwise.
+
+**Ground grid** (on by default) gives the scene a scale: a square grid of dim
+lines on the base plane (z = 0), one every `GROUND_GRID_PITCH_MM` (25 mm, not
+user-editable) through the origin, reaching 1.5 times the base radius (the
+farthest base anchor from the Z axis) rounded up to whole cells. The grid
+shares its plane with the base polygon, servo stubs and world axes, so its
+lines carry a depth bias of `GROUND_DEPTH_BIAS_MM` (2 mm) away from the camera
+and lose every depth tie with them.
+
+**Workspace box** (on by default) draws the twelve edges of the requirement
+X/Y/Z ranges as a box about home: X and Y from their `min` to `max`, Z from
+`homeHeight + min` to `homeHeight + max`, from the controller's
+`workspaceRanges`. It is the region the platform origin must reach, not the
+platform's extent, and it stays put as the pose moves. Rotation ranges are not
+drawn. Without all three translation ranges (for example a layout imported
+without a run or saved ranges) there is no box.
 
 **Servo arcs** (on by default) draw each servo's allowed travel as an arc of
 horn-length radius about its base anchor, from the effective minimum to the

@@ -1,6 +1,6 @@
 import { selectBest, displayResult, layoutToJSON } from '../io/results.js';
 import { importLayout, parseLayoutJSON } from '../io/layout-import.js';
-import { parseSimulatorSnapshot } from '../simulator/snapshot.js';
+import { parseSimulatorSnapshot, parseWorkspaceRanges, workspaceRangesToJSON } from '../simulator/snapshot.js';
 import { download } from './download.js';
 import { parseRequirements } from '../model/requirements.js';
 import { loadDefaultRequirements as loadSample } from '../io/sample-requirements.js';
@@ -141,9 +141,12 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
     }
     function loadCandidate(candidate) {
         simCandidateSelect.value = String(candidate.layout.id);
+        const settings = lastOutcome?.effective_settings ?? currentOptimizer?.effectiveSettings?.();
         simulatorController.loadLayout(candidate.layout, {
             source: { kind: 'candidate', candidateId: candidate.layout.id },
-            options: simulatorOptions(lastOutcome?.effective_settings ?? currentOptimizer?.effectiveSettings?.(), candidate.layout),
+            options: simulatorOptions(settings, candidate.layout),
+            // The run's requirement ranges, drawn as the workspace box.
+            workspaceRanges: parseWorkspaceRanges(settings?.bounds, 'effective_settings.bounds'),
         });
         // As in loadSimulatorLayout: only after the validating load.
         simulatorRun = lastOutcome;
@@ -416,7 +419,8 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
         return JSON.stringify({ ...layoutToJSON(state.layout), run: simulatorRun,
             simulator: { source: state.source, requested: state.requested, accepted: state.accepted,
                 options: state.options, animation: state.animation, markers: state.markers,
-                tracesEnabled: state.tracesEnabled, overlays: state.overlays, trace: state.trace,
+                tracesEnabled: state.tracesEnabled, overlays: state.overlays,
+                workspaceRanges: workspaceRangesToJSON(state.workspaceRanges), trace: state.trace,
                 camera: simulatorView.getCamera(), pointerMode: document.getElementById('simPointerMode').value } }, null, 2);
     }
     document.getElementById('simUseReference').addEventListener('click', () => {
@@ -434,12 +438,13 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
     function prepareSimulatorLoad(parsed) {
         const { layout, sourceRun } = importLayout(parsed);
         layout.id = parsed.id ?? parsed.layout?.id ?? parsed.result?.layout?.id ?? null;
-        const saved = parseSimulatorSnapshot(parsed.simulator, layout, simulatorOptions(sourceRun?.effective_settings, layout));
+        const saved = parseSimulatorSnapshot(parsed.simulator, layout, simulatorOptions(sourceRun?.effective_settings, layout),
+            sourceRun?.effective_settings?.bounds);
         return { parsed, layout, sourceRun, saved };
     }
     function applySimulatorLoad({ parsed, layout, sourceRun, saved }, activate = true) {
         simulatorController.loadLayout(layout, { source: { kind: 'import', candidateId: layout.id ?? null },
-            options: saved.options });
+            options: saved.options, workspaceRanges: saved.workspaceRanges });
         // Only after the validating load, so a rejected file never pairs its run
         // metadata with the candidate that stays loaded.
         simulatorRun = sourceRun;

@@ -25,6 +25,26 @@ export function normalizePose(pose = {}) {
   return result;
 }
 
+// Requirement workspace ranges about home, one `{ min, max }` per pose axis in
+// the caller's units (the controller holds mm and radians). Axes may be left
+// out, `step` and other keys are dropped, and a map with no axes is null.
+export function normalizeWorkspaceRanges(value, field = 'workspaceRanges') {
+  if (value == null) return null;
+  if (typeof value !== 'object' || Array.isArray(value)) throw new TypeError(`${field} must be an object.`);
+  const result = {};
+  for (const axis of POSE_AXES) {
+    const range = value[axis];
+    if (range == null) continue;
+    if (typeof range !== 'object' || Array.isArray(range)) throw new TypeError(`${field}.${axis} must be an object.`);
+    const { min, max } = range;
+    if (typeof min !== 'number' || typeof max !== 'number' || !Number.isFinite(min) || !Number.isFinite(max) || min > max) {
+      throw new RangeError(`${field}.${axis} must have finite min and max with min <= max.`);
+    }
+    result[axis] = { min, max };
+  }
+  return Object.keys(result).length ? result : null;
+}
+
 export function animationPose(pattern, seconds, { amplitudeMm = 12, rotationRad = Math.PI / 18,
   apexMm = 20, frequencyHz = 0.25 } = {}) {
   if (!ANIMATION_PATTERNS.includes(pattern)) throw new RangeError(`Unknown animation pattern: ${pattern}`);
@@ -56,12 +76,13 @@ export function createSimulatorController({ onChange } = {}) {
   let markers = true;
   let tracesEnabled = false;
   let overlays = { ...OVERLAY_DEFAULTS };
+  let workspaceRanges = null;
   let trace = [];
 
   function getState() {
     return copy({ layout, source, options, requested, accepted, assessment, acceptedAssessment,
       requestSource, rejected: Boolean(assessment && !assessment.reachable), animation,
-      markers, tracesEnabled, overlays, trace });
+      markers, tracesEnabled, overlays, workspaceRanges, trace });
   }
 
   function notify() {
@@ -94,17 +115,22 @@ export function createSimulatorController({ onChange } = {}) {
     return notify();
   }
 
+  // `workspaceRanges` (mm and radians, or null for none) replaces the drawn
+  // requirement ranges; left out, the current ranges are kept, so a geometry
+  // edit that reloads the layout keeps the box.
   function loadLayout(nextLayout, { source: nextSource = { kind: 'import' },
-    options: nextOptions = {} } = {}) {
+    options: nextOptions = {}, workspaceRanges: nextRanges } = {}) {
     ensureLayout(nextLayout);
     const nextLayoutCopy = copy(nextLayout);
     const nextOptionsCopy = copy(plainOptions(nextOptions));
+    const nextRangesCopy = nextRanges === undefined ? workspaceRanges : normalizeWorkspaceRanges(nextRanges);
     // Validate the options against the home pose before touching any state, as
     // setOptions does, so an invalid load leaves the previous layout intact.
     evaluatePose(nextLayoutCopy, HOME_POSE, { ...nextOptionsCopy, recordLegData: true });
     layout = nextLayoutCopy;
     source = copy(nextSource);
     options = nextOptionsCopy;
+    workspaceRanges = nextRangesCopy;
     requested = { ...HOME_POSE };
     accepted = null;
     assessment = null;
@@ -118,6 +144,7 @@ export function createSimulatorController({ onChange } = {}) {
     layout = null;
     source = null;
     options = {};
+    workspaceRanges = null;
     requested = { ...HOME_POSE };
     accepted = null;
     assessment = null;
@@ -173,6 +200,8 @@ export function createSimulatorController({ onChange } = {}) {
       overlays = { ...overlays, ...known };
       return notify();
     },
+    // Replaces the drawn requirement ranges (mm and radians); null removes them.
+    setWorkspaceRanges(ranges) { workspaceRanges = normalizeWorkspaceRanges(ranges); return notify(); },
     clearTrace() { trace = []; return notify(); },
     dispose() { listeners.clear(); },
   };

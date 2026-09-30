@@ -15,6 +15,7 @@ export const SCENE_COLORS = Object.freeze({
   servo: [1, 0.42, 0.39], trace: [0.72, 0.5, 1],
   x: [1, 0.38, 0.38], y: [0.39, 0.92, 0.47], z: [0.42, 0.62, 1],
   limitRange: [0.5, 0.56, 0.66], nearLimit: [1, 0.88, 0.2],
+  grid: [0.16, 0.2, 0.27], workspace: [0.32, 0.7, 0.76],
 });
 const COLORS = SCENE_COLORS;
 // The canvas clear colour; the ghost dims toward it instead of blending.
@@ -29,12 +30,19 @@ const dim = color => color.map((value, k) => SCENE_BACKGROUND[k] + (value - SCEN
 
 // Toggleable overlays and whether each is drawn when a state or saved file
 // does not say. New overlays default off unless their issue says otherwise.
-export const OVERLAY_DEFAULTS = Object.freeze({ servoArcs: true, jointCones: true, requestedGhost: true,
-  platformAxes: true, worldAxes: true });
+export const OVERLAY_DEFAULTS = Object.freeze({ groundGrid: true, servoArcs: true, jointCones: true,
+  workspaceBox: true, requestedGhost: true, platformAxes: true, worldAxes: true });
 export const OVERLAY_NAMES = Object.freeze(Object.keys(OVERLAY_DEFAULTS));
 // Limit overlays (servo travel, socket cones) tint a value this close to its
 // limit as a warning before the evaluator rejects it: 5°, in radians.
 export const NEAR_LIMIT_MARGIN_RAD = 5 * Math.PI / 180;
+// Ground grid line spacing (mm) and its half-width as a multiple of the base
+// radius, rounded up to whole cells. The grid lies on z = 0 with the base
+// polygon, servo stubs and world axes, so its lines are pushed this far (mm)
+// away from the camera to lose every depth tie with them.
+export const GROUND_GRID_PITCH_MM = 25;
+const GROUND_GRID_EXTENT = 1.5;
+export const GROUND_DEPTH_BIAS_MM = 2;
 const SERVO_ARC_SEGMENTS = 24;
 const JOINT_CONE_SEGMENTS = 24;
 const JOINT_CONE_GENERATRICES = 4;
@@ -67,6 +75,21 @@ function failureColor(state) {
     .map(violation => violation.leg));
   const globalFailure = !ghost && violations.some(violation => !Number.isInteger(violation.leg));
   return index => affectedLegs.has(index) ? COLORS.failure : globalFailure ? COLORS.globalFailure : null;
+}
+
+// A square grid on the base plane for scale: lines every GROUND_GRID_PITCH_MM
+// through the origin, out to GROUND_GRID_EXTENT times the base radius.
+function groundGrid(state, layout) {
+  const lines = [];
+  const radius = Math.max(...layout.baseAnchors.map(([x, y]) => Math.hypot(x, y)));
+  const cells = Math.max(1, Math.ceil(radius * GROUND_GRID_EXTENT / GROUND_GRID_PITCH_MM));
+  const half = cells * GROUND_GRID_PITCH_MM;
+  for (let k = -cells; k <= cells; k++) {
+    const offset = k * GROUND_GRID_PITCH_MM;
+    lines.push({ from: [offset, -half, 0], to: [offset, half, 0], color: COLORS.grid, depthBias: -GROUND_DEPTH_BIAS_MM });
+    lines.push({ from: [-half, offset, 0], to: [half, offset, 0], color: COLORS.grid, depthBias: -GROUND_DEPTH_BIAS_MM });
+  }
+  return { lines, points: [] };
 }
 
 function base(state, layout) {
@@ -177,6 +200,25 @@ function jointCones(state, layout, solved) {
   return { lines, points: [] };
 }
 
+// The twelve edges of the requirement x/y/z ranges as a box about home: the
+// region the platform origin must reach, not the platform's extent. Rotation
+// ranges are not drawn; without all three translation ranges there is no box.
+function workspaceBox(state, layout) {
+  const lines = [];
+  const { x, y, z } = state.workspaceRanges ?? {};
+  if (!x || !y || !z) return { lines, points: [] };
+  const corner = ([i, j, k]) => [[x.min, x.max][i], [y.min, y.max][j], layout.homeHeight + [z.min, z.max][k]];
+  // Four edges along each axis, one for each min/max pair of the other two.
+  for (const i of [0, 1]) {
+    for (const j of [0, 1]) {
+      for (const [from, to] of [[[0, i, j], [1, i, j]], [[i, 0, j], [i, 1, j]], [[i, j, 0], [i, j, 1]]]) {
+        lines.push({ from: corner(from), to: corner(to), color: COLORS.workspace });
+      }
+    }
+  }
+  return { lines, points: [] };
+}
+
 // The rejected request drawn faintly beside the accepted pose: the one layer
 // that shows geometry the evaluator did not accept. It uses only what the
 // rejected evaluation returned. The platform comes from its translation and
@@ -240,11 +282,13 @@ function trace(state) {
 }
 
 export const SCENE_BUILDERS = Object.freeze([
+  { name: 'groundGrid', overlay: 'groundGrid', build: groundGrid },
   { name: 'base', build: base },
   { name: 'platform', build: platform },
   { name: 'legs', build: legs },
   { name: 'servoArcs', overlay: 'servoArcs', build: servoArcs },
   { name: 'jointCones', overlay: 'jointCones', build: jointCones },
+  { name: 'workspaceBox', overlay: 'workspaceBox', build: workspaceBox },
   { name: 'requestedGhost', overlay: 'requestedGhost', build: requestedGhost },
   { name: 'platformAxes', overlay: 'platformAxes', build: platformAxes },
   { name: 'worldAxes', overlay: 'worldAxes', build: worldAxes },
