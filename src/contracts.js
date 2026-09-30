@@ -1,0 +1,26 @@
+// Shared names for the implementation streams tracked by issue #36.
+// Internal metric values use these camel-case keys. JSON preserves the existing
+// snake-case metadata names for compatibility.
+export const SCHEMA_VERSION = 2;
+export const MODEL_VERSION = 2;
+
+export const TOPOLOGIES = Object.freeze(['circular', 'c3_paired', 'rectangular_paired', 'free']);
+export const DEFAULT_TOPOLOGY = 'c3_paired';
+
+export const METRICS = Object.freeze({
+  coverage: { json: 'coverage', direction: 'max', unit: 'percent' },
+  relaxedCoverage: { json: 'relaxed_coverage', direction: 'max', unit: 'percent' },
+  conditioningQuality: { json: 'conditioning_quality', direction: 'max', unit: 'ratio' },
+  dexterity: { json: 'dexterity', direction: 'max', unit: 'ratio' },
+  stiffness: { json: 'stiffness', direction: 'max', unit: 'proxy' },
+  torque: { json: 'torque', direction: 'min', unit: 'N m' },
+  speedDemand: { json: 'speed_demand', direction: 'min', unit: 'rad/s' },
+  loadBalance: { json: 'load_balance', direction: 'max', unit: 'proxy' },
+  isotropy: { json: 'isotropy', direction: 'max', unit: 'ratio' },
+  limitMargin: { json: 'limit_margin', direction: 'max', unit: 'ratio' },
+  fatigue: { json: 'fatigue', direction: 'min', unit: 'proxy' },
+});
+
+export const FAILURE_CATEGORIES = Object.freeze([
+  'geometry', 'home', 'workspace', 'cycle', 'joint', 'conditioning', 'servo_capacity',
+]);
