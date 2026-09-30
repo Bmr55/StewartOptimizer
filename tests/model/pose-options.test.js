@@ -37,3 +37,31 @@ test('evaluatePose rejects wrongly typed limits, servo bounds and mounting by fi
   assert.equal(tight.reachable, false);
   assert.equal(tight.violations[0].type, 'servoLimit');
 });
+
+test('servo travel bounds are inclusive at the boundary with a 1e-6 rad tolerance and no more', () => {
+  const layout = asymmetricJointFixture();
+  const pose = { y: 6, rx: 0.05 };
+  const check = servoRangeRad => evaluatePose(layout, pose, { ballJointLimitDeg: 180, servoRangeRad });
+  const angles = check([-Math.PI, Math.PI]).servoAngles;
+  const low = Math.min(...angles), high = Math.max(...angles);
+  const lowLeg = angles.indexOf(low), highLeg = angles.indexOf(high);
+  assert.ok(high - low > 0.01 && lowLeg !== highLeg);
+  // Servo angles exactly at both bounds are accepted.
+  const exact = check([low, high]);
+  assert.equal(exact.reachable, true);
+  assert.deepEqual(exact.violations, []);
+  assert.deepEqual(exact.servoAngles, angles);
+  // Inside the 1e-6 rad tolerance the pose is still accepted.
+  assert.equal(check([low + 5e-7, high - 5e-7]).reachable, true);
+  // Just beyond the tolerance each bound rejects its own leg, reporting the angle.
+  const belowMin = check([low + 2e-6, high]);
+  assert.equal(belowMin.reachable, false);
+  assert.equal(belowMin.geometricallyReachable, false);
+  assert.deepEqual(belowMin.violations, [{ type: 'servoLimit', leg: lowLeg, value: low }]);
+  const aboveMax = check([low, high - 2e-6]);
+  assert.equal(aboveMax.reachable, false);
+  assert.deepEqual(aboveMax.violations, [{ type: 'servoLimit', leg: highLeg, value: high }]);
+  // The tolerance is 1e-6 rad; a bound 1e-4 rad inside the angle is a real violation.
+  assert.equal(check([low + 1e-4, high]).violations[0].type, 'servoLimit');
+  assert.equal(check([low, high - 1e-4]).violations[0].type, 'servoLimit');
+});

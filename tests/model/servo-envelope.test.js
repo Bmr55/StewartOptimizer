@@ -159,7 +159,7 @@ test('unavailable demand cannot pass envelope or continuous ratings; advisory st
   }
 });
 
-test('requirements, UI merging and replay preserve curves, continuous ratings and actuators', async () => {
+test('requirements and UI merging preserve curves, continuous ratings and actuators; a replay carries them and evaluates identically', async () => {
   const data = JSON.parse(sampleText);
   Object.assign(data.constraints, { servo_torque_speed_curve: curve, servo_continuous_torque_rating_nm: 0.3,
     servo_actuator: { output_inertia_kg_m2: 1e-4 },

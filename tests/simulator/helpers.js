@@ -23,12 +23,16 @@ export function createFakeDocument() {
     replaceChildren(...nodes) { this.children = nodes; }
     addEventListener(type, handler) { this.handlers[type] = handler; }
     setAttribute() {}
-    dispatch(type) { this.handlers[type]?.({ target: this }); }
+    dispatch(type, event = {}) { this.handlers[type]?.({ target: this, ...event }); }
   }
+  // Document-level listeners (the view's keydown) are kept so tests can fire them.
+  const documentHandlers = {};
   return {
     activeElement: null,
-    addEventListener() {},
-    removeEventListener() {},
+    documentHandlers,
+    addEventListener(type, handler) { documentHandlers[type] = handler; },
+    removeEventListener(type) { delete documentHandlers[type]; },
+    dispatch(type, event = {}) { documentHandlers[type]?.(event); },
     createElement: tag => new FakeElement(tag),
     getElementById(id) {
       if (!byId.has(id)) new FakeElement('div').id = id;

@@ -70,7 +70,7 @@ test('run budgets include workspace, home, cycle, and reject excess before evalu
   assert.throws(() => estimateWorkspaceSize({ x: { min: 2, max: 1 } }, { strategy: 'halton' }), /Sweep ranges/);
 });
 
-test('seed and effective settings replay evolution and sampled results', async () => {
+test('a seeded run is deterministic: effective settings replay evolution and samples identically (results are not pinned)', async () => {
   const options = { populationSize: 4, generations: 1, seed: 73, topology: 'rectangular_paired',
     homeHeightBounds: [80, 300],
     sampling: { strategy: 'halton', sampleCount: 16 }, ranges: { x: { min: -2, max: 2, step: 1 } },

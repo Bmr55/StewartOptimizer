@@ -146,7 +146,7 @@ test('missing parameters stay unavailable in ranking and export; validation is e
   assert.throws(() => parseRequirements(JSON.stringify(data)), /exactly one/);
 });
 
-test('a supplied stiffness model makes physical stiffness the Full objective, and it replays', async () => {
+test('a supplied stiffness model makes physical stiffness the Full objective, and a seeded replay evaluates it identically', async () => {
   assert.equal(objectiveDefinitions('full')[5].key, 'stiffness', 'without a stiffness model the proxy is the objective');
   assert.equal(objectiveDefinitions('full', { stiffnessMetric: 'physicalStiffness' })[5].key, 'physicalStiffness');
   const requirements = { mass_kg: 1, cycle_mm: 0, frequency_hz: 0, cycle_axis: 'z',

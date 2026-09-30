@@ -194,3 +194,48 @@ test('free-topology parameters must be an object, are copied, and version errors
   assert.throws(() => importLayout({ ...plain, model_version: 1.5 }), /model_version 1.5 is unsupported/);
   assert.throws(() => importLayout('{'), /Layout JSON is invalid/);
 });
+
+test('camelCase layouts import servoRangeRad as radians and copy every array from the input', () => {
+  const input = { ...jointFixture(), schemaVersion: 2, modelVersion: 2 };
+  input.baseAnchors[0][0] += 7.125;
+  input.betaAngles[2] += 0.123;
+  input.servoRangeRad = [-2.25, 1.75];
+  input.homeHeight = 177.5;
+  const { layout, sourceRun } = importLayout(input);
+  assert.equal(sourceRun, null);
+  assert.deepEqual(layout.servoRangeRad, [-2.25, 1.75]);
+  assert.equal('servoRangeDeg' in layout, false);
+  assert.deepEqual(layout.baseAnchors, input.baseAnchors);
+  assert.deepEqual(layout.platformAnchors, input.platformAnchors);
+  assert.deepEqual(layout.betaAngles, input.betaAngles);
+  assert.equal(layout.hornLength, 50);
+  assert.equal(layout.rodLength, 200);
+  assert.equal(layout.homeHeight, 177.5);
+  assert.equal(layout.topology, 'free');
+  assert.equal(layout.schemaVersion, 2);
+  assert.equal(layout.modelVersion, 2);
+  assert.equal(layout.migration.upgraded, false);
+  const before = structuredClone(layout);
+  input.baseAnchors[0][0] += 1;
+  input.platformAnchors[1][1] -= 1;
+  input.betaAngles[2] += 1;
+  input.servoRangeRad[0] = -3;
+  assert.deepEqual(layout, before, 'the imported layout aliases the input arrays');
+  assert.throws(() => importLayout({ ...input, servoRangeRad: [1, 0] }), /servoRangeRad must contain two finite bounds/);
+  assert.throws(() => importLayout({ ...input, baseAnchors: input.baseAnchors.slice(0, 5) }), /baseAnchors must contain six/);
+  assert.throws(() => importLayout({ ...input, schemaVersion: 0 }), /schema_version 0 is unsupported/);
+  assert.throws(() => importLayout({ ...input, modelVersion: 0 }), /model_version 0 is unsupported/);
+});
+
+test('snake_case imports copy their arrays and reject version 0', () => {
+  const input = asymmetric();
+  const { layout } = importLayout(input);
+  const before = structuredClone(layout);
+  input.base_anchors[0][0] += 1;
+  input.platform_anchors[2][2] += 1;
+  input.beta_angles[0] += 1;
+  input.servo_range[0] = -170;
+  assert.deepEqual(layout, before, 'the imported layout aliases the input arrays');
+  assert.throws(() => importLayout({ ...asymmetric(), schema_version: 0 }), /schema_version 0 is unsupported/);
+  assert.throws(() => importLayout({ ...asymmetric(), model_version: 0 }), /model_version 0 is unsupported/);
+});

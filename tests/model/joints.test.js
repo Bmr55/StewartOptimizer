@@ -49,6 +49,23 @@ test('moving horn and platform rotations follow their local mounting frames', ()
   assert.ok(tilted.jointAngles.lower[0] > tilted.jointAngles.upper[0]);
 });
 
+test('each leg reports the larger of its lower and upper socket deflections', () => {
+  const layout = jointFixture();
+  // The lower sockets deflect more at the first pose and the upper sockets at the second.
+  const cases = [[{ x: 10, ry: 0.1, rz: 0.05 }, 'lower'], [{ x: 15, y: -8, rx: 0.1, ry: -0.12 }, 'upper']];
+  for (const [pose, dominant] of cases) {
+    const result = evaluatePose(layout, pose, { ballJointLimitDeg: 180, recordLegData: true });
+    assert.equal(result.reachable, true);
+    assert.equal(result.ballJointAngles.length, 6);
+    for (let leg = 0; leg < 6; leg++) {
+      const { lower, upper } = result.jointAngles;
+      assert.ok(Math.abs(lower[leg] - upper[leg]) > 1e-3, `leg ${leg} sockets differ`);
+      assert.equal(dominant === 'lower' ? lower[leg] > upper[leg] : upper[leg] > lower[leg], true);
+      assert.equal(result.ballJointAngles[leg], Math.max(lower[leg], upper[leg]));
+    }
+  }
+});
+
 test('upper and lower failures are independently reported with leg, joint, and limit', async () => {
   for (const joint of ['lower', 'upper']) {
     const layout = withFlippedSocket(joint);

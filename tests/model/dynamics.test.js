@@ -214,7 +214,7 @@ test('invalid poses stay explicit failures with trajectory identity', () => {
   assert.match(result.trajectoryId, /ry:5deg/);
 });
 
-test('optimizer budgets, exports and replays a rotational rigid-body cycle', async () => {
+test('optimizer budgets and exports a rotational rigid-body cycle, and a seeded replay is deterministic', async () => {
   const requirements = { mass_kg: 1.5, trajectory: { frequency_hz: 1, components: [{ axis: 'rz', amplitude_deg: 4 }] },
     inertia_kg_m2: { ixx: 0.01, iyy: 0.01, izz: 0.02 }, center_of_mass_mm: [0, 0, 15] };
   const settings = { populationSize: 4, generations: 1, ranges: { x: { min: 0, max: 0, step: 1 } },
@@ -230,5 +230,8 @@ test('optimizer budgets, exports and replays a rotational rigid-body cycle', asy
   await replay.run();
   assert.deepEqual(replay.fitness.map(ev => ev.torque), optimizer.fitness.map(ev => ev.torque));
   const cycle = optimizer.fitness.find(ev => ev.cycle.valid)?.cycle;
-  if (cycle) assert.equal(cycle.trajectorySource, 'supplied');
+  assert.ok(cycle, `no candidate has a valid rotational cycle: ${optimizer.fitness.map(ev => ev.cycle.reason)}`);
+  assert.equal(cycle.trajectorySource, 'supplied');
+  assert.equal(cycle.massModel, 'rigid-body');
+  assert.match(cycle.trajectoryId, /rz:4deg/);
 });

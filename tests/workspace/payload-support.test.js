@@ -90,7 +90,7 @@ test('no, partial and missing ratings, invalid geometry and unavailable equilibr
   assert.ok(!advisory.feasibility.failedCategories.includes('payload_support'));
 });
 
-test('requirements, budgets, exports and replay carry the payload check', async () => {
+test('requirements, budgets and exports carry the payload check, and a replay is deterministic (payload results replay identically)', async () => {
   const data = JSON.parse(sampleText);
   data.constraints.workspace_payload_support = { rating: 'peak', policy: 'advisory' };
   assert.deepEqual(parseRequirements(JSON.stringify(data)).normalized.workspace_payload_support, { rating: 'peak', policy: 'advisory' });

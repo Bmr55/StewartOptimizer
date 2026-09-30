@@ -38,6 +38,17 @@ test('passing initial selection uses torque, speed, then conditioning', () => {
   assert.equal(selectBest([], [slow, worseCondition, best]), best);
 });
 
+test('otherwise equal candidates order by numeric id in the passing and diagnostic branches', () => {
+  const ids = [10, 9, 2];
+  const passing = ids.map(id => candidate(id));
+  assert.deepEqual(rankCandidates(passing).map(item => item.layout.id), [2, 9, 10]);
+  assert.equal(selectBest([], passing).layout.id, 2);
+  const diagnostics = ids.map(id => candidate(id, { passing: false, failedCategories: ['cycle'] }));
+  assert.deepEqual(rankCandidates(diagnostics).map(item => item.layout.id), [2, 9, 10]);
+  assert.equal(selectBest(diagnostics, []).layout.id, 2);
+  assert.ok(compareCandidates(candidate(10), candidate(9)) > 0);
+});
+
 test('diagnostic JSON preserves unavailable demand and failure details', () => {
   const evaluation = candidate(7, { passing: false, failedCategories: ['cycle'], torque: Infinity });
   const json = JSON.parse(JSON.stringify(exportResult(evaluation, { status: 'cancelled', partial: true })));
