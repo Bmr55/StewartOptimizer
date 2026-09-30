@@ -113,7 +113,7 @@ export function displayResult(evaluation) {
     diagnostic: !isPassing(evaluation),
     reference_diagnostics: evaluation.referenceDiagnostics ?? null,
     metrics: metricValues(evaluation),
-    layout: layoutToJSON(evaluation.layout, rad => rad * 180 / Math.PI),
+    layout: layoutToJSON(evaluation.layout),
     cycle: evaluation.cycle,
     conditioning: conditioningSummary(evaluation),
     servo_capacity: evaluation.servoCapacity ?? null,

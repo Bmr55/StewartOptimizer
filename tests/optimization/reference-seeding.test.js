@@ -76,3 +76,25 @@ test('finalizeLayout drops the imported servoRangeDeg so direct operator use exp
   }
   assert.deepEqual(imported.servoRangeDeg, [-137, 113]);
 });
+
+test('an exported candidate re-imports as the reference without bounds conflicts', () => {
+  // ±105° does not round-trip exactly through radians; ±120 (the sample) happens to round inward.
+  for (const bound of [105, 114, 96, 57, 52.5, 28.5, 12, 1.5]) {
+    const requirements = { servo_travel_bounds_deg: [-bound, bound] };
+    const exported = layoutToJSON(new Optimizer(requirements, { topology: 'c3_paired', seed: 7 }).createRandomLayout());
+    const optimizer = new Optimizer(requirements, { ...runOptions, referenceLayout: exported });
+    assert.deepEqual(optimizer.referenceDiagnostics.boundsConflicts, [], `±${bound}° reported a conflict`);
+    assert.equal(optimizer.referenceLayout.servoRangeDeg[1], exported.servo_range[1]);
+  }
+});
+
+test('reference bounds tolerate rounding noise but still flag real violations', () => {
+  const reference = layoutToJSON(new Optimizer({}, { topology: 'free', seed: 2 }).createRandomLayout());
+  for (const point of reference.platform_anchors) point[2] = 1e-12;
+  const clean = new Optimizer({}, { ...runOptions, referenceLayout: reference });
+  assert.deepEqual(clean.referenceDiagnostics.boundsConflicts, []);
+  reference.platform_anchors[0][2] = 1e-6;
+  reference.servo_range = [-120, 120.000001];
+  const flagged = new Optimizer({}, { ...runOptions, referenceLayout: reference }).referenceDiagnostics.boundsConflicts;
+  assert.deepEqual(flagged.map(item => item.field), ['servo_range', 'platform_anchors[0][2]']);
+});
