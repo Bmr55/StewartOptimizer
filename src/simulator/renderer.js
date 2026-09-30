@@ -3,6 +3,7 @@ import { vectorAdd, vectorCross, vectorDot, vectorNormalize, vectorScale, vector
 const COLORS = Object.freeze({
   base: [0.24, 0.64, 0.94], platform: [0.43, 0.88, 0.72],
   horn: [1, 0.69, 0.31], rod: [0.88, 0.89, 0.94],
+  failure: [1, 0.26, 0.32], globalFailure: [1, 0.38, 0.8],
   servo: [1, 0.42, 0.39], trace: [0.72, 0.5, 1],
   x: [1, 0.38, 0.38], y: [0.39, 0.92, 0.47], z: [0.42, 0.62, 1],
 });
@@ -15,22 +16,30 @@ export function buildSceneGeometry(state) {
   const { layout, acceptedAssessment: solved, markers = true, trace = [] } = state;
   const lines = [], points = [];
   if (!layout) return { lines, points };
+  // The geometry remains at the accepted pose. Color reports failures in the
+  // requested pose, which may have been rejected by the shared evaluator.
+  const violations = state.assessment?.violations ?? [];
+  const affectedLegs = new Set(violations.filter(violation => Number.isInteger(violation.leg))
+    .map(violation => violation.leg));
+  const globalFailure = violations.some(violation => !Number.isInteger(violation.leg));
+  const legColor = index => affectedLegs.has(index) ? COLORS.failure
+    : globalFailure ? COLORS.globalFailure : null;
   polygon(lines, layout.baseAnchors, COLORS.base);
   for (let i = 0; i < 6; i++) {
     const base = layout.baseAnchors[i];
     const beta = layout.betaAngles[i];
     const direction = [Math.cos(beta), Math.sin(beta), 0];
-    lines.push({ from: base, to: vectorAdd(base, vectorScale(direction, Math.max(12, layout.hornLength * 0.35))), color: COLORS.servo });
-    if (markers) points.push({ at: base, color: COLORS.servo, size: 7 });
+    lines.push({ from: base, to: vectorAdd(base, vectorScale(direction, Math.max(12, layout.hornLength * 0.35))), color: legColor(i) ?? COLORS.servo });
+    if (markers) points.push({ at: base, color: legColor(i) ?? COLORS.servo, size: 7 });
   }
   if (solved?.platformPoints?.length === 6 && solved?.hornTips?.length === 6) {
     polygon(lines, solved.platformPoints, COLORS.platform);
     for (let i = 0; i < 6; i++) {
-      lines.push({ from: layout.baseAnchors[i], to: solved.hornTips[i], color: COLORS.horn });
-      lines.push({ from: solved.hornTips[i], to: solved.platformPoints[i], color: COLORS.rod });
+      lines.push({ from: layout.baseAnchors[i], to: solved.hornTips[i], color: legColor(i) ?? COLORS.horn });
+      lines.push({ from: solved.hornTips[i], to: solved.platformPoints[i], color: legColor(i) ?? COLORS.rod });
       if (markers) {
-        points.push({ at: solved.hornTips[i], color: COLORS.horn, size: 6 });
-        points.push({ at: solved.platformPoints[i], color: COLORS.platform, size: 7 });
+        points.push({ at: solved.hornTips[i], color: legColor(i) ?? COLORS.horn, size: 6 });
+        points.push({ at: solved.platformPoints[i], color: legColor(i) ?? COLORS.platform, size: 7 });
       }
     }
     const center = solved.translation;

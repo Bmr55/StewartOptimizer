@@ -83,3 +83,9 @@ the layout and ignores old scores; every pose is checked again by the current
 evaluator. If WebGL2 is unavailable, the simulator names the missing capability
 and suggests enabling hardware acceleration or a modern desktop browser;
 optimization remains usable.
+
+## Live diagnostics
+
+The diagnostics panel subscribes to the same controller as the renderer. It reports the six-axis **requested** pose and last valid **rendered accepted** pose separately. A rejected request remains visible with its evaluator failures while the renderer holds the last accepted geometry. Red leg rows and matching WebGL leg colors mark failures in the requested pose; a whole-platform conditioning failure has a separate message and color. Highlighting does not imply that the rejected pose was rendered.
+
+Each leg shows lower and upper socket deflection against their effective limits, maximum deflection, rod-length deviation against the editable tolerance, and servo angle. Unavailable measurements show a dash because the evaluator may stop at the first structural failure. Lower and upper joint limits and rod tolerance can be edited in the panel; changes reevaluate the current request and last accepted pose. The mandatory reciprocal conditioning cutoff and optional engineering condition limit are displayed. Simulator JSON saves these effective options with the requested and accepted poses, and loading that JSON restores them.
