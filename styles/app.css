@@ -43,6 +43,12 @@ main {
 .sim-controls h2 { font-size: 18px; margin-top: 6px; }
 .sim-controls p { font-size: 13px; line-height: 1.5; }
 #simGeometryControls:empty, #simDiagnostics:empty { display: none; }
+.sim-diagnostic-settings { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+.sim-diagnostic-table-wrap { overflow-x: auto; }
+.sim-diagnostic-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.sim-diagnostic-table th, .sim-diagnostic-table td { padding: 8px; border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; }
+.sim-leg-failure { background: rgba(255, 70, 78, .13); }
+.sim-joint-failure { color: var(--danger); font-weight: 700; }
 @media (max-width: 820px) { .sim-layout { grid-template-columns: 1fr; } #simCanvas { height: 420px; } }
 
 section {

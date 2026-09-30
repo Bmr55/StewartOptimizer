@@ -15,6 +15,7 @@ import { createServoRatingControls } from './servo-ratings-controls.js';
 import { createSimulatorController } from '../simulator/controller.js';
 import { createSimulatorView } from '../simulator/view.js';
 import { createGeometryControls } from '../simulator/geometry-controls.js';
+import { mountSimulatorDiagnostics } from '../simulator/diagnostics.js';
 
 function simulatorOptions(settings = {}, layout = {}) {
     return {
@@ -57,6 +58,7 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
     const geometryControls = geometryContainer?.appendChild && geometryContainer?.replaceChildren
         ? createGeometryControls({ document, container: geometryContainer, controller: simulatorController })
         : null;
+    const simulatorDiagnostics = mountSimulatorDiagnostics({ document, controller: simulatorController });
     function setTab(tab) {
         activeTab = tab;
         for (const [name, buttonId, panelId] of [['optimize', 'optimizeTab', 'optimizePanel'],
@@ -421,5 +423,5 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
             console.error(error);
             showStatus(error.message, true);
         });
-    return { ready, simulatorController, simulatorView, geometryControls, setTab };
+    return { ready, simulatorController, simulatorView, geometryControls, simulatorDiagnostics, setTab };
 }
