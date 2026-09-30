@@ -1,14 +1,15 @@
 import { radToDeg } from '../math.js';
-import { topologyGeometry } from '../optimization/topology.js';
-import { createGeometryEditor, geometryMode } from './geometry-editor.js';
+import { topologyGeometry, PAIRED_HORN_TOPOLOGIES, DEFAULT_BETA_PAIR_OFFSET } from '../optimization/topology.js';
+import { createGeometryEditor, geometryMode, PARAMETER_FIELDS } from './geometry-editor.js';
 
-const ANGLE_FIELDS = new Set(['base_orientation', 'platform_orientation', 'beta_offset']);
+const ANGLE_FIELDS = new Set(['base_orientation', 'platform_orientation', 'beta_offset', 'beta_pair_offset']);
 const LABELS = {
   base_radius: 'Base radius (mm)', platform_radius: 'Platform radius (mm)',
   base_pair_gap: 'Base anchor spacing (mm)', platform_pair_gap: 'Platform anchor spacing (mm)',
   base_aspect: 'Base width/depth ratio', platform_aspect: 'Platform width/depth ratio',
   base_orientation: 'Base turn (deg)', platform_orientation: 'Platform turn (deg)',
   beta_offset: 'Horn direction offset (deg)',
+  beta_pair_offset: 'Alternating horn offset (deg)',
   hornLength: 'Horn length (mm)', rodLength: 'Rod length (mm)', homeHeight: 'Home height (mm)',
 };
 
@@ -32,6 +33,7 @@ export function suggestedParameters(layout, topology) {
     base_radius: base, platform_radius: platform,
     base_orientation: 0, platform_orientation: 0, beta_offset: 0,
   };
+  if (PAIRED_HORN_TOPOLOGIES.includes(topology)) parameters.beta_pair_offset = DEFAULT_BETA_PAIR_OFFSET;
   if (topology === 'c3_paired') {
     parameters.base_pair_gap = Math.min(30, base);
     parameters.platform_pair_gap = Math.min(30, platform);
@@ -108,7 +110,8 @@ export function createGeometryControls({ document, container, controller }) {
 
   function parameter(parent, layout, field) {
     const angle = ANGLE_FIELDS.has(field);
-    const value = angle ? radToDeg(layout.topologyParameters[field]) : layout.topologyParameters[field];
+    const storedValue = layout.topologyParameters[field] ?? 0;
+    const value = angle ? radToDeg(storedValue) : storedValue;
     const isAspect = field.endsWith('aspect');
     addPair(parent, {
       key: field.replaceAll('_', '-'), label: LABELS[field], value,
@@ -193,7 +196,7 @@ export function createGeometryControls({ document, container, controller }) {
     container.appendChild(actions);
 
     if (mode === 'parametric') {
-      for (const field of Object.keys(layout.topologyParameters)) {
+      for (const field of PARAMETER_FIELDS[layout.topology]) {
         if (LABELS[field]) parameter(container, layout, field);
       }
     } else explicitAnchors(container, layout);
@@ -222,7 +225,8 @@ export function createGeometryControls({ document, container, controller }) {
       'servo-min': radToDeg(layout.servoRangeRad[0]),
       'servo-max': radToDeg(layout.servoRangeRad[1]) };
     if (geometryMode(layout) === 'parametric') {
-      for (const [field, value] of Object.entries(layout.topologyParameters)) {
+      for (const field of PARAMETER_FIELDS[layout.topology]) {
+        const value = layout.topologyParameters[field] ?? 0;
         values[field.replaceAll('_', '-')] = ANGLE_FIELDS.has(field) ? radToDeg(value) : value;
       }
     } else {

@@ -1,6 +1,7 @@
 import { clamp, randomNormal, degToRad } from '../math.js';
 import { DEFAULT_TOPOLOGY, TOPOLOGIES } from '../contracts.js';
-import { topologyGeometry, validateTopology, wrapAngle } from './topology.js';
+import { topologyGeometry, validateTopology, wrapAngle,
+  PAIRED_HORN_TOPOLOGIES, DEFAULT_BETA_PAIR_OFFSET } from './topology.js';
 
 export const DEFAULT_DESIGN_SPACE = {
   baseRadius: [90, 160], platformRadius: [40, 120], homeHeightBounds: [50, 450],
@@ -17,6 +18,28 @@ function pairGapRange(radius, space) {
   const ceiling = Math.min(max, 1.2 * radius);
   if (ceiling < min) throw new Error('pairGapBounds cannot fit the selected radius bounds.');
   return [min, ceiling];
+}
+
+function regenerateBoundedTopology(layout, space) {
+  const { topology, topologyParameters: p } = layout;
+  const minimum = topology === 'c3_paired' ? space.pairGapBounds[0] / 1.2 : 0;
+  p.base_radius = clamp(p.base_radius, Math.max(space.baseRadius[0], minimum), space.baseRadius[1]);
+  p.platform_radius = clamp(p.platform_radius, Math.max(space.platformRadius[0], minimum), space.platformRadius[1]);
+  for (const field of ['base_orientation', 'platform_orientation', 'beta_offset']) {
+    p[field] = wrapAngle(p[field]);
+  }
+  if (PAIRED_HORN_TOPOLOGIES.includes(topology)) {
+    p.beta_pair_offset = wrapAngle(p.beta_pair_offset ?? 0);
+  }
+  if (topology === 'c3_paired') {
+    p.base_pair_gap = clamp(p.base_pair_gap, ...pairGapRange(p.base_radius, space));
+    p.platform_pair_gap = clamp(p.platform_pair_gap, ...pairGapRange(p.platform_radius, space));
+  }
+  if (topology === 'rectangular_paired') {
+    p.base_aspect = clamp(p.base_aspect, ...space.rectangularAspectBounds);
+    p.platform_aspect = clamp(p.platform_aspect, ...space.rectangularAspectBounds);
+  }
+  Object.assign(layout, topologyGeometry(topology, p));
 }
 
 function clampPointRadius(anchor, bounds) {
@@ -39,6 +62,7 @@ function randomParameters(topology, space, random) {
     platform_orientation: randomInRange([-Math.PI, Math.PI], random),
     beta_offset: randomInRange([-space.betaJitterRad, space.betaJitterRad], random),
   };
+  if (PAIRED_HORN_TOPOLOGIES.includes(topology)) p.beta_pair_offset = DEFAULT_BETA_PAIR_OFFSET;
   if (topology === 'c3_paired') {
     p.base_pair_gap = randomInRange(pairGapRange(p.base_radius, space), random);
     p.platform_pair_gap = randomInRange(pairGapRange(p.platform_radius, space), random);
@@ -105,22 +129,7 @@ export function finalizeLayout(layout, { designSpace: space, servoRangeRad }) {
     }
     for (const point of layout.platformAnchors) clampPointRadius(point, space.platformRadius);
   } else {
-    const p = layout.topologyParameters;
-    const minimum = topology === 'c3_paired' ? space.pairGapBounds[0] / 1.2 : 0;
-    p.base_radius = clamp(p.base_radius, Math.max(space.baseRadius[0], minimum), space.baseRadius[1]);
-    p.platform_radius = clamp(p.platform_radius, Math.max(space.platformRadius[0], minimum), space.platformRadius[1]);
-    for (const field of ['base_orientation', 'platform_orientation', 'beta_offset']) {
-      p[field] = wrapAngle(p[field]);
-    }
-    if (topology === 'c3_paired') {
-      p.base_pair_gap = clamp(p.base_pair_gap, ...pairGapRange(p.base_radius, space));
-      p.platform_pair_gap = clamp(p.platform_pair_gap, ...pairGapRange(p.platform_radius, space));
-    }
-    if (topology === 'rectangular_paired') {
-      p.base_aspect = clamp(p.base_aspect, ...space.rectangularAspectBounds);
-      p.platform_aspect = clamp(p.platform_aspect, ...space.rectangularAspectBounds);
-    }
-    Object.assign(layout, topologyGeometry(topology, p));
+    regenerateBoundedTopology(layout, space);
   }
   layout.servoRangeRad = servoRangeRad.slice();
   return layout;
@@ -149,6 +158,9 @@ export function mutateLayout(source, { designSpace: space, servoRangeRad, random
     p.base_orientation += randomNormal(random) * space.mutationAngle;
     p.platform_orientation += randomNormal(random) * space.mutationAngle;
     p.beta_offset += randomNormal(random) * space.mutationAngle;
+    if (PAIRED_HORN_TOPOLOGIES.includes(layout.topology)) {
+      p.beta_pair_offset = (p.beta_pair_offset ?? 0) + randomNormal(random) * space.mutationAngle;
+    }
     if (layout.topology === 'c3_paired') {
       p.base_pair_gap = clamp(p.base_pair_gap + randomNormal(random) * space.anchorJitter,
         ...pairGapRange(p.base_radius, space));
@@ -183,11 +195,16 @@ export function crossoverLayouts(a, b, { designSpace: space, servoRangeRad, rand
       layout.betaAngles[i] = b.betaAngles[i];
     }
   } else {
-    for (const field of Object.keys(layout.topologyParameters)) {
+    const fields = new Set(Object.keys(layout.topologyParameters));
+    if (PAIRED_HORN_TOPOLOGIES.includes(layout.topology)) fields.add('beta_pair_offset');
+    for (const field of fields) {
+      const fallback = field === 'beta_pair_offset' ? 0 : undefined;
       layout.topologyParameters[field] = random() < 0.5
-        ? a.topologyParameters[field] : b.topologyParameters[field];
+        ? a.topologyParameters[field] ?? fallback : b.topologyParameters[field] ?? fallback;
     }
-    Object.assign(layout, topologyGeometry(layout.topology, layout.topologyParameters));
+    // A valid diagnostic parent may be outside the search bounds. Bound coupled
+    // radius/gap choices before constructing the child, leaving both parents intact.
+    regenerateBoundedTopology(layout, space);
   }
   layout.hornLength = (a.hornLength + b.hornLength) / 2;
   layout.rodLength = (a.rodLength + b.rodLength) / 2;
