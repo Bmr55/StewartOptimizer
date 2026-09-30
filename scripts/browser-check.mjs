@@ -10,8 +10,11 @@ try {
   browser = await chromium.launch({ channel: 'chrome', headless: true });
   const page = await browser.newPage({ acceptDownloads: true });
   await page.goto(`http://127.0.0.1:${server.address().port}/`);
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write'],
+    { origin: `http://127.0.0.1:${server.address().port}` });
   await page.locator('#requirementsInput').waitFor({ state: 'visible' });
   await page.waitForFunction(() => document.querySelector('#requirementsInput').value.includes('mass_kg'));
+  assert.equal(await page.locator('#copyResultOutput').isEnabled(), false);
   const infoButtons = page.locator('.info-button');
   assert.equal(await infoButtons.count(), 30);
   assert.equal(await infoButtons.first().getAttribute('aria-label'), 'More information');
@@ -68,6 +71,15 @@ try {
   const selected = options[1];
   await candidateSelect.selectOption(selected);
   assert.equal(JSON.parse(await page.locator('#resultOutput').inputValue()).result.id, Number(selected));
+  assert.equal(await page.locator('#copyResultOutput').isEnabled(), true);
+  await page.locator('#copyResultOutput').click();
+  await page.waitForFunction(() => document.getElementById('copyResultStatus').textContent !== '');
+  assert.equal(await page.locator('#copyResultStatus').textContent(), 'Copied to clipboard.');
+  assert.equal((await page.evaluate(() => navigator.clipboard.readText())).replaceAll('\r\n', '\n'),
+    await page.locator('#resultOutput').inputValue());
+  await candidateSelect.selectOption(options[0]);
+  assert.equal(await page.locator('#copyResultStatus').textContent(), '');
+  await candidateSelect.selectOption(selected);
   await page.locator('#chartXAxis').selectOption('coverage');
   await page.locator('#chartYAxis').selectOption('coverage');
   assert.match(await page.locator('#paretoChart').getAttribute('aria-label'), /coverage \(percent\)/);

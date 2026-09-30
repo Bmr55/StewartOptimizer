@@ -508,6 +508,27 @@ button.primary:hover {
     min-height: 180px;
 }
 
+.result-output-header, .result-output-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.result-output-header {
+    justify-content: space-between;
+    flex-wrap: wrap;
+    margin-top: 12px;
+}
+
+.result-output-header label {
+    font-weight: 600;
+}
+
+#copyResultStatus {
+    color: var(--muted);
+    font-size: 13px;
+}
+
 #referenceLayoutInput {
     min-height: 110px;
 }

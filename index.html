@@ -256,7 +256,14 @@
                 <div class="pareto-chart"><canvas id="paretoChart" role="img" aria-label="Candidate chart"></canvas></div>
                 <p id="candidateSummary" class="status" aria-live="polite">No completed candidate is available.</p>
             </div>
-            <textarea id="resultOutput" spellcheck="false" readonly aria-label="Optimization output"></textarea>
+            <div class="result-output-header">
+                <label for="resultOutput">Execution JSON output</label>
+                <div class="result-output-actions">
+                    <span id="copyResultStatus" role="status" aria-live="polite"></span>
+                    <button type="button" id="copyResultOutput" disabled>Copy JSON</button>
+                </div>
+            </div>
+            <textarea id="resultOutput" spellcheck="false" readonly></textarea>
         </section>
         </div>
 

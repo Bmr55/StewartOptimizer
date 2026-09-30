@@ -38,6 +38,38 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
     const referenceLayoutInput = document.getElementById('referenceLayoutInput');
     const statusEl = document.getElementById('optStatus');
     const resultOutput = document.getElementById('resultOutput');
+    const copyResultButton = document.getElementById('copyResultOutput');
+    const copyResultStatus = document.getElementById('copyResultStatus');
+    function setResultOutput(value) {
+        resultOutput.value = value;
+        copyResultButton.disabled = !value;
+        copyResultStatus.textContent = '';
+    }
+    setResultOutput('');
+    copyResultButton.addEventListener('click', async () => {
+        const text = resultOutput.value;
+        if (!text) return;
+        let copied = false;
+        try {
+            if (window.navigator?.clipboard?.writeText) {
+                await window.navigator.clipboard.writeText(text);
+                copied = true;
+            }
+        } catch { /* Try the selection fallback for browsers that block Clipboard API writes. */ }
+        if (!copied) {
+            try {
+                resultOutput.focus();
+                resultOutput.select();
+                copied = document.execCommand('copy');
+                copyResultButton.focus();
+            } catch { /* The user can still select and copy the JSON manually. */ }
+        }
+        if (resultOutput.value === text) {
+            copyResultStatus.textContent = copied
+                ? 'Copied to clipboard.'
+                : 'Copy blocked. Select the JSON and copy it manually.';
+        }
+    });
     const ballJointClampCheckbox = document.getElementById('ballJointClamp');
     const ballJointLimitInput = document.getElementById('ballJointLimit');
     let currentOptimizer = null;
@@ -105,7 +137,7 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
     const resultsView = createResultsView(document, (candidate) => {
         if (!currentOptimizer || currentOptimizer.running) return;
         currentOptimizer.selectCandidate(candidate.layout.id);
-        resultOutput.value = JSON.stringify({ run: lastOutcome, result: displayResult(candidate) }, null, 2);
+        setResultOutput(JSON.stringify({ run: lastOutcome, result: displayResult(candidate) }, null, 2));
         loadCandidate(candidate);
         setRunning(false);
     }, ChartClass);
@@ -131,7 +163,7 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
 
     document.getElementById('clearRequirements').addEventListener('click', () => {
         requirementsInput.value = '';
-        resultOutput.value = '';
+        setResultOutput('');
         currentOptimizer = null;
         lastOutcome = null;
         offerFallback(false);
@@ -215,7 +247,7 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
         simCandidateSelect.innerHTML = currentOptimizer.fitness.map(item =>
             `<option value="${item.layout.id}">Candidate ${item.layout.id}</option>`).join('');
         simCandidateSelect.disabled = !currentOptimizer.fitness.length;
-        resultOutput.value = best ? JSON.stringify({ run: lastOutcome, result: displayResult(best) }, null, 2) : '';
+        setResultOutput(best ? JSON.stringify({ run: lastOutcome, result: displayResult(best) }, null, 2) : '');
         dashboard.finish(thisRun, { status: outcome.status, partialResults: outcome.partialResults,
             snapshot: finalSnapshot() });
         if (best) loadCandidate(best);
@@ -305,7 +337,7 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
                 : new OptimizerClass(normalized, options);
             if (currentOptimizer.topology) document.getElementById('optTopology').value = currentOptimizer.topology;
 
-            resultOutput.value = '';
+            setResultOutput('');
             lastOutcome = null;
             simulatorRun = null;
             simulatorController.clear();
@@ -422,7 +454,7 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
         clearSimulatorSelection();
         document.getElementById('simDownload').disabled = true;
         resultsView.clear();
-        resultOutput.value = '';
+        setResultOutput('');
         dashboard.reset();
         if (saved.inputs.requirementsInput.trim()) {
             try { populate(parseRequirements(saved.inputs.requirementsInput)); }
