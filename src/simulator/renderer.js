@@ -72,9 +72,13 @@ export function projectPoint(point, camera, width, height) {
   const depth = vectorDot(offset, forward);
   if (depth <= 1) return null;
   const scale = 1 / (depth * Math.tan(Math.PI / 6));
+  // The far plane follows the camera distance so a zoomed-out view (up to
+  // 2,500 units) still spreads the scene across the depth range instead of
+  // saturating every vertex at the clamp.
+  const far = Math.max(2001, 2 * distance + 1);
   return [vectorDot(offset, right) * scale * height / width,
     vectorDot(offset, up) * scale,
-    Math.min(0.999, Math.max(-0.999, (depth - 1) / 2000 * 2 - 1))];
+    Math.min(0.999, Math.max(-0.999, (depth - 1) / (far - 1) * 2 - 1))];
 }
 
 const VERTEX_SOURCE = `#version 300 es

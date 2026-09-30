@@ -77,6 +77,7 @@ test('loading a reference with invalid simulator options reports the error and k
   const saved = JSON.parse(element('referenceLayoutInput').value);
   saved.home_height = 555;
   saved.simulator.options.rodLengthTolerance = -1;
+  saved.run.effective_settings.populationSize = 999;
   element('referenceLayoutInput').value = JSON.stringify(saved);
   element('simLoadReference').handlers.click();
   assert.match(element('optStatus').textContent, /rodLengthTolerance/);
@@ -85,6 +86,7 @@ test('loading a reference with invalid simulator options reports the error and k
   const exported = JSON.parse(element('referenceLayoutInput').value);
   assert.equal(exported.home_height, source.homeHeight);
   assert.notEqual(exported.simulator.options.rodLengthTolerance, -1);
+  assert.equal(exported.run.effective_settings.populationSize, 4, 'rejected file replaced the run metadata');
   assert.deepEqual(exported.simulator.accepted, { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 });
 });
 

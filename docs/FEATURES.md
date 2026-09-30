@@ -346,7 +346,7 @@ The **Simulate** tab shares the retained candidate selection with Optimize and l
 - Six axis rows with paired sliders (±50 mm translation, ±30° rotation) and numeric fields that accept any finite value.
 - **Reset pose** returns to home.
 - Keyboard: arrows move X/Y, Page Up/Down move Z, W/S tilt about X, A/D tilt about Y, Q/E rotate about Z; Shift doubles the 1 mm / 1° step. Keys are ignored while typing in a field.
-- Mouse: **Orbit camera** (default) drags yaw/pitch and the wheel zooms between 80 and 2,500 units; **Move platform** drags X/Y pose requests instead. **Reset camera** restores the default view.
+- Mouse: **Orbit camera** (default) drags yaw/pitch and the wheel zooms between 80 and 2,500 units, with the renderer's depth range following the camera distance so far views keep near/far line ordering; **Move platform** drags X/Y pose requests instead. **Reset camera** restores the default view.
 - Gamepad (checkbox): left stick moves X/Y, right stick tilts, triggers move Z and shoulder buttons yaw, with a 0.15 dead zone.
 
 Every request is evaluated by the same pose evaluator as the optimizer. An accepted request becomes the rendered pose; a rejected request is reported with its violations while the last accepted pose stays rendered. Home failing at load leaves no accepted pose.
@@ -361,11 +361,11 @@ A native WebGL2 line/point renderer draws the base polygon, servo direction stub
 
 ### Mechanical geometry controls
 
-The panel edits an independent copy of the loaded layout; the optimizer's candidate is never changed. Parametric layouts expose their topology parameters (radii, pair spacing, aspect ratios, plate turns, horn direction offset, alternating horn offset for Circular and Rectangular) with paired sliders and numeric fields; all layouts expose horn length, rod length, home height and servo minimum/maximum. **Edit anchors explicitly** switches to Free while preserving coordinates and exposes each anchor coordinate and horn direction; **Generate selected topology** replaces explicit anchors with a suggested parametric layout. **Reset geometry** restores the last externally loaded layout. Invalid edits leave the last valid layout in place and report a field-specific error.
+The panel edits an independent copy of the loaded layout; the optimizer's candidate is never changed. Parametric layouts expose their topology parameters (radii, pair spacing, aspect ratios, plate turns, horn direction offset, alternating horn offset for Circular and Rectangular) with paired sliders and numeric fields; all layouts expose horn length, rod length, home height and servo minimum/maximum. **Edit anchors explicitly** switches to Free while preserving coordinates and exposes each anchor coordinate and horn direction; **Generate selected topology** replaces explicit anchors with a suggested parametric layout. **Reset geometry** restores the last externally loaded layout. Invalid edits, including an empty or non-numeric field (never read as 0), leave the last valid layout in place, restore the field and report a field-specific error. A field that has keyboard focus keeps its text while an animation plays, so geometry can be edited mid-animation; a rejected edit still restores the stored value.
 
 ### Pose diagnostics
 
-The diagnostics panel shows the requested and rendered accepted poses, editable lower and upper joint limits and rod-length tolerance (changes re-evaluate both poses), the active condition limit and the mandatory 1e-10 cutoff, whole-platform failures, and a per-leg table of lower/upper socket deflection against limits, maximum deflection, rod deviation against tolerance, servo angle and requested-pose failures.
+The diagnostics panel shows the requested and rendered accepted poses, editable lower and upper joint limits and rod-length tolerance (changes re-evaluate both poses; a focused field keeps its text during animation and is restored after a rejected edit), the active condition limit and the mandatory 1e-10 cutoff, whole-platform failures, and a per-leg table of lower/upper socket deflection against limits, maximum deflection, rod deviation against tolerance, servo angle and requested-pose failures.
 
 ### Transfer
 
