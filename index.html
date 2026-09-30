@@ -15,7 +15,7 @@
         <section>
             <div class="section-title">
                 <h1>Requirements</h1>
-                <button type="button" class="info-button" data-info="Paste or edit your project\'s requirements JSON. The optimizer reads this structured document to derive payload, workspace, and constraint targets.">ⓘ</button>
+                <button type="button" class="info-button" data-info="Paste or edit your project\'s requirements JSON. The optimizer reads this structured document to derive payload, workspace, and constraint targets." aria-label="More information"></button>
             </div>
             <p>Use the sample below or open the requirements reference for accepted fields and validation rules. The optimizer will generate candidate layouts automatically.</p>
             <details class="requirements-guide">
@@ -59,7 +59,7 @@
             <label class="field">
                 <div class="field-header">
                     <span>Requirements JSON</span>
-                    <button type="button" class="info-button" data-info="This JSON document defines the payload, workspace ranges, and actuator limits the optimizer must respect. Adjust it to match your real-world requirements.">ⓘ</button>
+                    <button type="button" class="info-button" data-info="This JSON document defines the payload, workspace ranges, and actuator limits the optimizer must respect. Adjust it to match your real-world requirements." aria-label="More information"></button>
                 </div>
                 <textarea id="requirementsInput" spellcheck="false" aria-label="Requirements JSON"></textarea>
             </label>
@@ -76,7 +76,7 @@
         <section>
             <div class="section-title">
                 <h2>Optimization Parameters</h2>
-                <button type="button" class="info-button" data-info="These settings control the genetic algorithm that searches for good layouts. More generations and a larger population improve search depth but take longer to compute.">ⓘ</button>
+                <button type="button" class="info-button" data-info="These settings control the genetic algorithm that searches for good layouts. More generations and a larger population improve search depth but take longer to compute." aria-label="More information"></button>
             </div>
             <div class="grid">
                 <label class="field">
@@ -99,29 +99,29 @@
                 <label class="field">
                     <div class="field-header">
                         <span>Generations</span>
-                        <button type="button" class="info-button" data-info="Number of evolutionary iterations used to refine the population of layouts.">ⓘ</button>
+                        <button type="button" class="info-button" data-info="Number of evolutionary iterations used to refine the population of layouts." aria-label="More information"></button>
                     </div>
                     <input type="number" id="optGenerations" value="5" min="1">
                 </label>
                 <label class="field">
                     <div class="field-header">
                         <span>Population Size</span>
-                        <button type="button" class="info-button" data-info="How many candidate layouts are evaluated in each generation of the optimizer.">ⓘ</button>
+                        <button type="button" class="info-button" data-info="How many candidate layouts are evaluated in each generation of the optimizer." aria-label="More information"></button>
                     </div>
                     <input type="number" id="optPopulation" value="12" min="4">
                 </label>
                 <label class="field">
-                    <div class="field-header"><span>Objective set</span><button type="button" class="info-button" data-info="Compact balances feasible coverage, conditioning quality, cycle torque, and speed. Full adds five diagnostic proxy objectives.">ⓘ</button></div>
+                    <div class="field-header"><span>Objective set</span><button type="button" class="info-button" data-info="Compact balances feasible coverage, conditioning quality, cycle torque, and speed. Full adds five diagnostic proxy objectives." aria-label="More information"></button></div>
                     <select id="optObjectiveSet"><option value="compact" selected>Compact (4 objectives)</option><option value="full">Full (9 objectives)</option></select>
                 </label>
                 <label class="field">
-                    <div class="field-header"><span>Mutation rate</span><button type="button" class="info-button" data-info="Probability from 0 to 1 that each offspring receives a mutation. Zero disables mutation.">ⓘ</button></div>
+                    <div class="field-header"><span>Mutation rate</span><button type="button" class="info-button" data-info="Probability from 0 to 1 that each offspring receives a mutation. Zero disables mutation." aria-label="More information"></button></div>
                     <input type="number" id="optMutationRate" value="0.35" min="0" max="1" step="any">
                 </label>
             </div>
             <div class="grid">
                 <label class="field">
-                    <div class="field-header"><span>Workspace sampling</span><button type="button" class="info-button" data-info="Halton samples cover the six-dimensional bounds at a fixed count. Cartesian grid uses each axis step below. Coverage is measured at sampled poses only.">ⓘ</button></div>
+                    <div class="field-header"><span>Workspace sampling</span><button type="button" class="info-button" data-info="Halton samples cover the six-dimensional bounds at a fixed count. Cartesian grid uses each axis step below. Coverage is measured at sampled poses only." aria-label="More information"></button></div>
                     <select id="optSampling">
                         <option value="1024" selected>Halton: 1,024 poses (default)</option>
                         <option value="256">Halton: 256 poses</option>
@@ -130,40 +130,40 @@
                     </select>
                 </label>
                 <label class="field">
-                    <div class="field-header"><span>Run seed</span><button type="button" class="info-button" data-info="The seed controls Halton sequence start, candidate evolution, and retained example poses. Reuse it to replay the same settings.">ⓘ</button></div>
+                    <div class="field-header"><span>Run seed</span><button type="button" class="info-button" data-info="The seed controls Halton sequence start, candidate evolution, and retained example poses. Reuse it to replay the same settings." aria-label="More information"></button></div>
                     <input type="number" id="optSeed" value="1" min="1" max="4294967295" step="1">
                     <button type="button" id="randomizeSeed">Randomize</button>
                 </label>
             </div>
             <div class="section-title">
                 <h2>Workspace Sweep Ranges</h2>
-                <button type="button" class="info-button" data-info="These bounds define the sampled position and orientation region. Steps apply to Cartesian grid only.">ⓘ</button>
+                <button type="button" class="info-button" data-info="These bounds define the sampled position and orientation region. Steps apply to Cartesian grid only." aria-label="More information"></button>
             </div>
             <p>These bounds are prefilled from the requirements. Steps apply only to Cartesian grid. Coverage measures sampled poses, not the continuous region.</p>
             <div class="range-rows">
                 <div class="axis-row">
-                    <label class="field"><div class="field-header"><span>X Max</span><button type="button" class="info-button" data-info="Upper bound of the platform translation along X (millimetres).">ⓘ</button></div><input type="number" id="optXMax"></label>
-                    <label class="field"><div class="field-header"><span>X Min</span><button type="button" class="info-button" data-info="Lower bound of the platform translation along X (millimetres).">ⓘ</button></div><input type="number" id="optXMin"></label>
-                    <label class="field"><div class="field-header"><span>X Step</span><button type="button" class="info-button" data-info="Spacing between X samples in the translation sweep (millimetres).">ⓘ</button></div><input type="number" id="optXStep"></label>
-                    <label class="field"><div class="field-header"><span>Rx Min</span><button type="button" class="info-button" data-info="Lower bound of roll rotation about the X axis (degrees).">ⓘ</button></div><input type="number" id="optRxMin"></label>
-                    <label class="field"><div class="field-header"><span>Rx Max</span><button type="button" class="info-button" data-info="Upper bound of roll rotation about the X axis (degrees).">ⓘ</button></div><input type="number" id="optRxMax"></label>
-                    <label class="field"><div class="field-header"><span>Rx Step</span><button type="button" class="info-button" data-info="Spacing between roll samples in the rotation sweep (degrees).">ⓘ</button></div><input type="number" id="optRxStep"></label>
+                    <label class="field"><div class="field-header"><span>X Max</span><button type="button" class="info-button" data-info="Upper bound of the platform translation along X (millimetres)." aria-label="More information"></button></div><input type="number" id="optXMax"></label>
+                    <label class="field"><div class="field-header"><span>X Min</span><button type="button" class="info-button" data-info="Lower bound of the platform translation along X (millimetres)." aria-label="More information"></button></div><input type="number" id="optXMin"></label>
+                    <label class="field"><div class="field-header"><span>X Step</span><button type="button" class="info-button" data-info="Spacing between X samples in the translation sweep (millimetres)." aria-label="More information"></button></div><input type="number" id="optXStep"></label>
+                    <label class="field"><div class="field-header"><span>Rx Min</span><button type="button" class="info-button" data-info="Lower bound of roll rotation about the X axis (degrees)." aria-label="More information"></button></div><input type="number" id="optRxMin"></label>
+                    <label class="field"><div class="field-header"><span>Rx Max</span><button type="button" class="info-button" data-info="Upper bound of roll rotation about the X axis (degrees)." aria-label="More information"></button></div><input type="number" id="optRxMax"></label>
+                    <label class="field"><div class="field-header"><span>Rx Step</span><button type="button" class="info-button" data-info="Spacing between roll samples in the rotation sweep (degrees)." aria-label="More information"></button></div><input type="number" id="optRxStep"></label>
                 </div>
                 <div class="axis-row">
-                    <label class="field"><div class="field-header"><span>Y Max</span><button type="button" class="info-button" data-info="Upper bound of the platform translation along Y (millimetres).">ⓘ</button></div><input type="number" id="optYMax"></label>
-                    <label class="field"><div class="field-header"><span>Y Min</span><button type="button" class="info-button" data-info="Lower bound of the platform translation along Y (millimetres).">ⓘ</button></div><input type="number" id="optYMin"></label>
-                    <label class="field"><div class="field-header"><span>Y Step</span><button type="button" class="info-button" data-info="Spacing between Y samples in the translation sweep (millimetres).">ⓘ</button></div><input type="number" id="optYStep"></label>
-                    <label class="field"><div class="field-header"><span>Ry Min</span><button type="button" class="info-button" data-info="Lower bound of pitch rotation about the Y axis (degrees).">ⓘ</button></div><input type="number" id="optRyMin"></label>
-                    <label class="field"><div class="field-header"><span>Ry Max</span><button type="button" class="info-button" data-info="Upper bound of pitch rotation about the Y axis (degrees).">ⓘ</button></div><input type="number" id="optRyMax"></label>
-                    <label class="field"><div class="field-header"><span>Ry Step</span><button type="button" class="info-button" data-info="Spacing between pitch samples in the rotation sweep (degrees).">ⓘ</button></div><input type="number" id="optRyStep"></label>
+                    <label class="field"><div class="field-header"><span>Y Max</span><button type="button" class="info-button" data-info="Upper bound of the platform translation along Y (millimetres)." aria-label="More information"></button></div><input type="number" id="optYMax"></label>
+                    <label class="field"><div class="field-header"><span>Y Min</span><button type="button" class="info-button" data-info="Lower bound of the platform translation along Y (millimetres)." aria-label="More information"></button></div><input type="number" id="optYMin"></label>
+                    <label class="field"><div class="field-header"><span>Y Step</span><button type="button" class="info-button" data-info="Spacing between Y samples in the translation sweep (millimetres)." aria-label="More information"></button></div><input type="number" id="optYStep"></label>
+                    <label class="field"><div class="field-header"><span>Ry Min</span><button type="button" class="info-button" data-info="Lower bound of pitch rotation about the Y axis (degrees)." aria-label="More information"></button></div><input type="number" id="optRyMin"></label>
+                    <label class="field"><div class="field-header"><span>Ry Max</span><button type="button" class="info-button" data-info="Upper bound of pitch rotation about the Y axis (degrees)." aria-label="More information"></button></div><input type="number" id="optRyMax"></label>
+                    <label class="field"><div class="field-header"><span>Ry Step</span><button type="button" class="info-button" data-info="Spacing between pitch samples in the rotation sweep (degrees)." aria-label="More information"></button></div><input type="number" id="optRyStep"></label>
                 </div>
                 <div class="axis-row">
-                    <label class="field"><div class="field-header"><span>Z Max</span><button type="button" class="info-button" data-info="Upper bound of the platform translation along Z (millimetres).">ⓘ</button></div><input type="number" id="optZMax"></label>
-                    <label class="field"><div class="field-header"><span>Z Min</span><button type="button" class="info-button" data-info="Lower bound of the platform translation along Z (millimetres).">ⓘ</button></div><input type="number" id="optZMin"></label>
-                    <label class="field"><div class="field-header"><span>Z Step</span><button type="button" class="info-button" data-info="Spacing between Z samples in the translation sweep (millimetres).">ⓘ</button></div><input type="number" id="optZStep"></label>
-                    <label class="field"><div class="field-header"><span>Rz Min</span><button type="button" class="info-button" data-info="Lower bound of yaw rotation about the Z axis (degrees).">ⓘ</button></div><input type="number" id="optRzMin"></label>
-                    <label class="field"><div class="field-header"><span>Rz Max</span><button type="button" class="info-button" data-info="Upper bound of yaw rotation about the Z axis (degrees).">ⓘ</button></div><input type="number" id="optRzMax"></label>
-                    <label class="field"><div class="field-header"><span>Rz Step</span><button type="button" class="info-button" data-info="Spacing between yaw samples in the rotation sweep (degrees).">ⓘ</button></div><input type="number" id="optRzStep"></label>
+                    <label class="field"><div class="field-header"><span>Z Max</span><button type="button" class="info-button" data-info="Upper bound of the platform translation along Z (millimetres)." aria-label="More information"></button></div><input type="number" id="optZMax"></label>
+                    <label class="field"><div class="field-header"><span>Z Min</span><button type="button" class="info-button" data-info="Lower bound of the platform translation along Z (millimetres)." aria-label="More information"></button></div><input type="number" id="optZMin"></label>
+                    <label class="field"><div class="field-header"><span>Z Step</span><button type="button" class="info-button" data-info="Spacing between Z samples in the translation sweep (millimetres)." aria-label="More information"></button></div><input type="number" id="optZStep"></label>
+                    <label class="field"><div class="field-header"><span>Rz Min</span><button type="button" class="info-button" data-info="Lower bound of yaw rotation about the Z axis (degrees)." aria-label="More information"></button></div><input type="number" id="optRzMin"></label>
+                    <label class="field"><div class="field-header"><span>Rz Max</span><button type="button" class="info-button" data-info="Upper bound of yaw rotation about the Z axis (degrees)." aria-label="More information"></button></div><input type="number" id="optRzMax"></label>
+                    <label class="field"><div class="field-header"><span>Rz Step</span><button type="button" class="info-button" data-info="Spacing between yaw samples in the rotation sweep (degrees)." aria-label="More information"></button></div><input type="number" id="optRzStep"></label>
                 </div>
             </div>
             <h2>Safety</h2>
@@ -171,7 +171,7 @@
                 <label class="field">
                     <div class="field-header">
                         <span>Ball Joint Limit (deg)</span>
-                        <button type="button" class="info-button" data-info="Maximum allowed angle at each ball joint before a pose counts as violating the limit.">ⓘ</button>
+                        <button type="button" class="info-button" data-info="Maximum allowed angle at each ball joint before a pose counts as violating the limit." aria-label="More information"></button>
                     </div>
                     <input type="number" id="ballJointLimit" value="52" min="0" max="180">
                 </label>
@@ -179,7 +179,7 @@
                     <input type="checkbox" id="ballJointClamp">
                     <div class="field-header">
                         <span>Explore beyond ball-joint limits (soft constraints)</span>
-                        <button type="button" class="info-button" data-info="Explore joint-limit violations using a separate relaxed score. Feasible coverage always excludes violations; no geometry is clamped.">ⓘ</button>
+                        <button type="button" class="info-button" data-info="Explore joint-limit violations using a separate relaxed score. Feasible coverage always excludes violations; no geometry is clamped." aria-label="More information"></button>
                     </div>
                 </label>
             </div>
