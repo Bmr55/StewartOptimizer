@@ -221,8 +221,10 @@ export async function computeWorkspace(layout, ranges = {}, options = {}) {
     sampleLimit = 200,
     violationSampleLimit = sampleLimit,
     onProgress,
+    signal,
   } = options;
 
+  signal?.throwIfAborted();
   const totalPoses = estimateWorkspaceSize(ranges);
   const xs = buildRange(ranges.x, 0);
   const ys = buildRange(ranges.y, 0);
@@ -267,6 +269,7 @@ export async function computeWorkspace(layout, ranges = {}, options = {}) {
   let completed = 0;
   onProgress?.({ completed, total: totalPoses });
   await yieldToEventLoop();
+  signal?.throwIfAborted();
   for (const x of xs) {
     for (const y of ys) {
       for (const z of zs) {
@@ -351,6 +354,7 @@ export async function computeWorkspace(layout, ranges = {}, options = {}) {
               if (completed % 256 === 0) {
                 onProgress?.({ completed, total: totalPoses });
                 await yieldToEventLoop();
+                signal?.throwIfAborted();
               }
             }
           }
