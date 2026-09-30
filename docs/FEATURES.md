@@ -365,7 +365,7 @@ The panel edits an independent copy of the loaded layout; the optimizer's candid
 
 ### Pose diagnostics
 
-The diagnostics panel shows the requested and rendered accepted poses, editable lower and upper joint limits and rod-length tolerance (changes re-evaluate both poses; a focused field keeps its text during animation and is restored after a rejected edit), the active condition limit and the mandatory 1e-10 cutoff, whole-platform failures, and a per-leg table of lower/upper socket deflection against limits, maximum deflection, rod deviation against tolerance, servo angle and requested-pose failures.
+The diagnostics panel shows the requested and rendered accepted poses, editable lower and upper joint limits and rod-length tolerance (changes re-evaluate both poses; a focused field keeps text the user has typed during animation, follows loads and settings changes when untouched, and is restored after a rejected edit), the active condition limit and the mandatory 1e-10 cutoff, whole-platform failures, and a per-leg table of lower/upper socket deflection against limits, maximum deflection, rod deviation against tolerance, servo angle and requested-pose failures.
 
 ### Transfer
 

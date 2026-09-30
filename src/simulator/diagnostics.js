@@ -1,6 +1,7 @@
 import { radToDeg } from '../math.js';
 import { DEFAULT_BALL_JOINT_LIMIT_DEG } from '../contracts.js';
 import { NUMERICAL_RECIPROCAL_CUTOFF } from '../model/conditioning.js';
+import { syncInput } from './geometry-controls.js';
 
 const numeric = value => Number.isFinite(value) ? value : null;
 const rounded = (value, digits = 3) => value == null ? '—' : Number(value.toFixed(digits)).toString();
@@ -78,16 +79,14 @@ export function mountSimulatorDiagnostics({ document, controller, host = documen
     </tr></thead><tbody id="simDiagnosticRows"></tbody></table></div>`;
   const field = id => document.getElementById(id);
   const error = field('simDiagnosticError');
+  const synced = new WeakMap();
 
-  // Redraws arrive on every animation frame, so a focused limit field keeps the
-  // user's text unless a rejected edit forces the stored value back.
+  // Redraws arrive on every animation frame, so a limit field the user is typing
+  // into keeps its text unless a rejected edit forces the stored value back; a
+  // focused but untouched field still follows a load or settings change.
   function redraw(state, force = false) {
     const diagnostics = buildPoseDiagnostics(state);
-    const active = document.activeElement;
-    const setValue = (id, value) => {
-      const input = field(id);
-      if (force || input !== active) input.value = String(value);
-    };
+    const setValue = (id, value) => syncInput(document, field(id), String(value), synced, force);
     const requested = field('simRequestedDiagnostic');
     requested.textContent = `Requested pose (${diagnostics.source ?? 'manual'}): ${poseText(diagnostics.requested)} — ${diagnostics.requestedStatus}.`;
     requested.classList.toggle('error', diagnostics.requestedStatus === 'rejected');
