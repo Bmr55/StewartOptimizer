@@ -64,15 +64,11 @@ export function displayText(value) {
   return Number.isFinite(value) ? String(Number(value.toPrecision(12))) : String(value);
 }
 
-function sameNumber(a, b) {
-  const parse = text => text.trim() === '' ? NaN : Number(text);
-  const x = parse(a), y = parse(b);
-  return Number.isFinite(x) && Number.isFinite(y)
-    && Math.abs(x - y) <= 1e-9 * Math.max(1, Math.abs(x), Math.abs(y));
-}
-
+// Only the exact text counts as untouched. Comparing numbers instead would
+// rewrite in-progress typing that happens to parse to the shown value
+// (50.0 on the way to 50.05) on the next animation frame.
 export function syncInput(document, input, shown, synced, force = false) {
-  const untouched = input.value === synced.get(input) || input.value === shown || sameNumber(input.value, shown);
+  const untouched = input.value === synced.get(input) || input.value === shown;
   if (!force && input === document.activeElement && !untouched) return false;
   input.value = shown;
   synced.set(input, shown);
