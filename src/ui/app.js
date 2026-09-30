@@ -4,6 +4,8 @@ import { parseRequirements } from '../model/requirements.js';
 import { loadDefaultRequirements as loadSample } from '../io/sample-requirements.js';
 import { Optimizer as DefaultOptimizer } from '../optimization/optimizer.js';
 import { WorkerOptimizer } from './worker-optimizer.js';
+import { progressSnapshot } from './worker-protocol.js';
+import { createRunDashboard } from './run-dashboard.js';
 import { createControls } from './controls.js';
 import { installTooltips } from './tooltips.js';
 import { createResultsView } from './results-view.js';
@@ -11,7 +13,8 @@ import { buildConstructionSkeleton, canExportCad, skeletonToCSV, skeletonToFusio
 import { createServoRatingControls } from './servo-ratings-controls.js';
 
 export function createApp({ document, window, Optimizer = DefaultOptimizer, workerFactory,
-    loadDefaultRequirements = loadSample, downloadFile = download }) {
+    loadDefaultRequirements = loadSample, downloadFile = download,
+    now = () => performance.now() }) {
     const requirementsInput = document.getElementById('requirementsInput');
     const referenceLayoutInput = document.getElementById('referenceLayoutInput');
     const statusEl = document.getElementById('optStatus');
@@ -22,6 +25,7 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
     let lastOutcome = null;
     let runSerial = 0;
     let runReferenceNote = '';
+    const dashboard = createRunDashboard(document, { now });
     const fallbackButton = document.getElementById('runMainThreadFallback');
     function offerFallback(available) {
         fallbackButton.hidden = !available;
@@ -68,6 +72,7 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
         lastOutcome = null;
         offerFallback(false);
         resultsView.clear();
+        dashboard.reset();
         setRunning(false);
         showStatus('Requirements cleared.');
     });
@@ -113,16 +118,28 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
 
     document.getElementById('cancelOptimization').addEventListener('click', () => {
         currentOptimizer?.stop();
+        dashboard.cancelRequested(runSerial);
         showStatus('Cancelling optimization...');
     });
 
-    function presentOutcome(outcome) {
+    function finalSnapshot() {
+        if (currentOptimizer?.lastProgress) return currentOptimizer.lastProgress;
+        if (!Number.isInteger(currentOptimizer?.completedEvaluations)) return null;
+        return progressSnapshot(currentOptimizer, {
+            completed: currentOptimizer.completedPoseWork ?? 0,
+            generation: currentOptimizer.generation,
+        }, dashboard.elapsedMs());
+    }
+
+    function presentOutcome(outcome, thisRun) {
         const pareto = currentOptimizer.pareto?.length ? currentOptimizer.pareto : currentOptimizer.fitness;
         const best = currentOptimizer.getSelectedCandidate?.()
             ?? selectBest(currentOptimizer.pareto, currentOptimizer.fitness);
         lastOutcome = { ...outcome, effective_settings: currentOptimizer.effectiveSettings?.() };
         resultsView.render(currentOptimizer.fitness, best?.layout.id);
         resultOutput.value = best ? JSON.stringify({ run: lastOutcome, result: displayResult(best) }, null, 2) : '';
+        dashboard.finish(thisRun, { status: outcome.status, partialResults: outcome.partialResults,
+            snapshot: finalSnapshot() });
         if (outcome.status === 'cancelled') {
             showStatus(best ? 'Optimization cancelled. Showing partial results from the last completed population.' : 'Optimization cancelled before a population completed.');
         } else if (outcome.status === 'failed') {
@@ -134,22 +151,32 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
 
     function reportProgress(thisRun, progress) {
         if (thisRun !== runSerial) return;
-        const completed = progress.completed ?? progress.actualCompletedPoseWork ?? 0;
-        const total = progress.total ?? progress.budgetedPoseWork ?? 0;
-        showStatus(`Generation ${progress.generation}: ${completed.toLocaleString()} / ${total.toLocaleString()} pose evaluations (${total ? (100 * completed / total).toFixed(1) : '0.0'}%).`);
+        const snapshot = Number.isFinite(progress.elapsedMs) && Number.isInteger(progress.completedCandidates)
+            ? progress : progressSnapshot(currentOptimizer, progress, dashboard.elapsedMs());
+        if (!dashboard.publish(thisRun, snapshot)) return;
+        const completed = snapshot.actualCompletedPoseWork;
+        const total = snapshot.budgetedPoseWork;
+        showStatus(`Generation ${snapshot.generation}: ${completed.toLocaleString()} / ${total.toLocaleString()} pose evaluations (${total ? (100 * completed / total).toFixed(1) : '0.0'}%).`);
     }
 
     fallbackButton.addEventListener('click', async () => {
         if (!(currentOptimizer instanceof WorkerOptimizer) || !currentOptimizer.startupFailure || currentOptimizer.running) return;
         const thisRun = ++runSerial;
         offerFallback(false);
+        currentOptimizer.onProgress = progress => reportProgress(thisRun, progress);
+        const work = currentOptimizer.estimateWork();
+        dashboard.start(thisRun, { candidates: work.evaluations,
+            generations: currentOptimizer.generations, poseWork: work.totalPoses });
         showStatus('Running explicit main-thread fallback. The page yields between pose batches.');
         setRunning(true);
         try {
             const outcome = await currentOptimizer.startFallback();
-            if (thisRun === runSerial) presentOutcome(outcome);
+            if (thisRun === runSerial) presentOutcome(outcome, thisRun);
         } catch (error) {
-            if (thisRun === runSerial) showStatus(error.message, true);
+            if (thisRun === runSerial) {
+                dashboard.finish(thisRun, { status: 'failed', snapshot: finalSnapshot() });
+                showStatus(error.message, true);
+            }
         } finally {
             if (thisRun === runSerial) setRunning(false);
         }
@@ -203,6 +230,8 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
             lastOutcome = null;
             resultsView.clear();
             const work = currentOptimizer.estimateWork();
+            dashboard.start(thisRun, { candidates: work.evaluations,
+                generations, poseWork: work.totalPoses });
             const reference = currentOptimizer.referenceDiagnostics;
             const migrationNote = currentOptimizer.referenceLayout?.migration?.note;
             const referenceNote = reference
@@ -214,9 +243,11 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
             const outcome = await currentOptimizer.start();
             if (thisRun !== runSerial) return;
 
-            presentOutcome(outcome);
+            presentOutcome(outcome, thisRun);
         } catch (error) {
             if (thisRun !== runSerial) return;
+            dashboard.finish(thisRun, { status: 'failed',
+                partialResults: currentOptimizer?.fitness?.length > 0, snapshot: finalSnapshot() });
             if (error.startupFailure) {
                 showStatus(`Worker startup failed: ${error.message} Select “Run on main thread” to continue.`, true);
                 offerFallback(true);

@@ -75,10 +75,11 @@ export class WorkerOptimizer extends Optimizer {
         cleanup();
         reject(new WorkerStartupError(error?.message || String(error)));
       };
-      const failRuntime = (message, snapshot) => {
+      const failRuntime = (message, snapshot, summary) => {
         if (settled) return;
         settled = true;
         this.applyCheckpoint(snapshot);
+        if (summary) this.lastProgress = summary;
         this.runStatus = 'failed';
         const outcome = { status: 'failed', completedGenerations: this.generation,
           completedEvaluations: this.completedEvaluations, partialResults: this.fitness.length > 0,
@@ -111,6 +112,7 @@ export class WorkerOptimizer extends Optimizer {
             case 'result': {
               if (!started) break;
               this.applyCheckpoint(message.snapshot);
+              if (message.summary) this.lastProgress = message.summary;
               settled = true;
               this.runStatus = message.outcome.status;
               const outcome = message.outcome;
@@ -121,7 +123,7 @@ export class WorkerOptimizer extends Optimizer {
             }
             case 'error':
               if (!started || message.phase === 'startup') failStartup(new Error(message.message));
-              else failRuntime(message.message, message.snapshot);
+              else failRuntime(message.message, message.snapshot, message.summary);
               break;
           }
         };

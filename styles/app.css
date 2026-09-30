@@ -232,6 +232,37 @@ button.primary:hover {
     color: var(--danger);
 }
 
+.run-dashboard {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 8px;
+    margin: 12px 0;
+}
+
+.run-dashboard > div {
+    display: grid;
+    gap: 6px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: #151515;
+}
+
+.run-dashboard span {
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.run-dashboard strong {
+    font-size: 13px;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.run-dashboard .run-dashboard-wide {
+    grid-column: 1 / -1;
+}
+
 #resultOutput {
     min-height: 180px;
 }

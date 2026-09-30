@@ -22,6 +22,17 @@ try {
   await page.locator('#servoRatingPolicy').selectOption('advisory');
   await page.locator('#runOptimization').click();
   await page.waitForFunction(() => document.querySelector('#optStatus').textContent.includes('Optimization complete'), null, { timeout: 30000 });
+  assert.equal(await page.locator('#runPhase').textContent(), 'completed');
+  assert.equal(await page.locator('#runCandidates').textContent(), '8 / 8');
+  assert.equal(await page.locator('#runGeneration').textContent(), '1 / 1');
+  assert.match(await page.locator('#runElapsed').textContent(), /\d+\.\d s/);
+  assert.match(await page.locator('#runFrontSize').textContent(), /^\d+$/);
+  assert.match(await page.locator('#runBestCandidate').textContent(), /#\d+ ·/);
+  assert.equal(await page.locator('#runEta').textContent(), 'Complete');
+  const workText = await page.locator('#runPoseWork').textContent();
+  const workCounts = workText.match(/^([\d,]+) actual \/ ([\d,]+) budgeted$/);
+  assert.ok(workCounts);
+  assert.ok(Number(workCounts[1].replaceAll(',', '')) <= Number(workCounts[2].replaceAll(',', '')));
 
   const candidateSelect = page.locator('#candidateSelect');
   const options = await candidateSelect.locator('option').evaluateAll(nodes => nodes.map(node => node.value));
@@ -63,6 +74,7 @@ try {
   assert.equal(await page.locator('#cancelOptimization').isEnabled(), true);
   await page.locator('#cancelOptimization').click();
   await page.waitForFunction(() => document.querySelector('#optStatus').textContent.includes('cancelled'), null, { timeout: 30000 });
+  assert.match(await page.locator('#runPhase').textContent(), /^cancelled/);
   await page.locator('#optSampling').selectOption('256');
   await page.locator('#runOptimization').click();
   await page.waitForFunction(() => document.querySelector('#optStatus').textContent.includes('Optimization complete'), null, { timeout: 30000 });
@@ -77,11 +89,71 @@ try {
   await fallbackPage.locator('#optSampling').selectOption('256');
   await fallbackPage.locator('#runOptimization').click();
   await fallbackPage.waitForFunction(() => document.querySelector('#optStatus').textContent.includes('Worker startup failed'));
+  assert.equal(await fallbackPage.locator('#runPhase').textContent(), 'failed');
   assert.equal(await fallbackPage.locator('#runMainThreadFallback').isVisible(), true);
   assert.equal(await fallbackPage.locator('#runMainThreadFallback').isEnabled(), true);
   await fallbackPage.locator('#runMainThreadFallback').click();
   await fallbackPage.waitForFunction(() => document.querySelector('#optStatus').textContent.includes('Optimization complete'), null, { timeout: 30000 });
-  console.log('Browser worker completion, cancellation/restart, startup fallback, objectives, mutation, ratings, reference import, selection and export passed.');
+  assert.equal(await fallbackPage.locator('#runPhase').textContent(), 'completed');
+  assert.equal(await fallbackPage.locator('#runCandidates').textContent(), '8 / 8');
+
+  const errorPage = await browser.newPage();
+  await errorPage.route('**/src/ui/optimizer-worker.js', route => route.fulfill({
+    contentType: 'text/javascript', body: `
+      import { createWorkerRuntime } from './worker-runtime.js';
+      import { Optimizer } from '../optimization/optimizer.js';
+      class FaultyOptimizer extends Optimizer {
+        emitCheckpoint() { super.emitCheckpoint(); throw new Error('forced runtime failure'); }
+      }
+      const runtime = createWorkerRuntime({ postMessage: message => self.postMessage(message), OptimizerClass: FaultyOptimizer });
+      self.addEventListener('message', event => { void runtime.handleMessage(event.data); });
+    `,
+  }));
+  await errorPage.goto(`http://127.0.0.1:${server.address().port}/`);
+  await errorPage.waitForFunction(() => document.querySelector('#requirementsInput').value.includes('mass_kg'));
+  await errorPage.locator('#optPopulation').fill('4');
+  await errorPage.locator('#optGenerations').fill('1');
+  await errorPage.locator('#optSampling').selectOption('256');
+  await errorPage.locator('#runOptimization').click();
+  await errorPage.waitForFunction(() => document.querySelector('#optStatus').textContent.includes('forced runtime failure'), null, { timeout: 30000 });
+  assert.equal(await errorPage.locator('#runPhase').textContent(), 'failed · partial results');
+  assert.equal(await errorPage.locator('#runCandidates').textContent(), '4 / 8');
+  assert.match(await errorPage.locator('#runBestCandidate').textContent(), /#\d+ ·/);
+  assert.equal(await errorPage.locator('#exportBestLayout').isEnabled(), true);
+
+  const stalePage = await browser.newPage();
+  await stalePage.route('**/src/ui/optimizer-worker.js', route => route.fulfill({
+    contentType: 'text/javascript', body: `
+      self.addEventListener('message', event => {
+        if (event.data.type !== 'start') return;
+        const runId = event.data.runId;
+        self.postMessage({ type: 'started', runId });
+        self.postMessage({ type: 'progress', runId: 'obsolete', snapshot: {
+          elapsedMs: 100, completedCandidates: 999, totalCandidates: 8, generation: 99,
+          frontSize: 99, bestCandidate: null, actualCompletedPoseWork: 999,
+          budgetedPoseWork: 100, etaMs: 0, etaApproximate: true,
+        } });
+        setTimeout(() => self.postMessage({ type: 'result', runId,
+          outcome: { status: 'cancelled', partialResults: false },
+          snapshot: { fitness: [], generation: 0 },
+          summary: { elapsedMs: 250, completedCandidates: 0, totalCandidates: 8,
+            generation: 0, frontSize: 0, bestCandidate: null,
+            actualCompletedPoseWork: 0, budgetedPoseWork: 100,
+            etaMs: null, etaApproximate: false },
+        }), 250);
+      });
+    `,
+  }));
+  await stalePage.goto(`http://127.0.0.1:${server.address().port}/`);
+  await stalePage.waitForFunction(() => document.querySelector('#requirementsInput').value.includes('mass_kg'));
+  await stalePage.locator('#optPopulation').fill('4');
+  await stalePage.locator('#optGenerations').fill('1');
+  await stalePage.locator('#optSampling').selectOption('256');
+  await stalePage.locator('#runOptimization').click();
+  await stalePage.waitForTimeout(100);
+  assert.equal(await stalePage.locator('#runCandidates').textContent(), '0 / 8');
+  await stalePage.waitForFunction(() => document.querySelector('#runPhase').textContent === 'cancelled');
+  console.log('Browser dashboard completion, cancellation, runtime error/partial, stale messages, startup fallback, objectives, mutation, ratings, import, selection and export passed.');
 } finally {
   await browser?.close();
   await new Promise(resolve => server.close(resolve));
