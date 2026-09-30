@@ -3,6 +3,8 @@
 // snake-case metadata names for compatibility.
 export const SCHEMA_VERSION = 2;
 export const MODEL_VERSION = 2;
+// Cycle dynamics identity, separate from the layout/joint MODEL_VERSION.
+export const CYCLE_MODEL_VERSION = 'cycle-newton-euler-v1';
 
 export const TOPOLOGIES = Object.freeze(['circular', 'c3_paired', 'rectangular_paired', 'free']);
 export const DEFAULT_TOPOLOGY = 'c3_paired';

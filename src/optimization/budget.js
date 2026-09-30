@@ -1,8 +1,11 @@
 import { estimateWorkspaceSize } from '../workspace/sweep.js';
+import { isStationary, legacyTrajectory } from '../model/trajectory.js';
+import { LEGACY_CYCLE_SAMPLES } from '../model/cycle.js';
 
-export function estimateWork({ ranges, sampling, stroke, frequency, populationSize, generations }) {
+export function estimateWork({ ranges, sampling, stroke, frequency, trajectory, populationSize, generations }) {
   const workspacePosesPerLayout = estimateWorkspaceSize(ranges, sampling);
-  const cyclePosesPerLayout = stroke > 0 && frequency > 0 ? 64 : 1;
+  const effectiveTrajectory = trajectory ?? legacyTrajectory({ stroke, frequency });
+  const cyclePosesPerLayout = isStationary(effectiveTrajectory) ? 1 : LEGACY_CYCLE_SAMPLES;
   const posesPerLayout = workspacePosesPerLayout + cyclePosesPerLayout + 1;
   const evaluations = populationSize * (generations + 1);
   const totalPoses = posesPerLayout * evaluations;

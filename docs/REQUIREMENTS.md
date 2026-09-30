@@ -4,10 +4,14 @@ Requirements may be flat or grouped into `payload`, `workspace`, `rotations`, an
 
 | Field | Domain / meaning | Default |
 | --- | --- | --- |
-| mass_kg | Finite number >= 0; centered payload mass, kg | Required |
-| cycle_mm | Finite number >= 0; peak-to-peak translation, mm | Required |
-| frequency_hz | Finite number >= 0; zero means stationary | Required |
-| cycle_axis | x, y or z, case-insensitive | Required |
+| mass_kg | Finite number >= 0; combined moving platform and payload mass, kg | Required |
+| cycle_mm | Finite number >= 0; peak-to-peak translation, mm | Required unless `trajectory` |
+| frequency_hz | Finite number >= 0; zero means stationary | Required unless `trajectory` |
+| cycle_axis | x, y or z, case-insensitive | Required unless `trajectory` |
+| trajectory | Optional payload field replacing the three cycle fields: `{ frequency_hz, components: [{ axis, amplitude_mm or amplitude_deg, phase_deg }] }` | Single-axis cycle |
+| center_of_mass_mm | Optional payload field; [x, y, z] platform-frame offset from the moving origin, mm | [0, 0, 0] |
+| inertia_kg_m2 | Optional payload field; admissible inertia tensor about the center of mass, kg m^2 | Zero |
+| external_force_n / external_moment_nm | Optional payload fields; base-frame external force at the center of mass (N) and moment (N m) | Zero |
 | x_range_mm, y_range_mm, z_range_mm | Finite min/max with max >= min; offsets from home, mm | Required |
 | rx_range_deg, ry_range_deg, rz_range_deg | Finite min/max with max >= min; roll/pitch/yaw, degrees | Required |
 | ball_joint_max_deg | Finite number in [0, 180] | 45 |
@@ -20,6 +24,8 @@ Requirements may be flat or grouped into `payload`, `workspace`, `rotations`, an
 | servo_speed_rating_deg_s | Optional finite positive shared peak angular speed rating in deg/s | Omitted |
 | per_servo_ratings | Optional six-entry array in servo order; each entry may set positive `torque_nm` and/or `speed_deg_s`, or be null | Omitted |
 | servo_rating_policy | `enforced` or `advisory`; supplied ratings constrain feasibility by default | `enforced` |
+
+Trajectory, mass-property and external-wrench conventions are defined in [CYCLE_MODEL.md](./CYCLE_MODEL.md). Supplying `trajectory` together with any legacy cycle field is rejected rather than silently choosing one.
 
 Ranges accept `[min, max]`, `{ "min": min, "max": max }`, or `{ "from": min, "to": max }`. Arrays must contain exactly two values. Equal bounds are allowed for a fixed length, stationary coordinate or locked servo. A zero payload removes the modeled external load; zero stroke or frequency evaluates a stationary cycle. Valid input need not describe a feasible design.
 
