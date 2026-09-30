@@ -75,6 +75,8 @@ test('length, height, servo bounds, and explicit anchors change only the request
   assert.deepEqual(servo.baseAnchors, beta.baseAnchors);
   assert.throws(() => editGeometry(beta, { type: 'parameter', field: 'base_radius', value: 120 }), /parametric/);
   assert.throws(() => editGeometry(beta, { type: 'servoRange', degrees: [10, -10] }), /servoRange/);
+  assert.deepEqual(editGeometry(beta, { type: 'servoRange', degrees: [15, 15] }).servoRangeRad,
+    [15, 15].map(value => value * Math.PI / 180), 'an equal-bounds locked servo range is a valid edit');
   assert.deepEqual(original, source);
 });
 

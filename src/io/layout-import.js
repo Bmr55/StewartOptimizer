@@ -37,10 +37,13 @@ function positive(value, field) {
   return value;
 }
 
+// Equal bounds lock the servo, which parseRequirements and evaluatePose both
+// accept, so a run with a locked range must export a layout that imports and
+// replays.
 function servoBounds(value, field) {
   if (!Array.isArray(value) || value.length !== 2 || !value.every(Number.isFinite)
-      || value[1] <= value[0]) {
-    throw new RangeError(`${field} must contain two finite bounds with max > min.`);
+      || value[1] < value[0]) {
+    throw new RangeError(`${field} must contain two finite bounds with max >= min.`);
   }
   return value.slice();
 }
