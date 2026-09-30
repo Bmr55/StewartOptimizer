@@ -12,6 +12,14 @@ try {
   await page.goto(`http://127.0.0.1:${server.address().port}/`);
   await page.locator('#requirementsInput').waitFor({ state: 'visible' });
   await page.waitForFunction(() => document.querySelector('#requirementsInput').value.includes('mass_kg'));
+  const infoButtons = page.locator('.info-button');
+  assert.equal(await infoButtons.count(), 30);
+  assert.equal(await infoButtons.first().getAttribute('aria-label'), 'More information');
+  assert.match(await infoButtons.first().evaluate(button => getComputedStyle(button, '::before').maskImage), /info\.svg/);
+  await infoButtons.first().click();
+  assert.match(await page.locator('.info-popup.visible').innerText(), /requirements JSON/i);
+  await infoButtons.first().click();
+  assert.equal(await page.locator('.info-popup.visible').count(), 0);
   const requirementsGuide = page.locator('.requirements-guide');
   assert.equal(await requirementsGuide.locator('table').isVisible(), false);
   await requirementsGuide.locator('summary').click();
