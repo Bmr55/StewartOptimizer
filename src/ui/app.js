@@ -416,7 +416,7 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
         return JSON.stringify({ ...layoutToJSON(state.layout), run: simulatorRun,
             simulator: { source: state.source, requested: state.requested, accepted: state.accepted,
                 options: state.options, animation: state.animation, markers: state.markers,
-                tracesEnabled: state.tracesEnabled, trace: state.trace,
+                tracesEnabled: state.tracesEnabled, overlays: state.overlays, trace: state.trace,
                 camera: simulatorView.getCamera(), pointerMode: document.getElementById('simPointerMode').value } }, null, 2);
     }
     document.getElementById('simUseReference').addEventListener('click', () => {
@@ -460,6 +460,7 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
         if (saved.pointerMode) document.getElementById('simPointerMode').value = saved.pointerMode;
         if (saved.markers !== null) simulatorController.setMarkers(saved.markers);
         if (saved.tracesEnabled !== null) simulatorController.setTraces(saved.tracesEnabled);
+        if (saved.overlays) simulatorController.setOverlays(saved.overlays);
         document.getElementById('simDownload').disabled = false;
         if (activate) setTab('simulate');
     }

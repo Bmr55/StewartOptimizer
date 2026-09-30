@@ -1,6 +1,7 @@
 import { clamp, degToRad, radToDeg } from '../math.js';
 import { HOME_POSE, POSE_AXES } from './controller.js';
 import { createWebGLRenderer } from './renderer.js';
+import { OVERLAY_NAMES } from './scene.js';
 import { markCommitted, syncInput } from './geometry-controls.js';
 
 const RADIAN_AXES = new Set(['rx', 'ry', 'rz']);
@@ -11,6 +12,8 @@ const modelValue = (axis, value) => RADIAN_AXES.has(axis) ? degToRad(value) : va
 const fmt = value => Number.isFinite(value) ? Number(value.toFixed(2)) : '—';
 export const CAMERA_DISTANCE_RANGE = Object.freeze([80, 2500]);
 export const CAMERA_PITCH_LIMIT = 1.4;
+// Each overlay toggle is a checkbox named after its builder: worldAxes -> simOverlayWorldAxes.
+export const overlayInputId = name => `simOverlay${name[0].toUpperCase()}${name.slice(1)}`;
 
 // Only the known camera fields are taken, each checked, so a saved camera from
 // hand-edited JSON cannot spread characters or store a non-finite view.
@@ -49,6 +52,7 @@ export function createSimulatorView({ document, window, controller, isActive = (
   const pointerMode = document.getElementById('simPointerMode');
   const markers = document.getElementById('simMarkers');
   const traces = document.getElementById('simTraces');
+  const overlayInputs = OVERLAY_NAMES.map(name => [name, document.getElementById(overlayInputId(name))]);
   const renderer = createRenderer(canvas, { window, onContextChange: () => show(controller.getState()) });
   const synced = new WeakMap();
   let camera = { yaw: 0.7, pitch: 0.38, distance: 600, target: [0, 0, 100] };
@@ -85,6 +89,7 @@ export function createSimulatorView({ document, window, controller, isActive = (
     // Snapshot loads and browser-save restores set these on the controller directly.
     markers.checked = state.markers;
     traces.checked = state.tracesEnabled;
+    for (const [name, input] of overlayInputs) input.checked = state.overlays[name];
     if (renderer.available) renderer.render(state, camera);
   }
 
@@ -137,6 +142,9 @@ export function createSimulatorView({ document, window, controller, isActive = (
   });
   markers.addEventListener('change', () => controller.setMarkers(markers.checked));
   traces.addEventListener('change', () => controller.setTraces(traces.checked));
+  for (const [name, input] of overlayInputs) {
+    input.addEventListener('change', () => controller.setOverlays({ [name]: input.checked }));
+  }
   document.getElementById('simClearTrace').addEventListener('click', () => controller.clearTrace());
   pattern.addEventListener('change', guarded(() => controller.setAnimation(pattern.value, false)));
   play.addEventListener('click', guarded(() => {

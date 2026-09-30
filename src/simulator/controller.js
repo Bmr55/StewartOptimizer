@@ -1,4 +1,5 @@
 import { evaluatePose, ensureLayout } from '../model/pose.js';
+import { OVERLAY_DEFAULTS, OVERLAY_NAMES, parseOverlays } from './scene.js';
 
 export const POSE_AXES = Object.freeze(['x', 'y', 'z', 'rx', 'ry', 'rz']);
 export const HOME_POSE = Object.freeze({ x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 });
@@ -54,12 +55,13 @@ export function createSimulatorController({ onChange } = {}) {
   let animation = { pattern: 'none', playing: false, seconds: 0, speed: 1, pauseReason: null };
   let markers = true;
   let tracesEnabled = false;
+  let overlays = { ...OVERLAY_DEFAULTS };
   let trace = [];
 
   function getState() {
     return copy({ layout, source, options, requested, accepted, assessment, acceptedAssessment,
       requestSource, rejected: Boolean(assessment && !assessment.reachable), animation,
-      markers, tracesEnabled, trace });
+      markers, tracesEnabled, overlays, trace });
   }
 
   function notify() {
@@ -163,6 +165,14 @@ export function createSimulatorController({ onChange } = {}) {
     getReferenceLayout() { return copy(layout); },
     setMarkers(enabled) { markers = Boolean(enabled); return notify(); },
     setTraces(enabled) { tracesEnabled = Boolean(enabled); return notify(); },
+    // Patches the overlay toggles; names missing from the patch keep their state.
+    setOverlays(patch) {
+      const known = parseOverlays(patch);
+      const unknown = Object.keys(patch).filter(name => !OVERLAY_NAMES.includes(name));
+      if (unknown.length) throw new RangeError(`Unknown overlay: ${unknown.join(', ')}.`);
+      overlays = { ...overlays, ...known };
+      return notify();
+    },
     clearTrace() { trace = []; return notify(); },
     dispose() { listeners.clear(); },
   };
