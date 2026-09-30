@@ -56,6 +56,12 @@ The physical rotary mapping is `G = D^-1 A`, with `A_i = [u_i^T, (r_i x u_i)^T]`
 
 Results report the largest sampled absolute torque (`torqueNm`, N m), speed (`speedRadPerSec`, rad/s) and acceleration (`accelerationRadPerSec2`, rad/s^2), per-servo peaks, and `limiting` entries giving the servo, sample index, time and signed value of each peak. These sampled maxima need not bound the continuous trajectory.
 
+## Rod load sharing
+
+`cycle.loadSharing` (`rod-load-sharing-v1`) is computed from the signed rod forces solved at every cycle sample, so it reflects the requested trajectory, mass properties and external wrench rather than gravity-only vertical sharing. Positive force is compression (the rod pushes the platform); tension is reported as a positive magnitude. At each sample, CV = std(abs(f)) / mean(abs(f)) over the six rods (population standard deviation). The cycle `meanCv` is the time-weighted mean over samples with load, `worstCv`/`worstTime` the most unequal sample, and `balanceScore` = 1 / (1 + meanCv). Samples whose mean absolute force is at most 1e-9 N count as `zeroLoadSamples`; a cycle with no loaded sample reports `status: "zero-load"` and null scores, never perfect balance. An invalid cycle reports `unavailable`. Per-rod peak compression and tension, and the largest of each with its rod and time, are retained so balanced but excessive forces stay visible. Statistics are streamed with fixed memory from the bounded cycle samples.
+
+Actuator utilization is reported separately (`actuator_utilization`): horn leverage and ratings change servo torque for the same rod loads.
+
 ## Actuator demand and servo capacity
 
 Each sample also yields an output-shaft actuator torque `tau_act = tau_load + J alphaDDot + b alphaDot + c sign(alphaDot)` when `servo_actuator` (or a per-servo `actuator`) is supplied: `J` is actuator rotor/gear inertia reflected to the output shaft (`J_motor N^2`), `b` viscous friction (N m s/rad) and `c` Coulomb friction (N m, zero at rest; static friction is unmodeled). The load model already accounts for the moving platform, so `J` must not repeat platform inertia; horn inertia about the servo axis is not in the load model and may be included in `J`. Without an actuator model, `cycle.actuator.model` is `ideal` and actuator torque equals load torque. `cycle.actuator` reports per-servo peak and time-weighted RMS actuator torque; RMS uses the trapezoidal periodic weights of the (possibly nonuniform) samples.
