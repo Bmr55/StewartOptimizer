@@ -51,12 +51,14 @@ export class Optimizer {
     ballJointClamp = false,
     servoRatings,
     onProgress,
+    onCheckpoint,
   } = {}) {
     if (!Number.isSafeInteger(populationSize) || populationSize < 4
         || !Number.isSafeInteger(generations) || generations < 1) {
       throw new RangeError('Population must be an integer >= 4 and generations an integer >= 1.');
     }
     this.onProgress = onProgress;
+    this.onCheckpoint = onCheckpoint;
     this.requirements = requirements;
     this.populationSize = Math.max(4, populationSize);
     this.generations = Math.max(1, generations);
@@ -232,6 +234,11 @@ export class Optimizer {
     }
   }
 
+  emitCheckpoint() {
+    this.onCheckpoint?.({ generation: this.generation, completedEvaluations: this.completedEvaluations,
+      fitness: this.fitness, pareto: this.pareto });
+  }
+
   getSelectedCandidate() {
     return this.fitness.find(ev => ev.layout.id === this.selectedCandidateId)
       || selectBest(this.pareto, this.fitness);
@@ -314,6 +321,7 @@ export class Optimizer {
     let fronts = this.fastNonDominatedSort(evaluations);
     this.assignCrowdingDistance(fronts, evaluations);
     this.updateState(evaluations, fronts);
+    this.emitCheckpoint();
 
     for (let gen = 0; gen < this.generations; gen++) {
       this.abortController?.signal.throwIfAborted();
@@ -328,6 +336,7 @@ export class Optimizer {
       this.assignCrowdingDistance(fronts, evaluations);
       this.updateState(evaluations, fronts);
       this.generation = gen + 1;
+      this.emitCheckpoint();
     }
   }
 

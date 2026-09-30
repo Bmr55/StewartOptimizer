@@ -7,7 +7,8 @@ import { loadUI } from './helpers.js';
 
 test('reference input stays separate from requirements and remains selectable for exact export', async () => {
   let exported;
-  const element = await loadUI(Optimizer, { downloadFile: json => { exported = JSON.parse(json); } });
+  class HeadlessOptimizer extends Optimizer {}
+  const element = await loadUI(HeadlessOptimizer, { downloadFile: json => { exported = JSON.parse(json); } });
   const source = layoutToJSON(jointFixture());
   source.topology = undefined;
   source.topology_parameters = undefined;

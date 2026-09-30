@@ -3,13 +3,15 @@ import { download } from './download.js';
 import { parseRequirements } from '../model/requirements.js';
 import { loadDefaultRequirements as loadSample } from '../io/sample-requirements.js';
 import { Optimizer as DefaultOptimizer } from '../optimization/optimizer.js';
+import { WorkerOptimizer } from './worker-optimizer.js';
 import { createControls } from './controls.js';
 import { installTooltips } from './tooltips.js';
 import { createResultsView } from './results-view.js';
 import { buildConstructionSkeleton, canExportCad, skeletonToCSV, skeletonToFusionScript } from '../io/cad.js';
 import { createServoRatingControls } from './servo-ratings-controls.js';
 
-export function createApp({ document, window, Optimizer = DefaultOptimizer, loadDefaultRequirements = loadSample, downloadFile = download }) {
+export function createApp({ document, window, Optimizer = DefaultOptimizer, workerFactory,
+    loadDefaultRequirements = loadSample, downloadFile = download }) {
     const requirementsInput = document.getElementById('requirementsInput');
     const referenceLayoutInput = document.getElementById('referenceLayoutInput');
     const statusEl = document.getElementById('optStatus');
@@ -19,6 +21,13 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, load
     let currentOptimizer = null;
     let lastOutcome = null;
     let runSerial = 0;
+    let runReferenceNote = '';
+    const fallbackButton = document.getElementById('runMainThreadFallback');
+    function offerFallback(available) {
+        fallbackButton.hidden = !available;
+        fallbackButton.disabled = !available;
+    }
+    offerFallback(false);
     const { populateRequirementsDefaults, readWorkspaceRanges, readHomeHeightBounds,
         readSamplingSettings, randomizeSeed } = createControls(document);
     const ratingControls = createServoRatingControls(document);
@@ -57,6 +66,7 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, load
         resultOutput.value = '';
         currentOptimizer = null;
         lastOutcome = null;
+        offerFallback(false);
         resultsView.clear();
         setRunning(false);
         showStatus('Requirements cleared.');
@@ -92,6 +102,7 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, load
             document.getElementById(id).disabled = running;
         }
         document.getElementById('cancelOptimization').disabled = !running;
+        if (running) fallbackButton.disabled = true;
         document.getElementById('exportBestLayout').disabled = running
             || !(currentOptimizer?.getSelectedCandidate?.() || currentOptimizer?.fitness?.length);
         const cadAvailable = !running && canExportCad(currentOptimizer?.getSelectedCandidate?.());
@@ -104,9 +115,49 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, load
         showStatus('Cancelling optimization...');
     });
 
+    function presentOutcome(outcome) {
+        const pareto = currentOptimizer.pareto?.length ? currentOptimizer.pareto : currentOptimizer.fitness;
+        const best = currentOptimizer.getSelectedCandidate?.()
+            ?? selectBest(currentOptimizer.pareto, currentOptimizer.fitness);
+        lastOutcome = { ...outcome, effective_settings: currentOptimizer.effectiveSettings?.() };
+        resultsView.render(currentOptimizer.fitness, best?.layout.id);
+        resultOutput.value = best ? JSON.stringify({ run: lastOutcome, result: displayResult(best) }, null, 2) : '';
+        if (outcome.status === 'cancelled') {
+            showStatus(best ? 'Optimization cancelled. Showing partial results from the last completed population.' : 'Optimization cancelled before a population completed.');
+        } else if (outcome.status === 'failed') {
+            showStatus(`${outcome.error || 'Worker execution failed.'}${best ? ' Showing partial results from the last completed population.' : ''}`, true);
+        } else {
+            showStatus(`Optimization complete. Feasible coverage: ${best?.coverage ?? 0}%. Pareto front contains ${currentOptimizer.pareto.length || pareto.length} layouts. Coverage applies only to sampled poses and modeled constraints.${runReferenceNote}`);
+        }
+    }
+
+    function reportProgress(thisRun, progress) {
+        if (thisRun !== runSerial) return;
+        const completed = progress.completed ?? progress.actualCompletedPoseWork ?? 0;
+        const total = progress.total ?? progress.budgetedPoseWork ?? 0;
+        showStatus(`Generation ${progress.generation}: ${completed.toLocaleString()} / ${total.toLocaleString()} pose evaluations (${total ? (100 * completed / total).toFixed(1) : '0.0'}%).`);
+    }
+
+    fallbackButton.addEventListener('click', async () => {
+        if (!(currentOptimizer instanceof WorkerOptimizer) || !currentOptimizer.startupFailure || currentOptimizer.running) return;
+        const thisRun = ++runSerial;
+        offerFallback(false);
+        showStatus('Running explicit main-thread fallback. The page yields between pose batches.');
+        setRunning(true);
+        try {
+            const outcome = await currentOptimizer.startFallback();
+            if (thisRun === runSerial) presentOutcome(outcome);
+        } catch (error) {
+            if (thisRun === runSerial) showStatus(error.message, true);
+        } finally {
+            if (thisRun === runSerial) setRunning(false);
+        }
+    });
+
     document.getElementById('runOptimization').addEventListener('click', async () => {
         if (currentOptimizer?.running) return;
         const thisRun = ++runSerial;
+        offerFallback(false);
         try {
             const text = requirementsInput.value.trim();
             if (!text) {
@@ -121,7 +172,8 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, load
             const { seed, sampling } = readSamplingSettings();
             const servoRatings = ratingControls.read();
 
-            currentOptimizer = new Optimizer(normalized, {
+            const OptimizerClass = Optimizer === DefaultOptimizer ? WorkerOptimizer : Optimizer;
+            const options = {
                 generations,
                 populationSize,
                 ranges,
@@ -133,10 +185,11 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, load
                 servoRatings,
                 ballJointLimitDeg: Number(ballJointLimitInput.value),
                 ballJointClamp: ballJointClampCheckbox.checked,
-                onProgress: ({ completed, total, generation }) => showStatus(
-                    `Generation ${generation}: ${completed.toLocaleString()} / ${total.toLocaleString()} pose evaluations (${(100 * completed / total).toFixed(1)}%).`
-                ),
-            });
+                onProgress: progress => reportProgress(thisRun, progress),
+            };
+            currentOptimizer = OptimizerClass === WorkerOptimizer
+                ? new WorkerOptimizer(normalized, options, workerFactory ? { workerFactory } : {})
+                : new OptimizerClass(normalized, options);
             if (currentOptimizer.topology) document.getElementById('optTopology').value = currentOptimizer.topology;
 
             resultOutput.value = '';
@@ -148,27 +201,22 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, load
             const referenceNote = reference
                 ? ` Reference: ${reference.boundsConflicts.length} search-bounds conflict(s); home pose ${reference.homePoseSatisfied ? 'valid' : 'invalid'}.${migrationNote ? ` ${migrationNote}` : ''}`
                 : '';
+            runReferenceNote = referenceNote;
             showStatus(`Optimization starting: ${work.totalPoses.toLocaleString()} pose evaluations.${referenceNote}`);
             setRunning(true);
             const outcome = await currentOptimizer.start();
             if (thisRun !== runSerial) return;
 
-            const pareto = currentOptimizer.pareto && currentOptimizer.pareto.length ? currentOptimizer.pareto : currentOptimizer.fitness;
-            const best = currentOptimizer.getSelectedCandidate?.()
-                ?? selectBest(currentOptimizer.pareto, currentOptimizer.fitness);
-            lastOutcome = { ...outcome,
-                effective_settings: currentOptimizer.effectiveSettings?.() ?? null };
-            resultsView.render(currentOptimizer.fitness, best?.layout.id);
-            resultOutput.value = best ? JSON.stringify({ run: lastOutcome, result: displayResult(best) }, null, 2) : '';
-            if (outcome.status === 'cancelled') {
-                showStatus(best ? 'Optimization cancelled. Showing partial results from the last completed population.' : 'Optimization cancelled before a population completed.');
-                return;
-            }
-            showStatus(`Optimization complete. Feasible coverage: ${best?.coverage ?? 0}%. Pareto front contains ${currentOptimizer.pareto.length || pareto.length} layouts. Coverage applies only to sampled poses and modeled constraints.${referenceNote}`);
+            presentOutcome(outcome);
         } catch (error) {
             if (thisRun !== runSerial) return;
-            console.error(error);
-            showStatus(error.message, true);
+            if (error.startupFailure) {
+                showStatus(`Worker startup failed: ${error.message} Select “Run on main thread” to continue.`, true);
+                offerFallback(true);
+            } else {
+                console.error(error);
+                showStatus(error.message, true);
+            }
         } finally {
             if (thisRun === runSerial) setRunning(false);
         }
