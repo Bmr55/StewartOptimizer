@@ -1,6 +1,5 @@
 import fs from 'node:fs';
-import vm from 'node:vm';
-import { parseRequirements } from '../requirements.js';
+import { createApp } from '../src/ui/app.js';
 export const sampleText = fs.readFileSync(new URL('../Additional_Repo_Stuff/examples/Sample_Requirements.json', import.meta.url), 'utf8');
 export async function loadUI(Optimizer) {
   const elements = new Map();
@@ -15,12 +14,9 @@ export async function loadUI(Optimizer) {
   };
   const document = { getElementById: element, createElement: () => element('popup'),
     body: { appendChild() {} }, addEventListener() {} };
-  const context = vm.createContext({ document, window: { addEventListener() {} }, console,
-    parseRequirements, Optimizer, loadDefaultRequirements: async () => sampleText });
-  const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
-  const script = html.match(/<script type="module">([\s\S]*?)<\/script>/)[1].replace(/^\s*import .*;$/gm, '');
-  vm.runInContext(script, context);
-  await new Promise(setImmediate);
+  const app = createApp({ document, window: { addEventListener() {} },
+    Optimizer, loadDefaultRequirements: async () => sampleText });
+  await app.ready;
   element('optPopulation').value = '4';
   element('optGenerations').value = '1';
   return element;
