@@ -61,6 +61,51 @@ section {
     gap: 14px;
 }
 
+.optimization-section {
+    position: relative;
+}
+
+.optimization-summary {
+    cursor: pointer;
+    list-style: none;
+    padding-right: 36px;
+}
+
+.optimization-summary::-webkit-details-marker {
+    display: none;
+}
+
+.optimization-summary::before {
+    content: "";
+    width: 9px;
+    height: 9px;
+    flex: 0 0 9px;
+    border-right: 2px solid var(--accent);
+    border-bottom: 2px solid var(--accent);
+    transform: rotate(-45deg);
+    transition: transform .15s ease;
+}
+
+.optimization-panel[open] .optimization-summary::before {
+    transform: rotate(45deg);
+}
+
+.optimization-summary:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 4px;
+    border-radius: 4px;
+}
+
+.optimization-info {
+    position: absolute;
+    top: 18px;
+    right: 20px;
+}
+
+.optimization-panel > :not(summary) {
+    margin-top: 14px;
+}
+
 h1, h2 {
     margin: 0;
     font-weight: 600;

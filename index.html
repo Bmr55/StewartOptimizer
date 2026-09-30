@@ -87,11 +87,11 @@
             </div>
         </section>
 
-        <section>
-            <div class="section-title">
-                <h2>Optimization Parameters</h2>
-                <button type="button" class="info-button" data-info="These settings control the genetic algorithm that searches for good layouts. More generations and a larger population improve search depth but take longer to compute." aria-label="More information"></button>
-            </div>
+        <section class="optimization-section">
+            <details class="optimization-panel" id="optimizationParameters">
+                <summary class="section-title optimization-summary">
+                    <h2>Optimization Parameters</h2>
+                </summary>
             <div class="grid">
                 <label class="field">
                     <div class="field-header"><span>Layout Topology</span></div>
@@ -213,6 +213,8 @@
                 <label for="servoTorque5">5</label><input type="number" id="servoTorque5" step="any" placeholder="Shared"><input type="number" id="servoSpeed5" step="any" placeholder="Shared">
                 <label for="servoTorque6">6</label><input type="number" id="servoTorque6" step="any" placeholder="Shared"><input type="number" id="servoSpeed6" step="any" placeholder="Shared">
             </div>
+            </details>
+            <button type="button" class="info-button optimization-info" data-info="These settings control the genetic algorithm that searches for good layouts. More generations and a larger population improve search depth but take longer to compute." aria-label="More information"></button>
         </section>
 
         <section>
