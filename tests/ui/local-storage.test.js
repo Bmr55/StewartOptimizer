@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { loadUI } from './helpers.js';
+import { loadUI, sampleText } from './helpers.js';
 import { LOCAL_WORKSPACE_KEY } from '../../src/ui/local-workspace.js';
 import { asymmetricJointFixture } from '../fixtures/layout.js';
 
@@ -79,4 +79,44 @@ test('cycle sampling is saved, and saves from before that control still restore'
   document.getElementById('optCycleSampling').value = 'adaptive';
   applyLocalWorkspace(document, parseLocalWorkspace(JSON.stringify(saved)));
   assert.equal(document.getElementById('optCycleSampling').value, 'adaptive');
+});
+
+test('a run started before the sample fetch settles is not reset by the automatic restore', async () => {
+  const localStorage = storage();
+  const windowOptions = { window: { localStorage, addEventListener() {} } };
+  const first = await loadUI(FixtureOptimizer, windowOptions);
+  await first('runOptimization').handlers.click();
+  first('saveLocalWorkspace').handlers.click();
+  assert.ok(localStorage.getItem(LOCAL_WORKSPACE_KEY));
+
+  let finishRun;
+  const gate = new Promise(resolve => { finishRun = resolve; });
+  class SlowOptimizer extends FixtureOptimizer {
+    async start() {
+      this.running = true;
+      try { await gate; } finally { this.running = false; }
+      return { status: 'completed' };
+    }
+  }
+  let resolveSample;
+  const sample = new Promise(resolve => { resolveSample = resolve; });
+  const element = await loadUI(SlowOptimizer, { ...windowOptions, awaitReady: false,
+    loadDefaultRequirements: () => sample });
+  element('requirementsInput').value = sampleText;
+  const run = element('runOptimization').handlers.click();
+  await Promise.resolve();
+  assert.notEqual(element('runPhase').textContent, 'Idle');
+  resolveSample(sampleText);
+  await element.app.ready;
+  assert.notEqual(element('runPhase').textContent, 'Idle');
+  assert.equal(element('cancelOptimization').disabled, false);
+  assert.match(element('optStatus').textContent, /not restored automatically/i);
+  finishRun();
+  await run;
+  assert.doesNotMatch(element('optStatus').textContent, /TypeError|Cannot read/);
+  assert.match(element('simCandidateSummary').textContent, /Candidate 19/);
+  assert.equal(element('runOptimization').disabled, false);
+
+  element('restoreLocalWorkspace').handlers.click();
+  assert.match(element('optStatus').textContent, /Local workspace restored/);
 });

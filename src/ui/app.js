@@ -530,7 +530,14 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
         .then(() => {
             try {
                 const saved = window.localStorage?.getItem(LOCAL_WORKSPACE_KEY);
-                if (saved) restoreLocalWorkspace(saved);
+                if (!saved) return;
+                // The user may have started a run before the sample fetch settled.
+                // Restoring now would null the optimizer under the active run.
+                if (currentOptimizer?.running) {
+                    showStatus('Optimization running; the browser save was not restored automatically. Use Restore browser save after the run finishes.');
+                    return;
+                }
+                restoreLocalWorkspace(saved);
             } catch (error) {
                 showStatus(`Could not restore browser save: ${error.message}`, true);
             }

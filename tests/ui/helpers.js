@@ -5,7 +5,7 @@ class FakeChart {
   constructor(_canvas, config) { this.data = config.data; this.options = config.options; }
   update() {}
 }
-export async function loadUI(Optimizer, options = {}) {
+export async function loadUI(Optimizer, { awaitReady = true, ...options } = {}) {
   const elements = new Map();
   const element = id => {
     if (!elements.has(id)) elements.set(id, {
@@ -21,7 +21,8 @@ export async function loadUI(Optimizer, options = {}) {
   element('downloadFormat').value = 'json';
   const app = createApp({ document, window: { addEventListener() {} },
     Optimizer, ChartClass: FakeChart, loadDefaultRequirements: async () => sampleText, ...options });
-  await app.ready;
+  if (awaitReady) await app.ready;
+  element.app = app;
   element('optPopulation').value = '4';
   element('optGenerations').value = '1';
   element('optObjectiveSet').value = 'compact';

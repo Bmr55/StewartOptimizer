@@ -5,9 +5,11 @@ const metric = (value, digits = 3) => Number.isFinite(value) ? Number(value).toP
 export function formatDuration(milliseconds) {
   if (!Number.isFinite(milliseconds) || milliseconds < 0) return 'Unavailable';
   const seconds = milliseconds / 1000;
-  if (seconds < 60) return `${seconds.toFixed(1)} s`;
-  const minutes = Math.floor(seconds / 60);
-  return `${minutes}m ${(seconds - minutes * 60).toFixed(0)}s`;
+  if (seconds < 59.95) return `${seconds.toFixed(1)} s`;
+  // Round whole seconds before splitting so the remainder never reads 60.
+  const wholeSeconds = Math.round(seconds);
+  const minutes = Math.floor(wholeSeconds / 60);
+  return `${minutes}m ${wholeSeconds - minutes * 60}s`;
 }
 
 export function bestCandidateText(best) {
