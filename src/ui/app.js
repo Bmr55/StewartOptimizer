@@ -14,6 +14,7 @@ import { buildConstructionSkeleton, canExportCad, skeletonToCSV, skeletonToFusio
 import { createServoRatingControls } from './servo-ratings-controls.js';
 import { createSimulatorController } from '../simulator/controller.js';
 import { createSimulatorView } from '../simulator/view.js';
+import { createGeometryControls } from '../simulator/geometry-controls.js';
 
 function simulatorOptions(settings = {}, layout = {}) {
     return {
@@ -52,6 +53,10 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
     const simulatorController = createSimulatorController();
     const simulatorView = createSimulatorView({ document, window, controller: simulatorController,
         isActive: () => activeTab === 'simulate' });
+    const geometryContainer = document.getElementById('simGeometryControls');
+    const geometryControls = geometryContainer?.appendChild && geometryContainer?.replaceChildren
+        ? createGeometryControls({ document, container: geometryContainer, controller: simulatorController })
+        : null;
     function setTab(tab) {
         activeTab = tab;
         for (const [name, buttonId, panelId] of [['optimize', 'optimizeTab', 'optimizePanel'],
@@ -416,5 +421,5 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
             console.error(error);
             showStatus(error.message, true);
         });
-    return { ready, simulatorController, simulatorView, setTab };
+    return { ready, simulatorController, simulatorView, geometryControls, setTab };
 }
