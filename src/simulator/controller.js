@@ -85,9 +85,14 @@ export function createSimulatorController({ onChange } = {}) {
   function loadLayout(nextLayout, { source: nextSource = { kind: 'import' },
     options: nextOptions = {} } = {}) {
     ensureLayout(nextLayout);
-    layout = copy(nextLayout);
+    const nextLayoutCopy = copy(nextLayout);
+    const nextOptionsCopy = copy(nextOptions);
+    // Validate the options against the home pose before touching any state, as
+    // setOptions does, so an invalid load leaves the previous layout intact.
+    evaluatePose(nextLayoutCopy, HOME_POSE, { ...nextOptionsCopy, recordLegData: true });
+    layout = nextLayoutCopy;
     source = copy(nextSource);
-    options = copy(nextOptions);
+    options = nextOptionsCopy;
     requested = { ...HOME_POSE };
     accepted = null;
     assessment = null;

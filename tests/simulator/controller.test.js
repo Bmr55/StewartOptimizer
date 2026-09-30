@@ -59,3 +59,23 @@ test('animations pause on invalid frames and preserve requested and accepted sta
     assert.deepEqual(Object.keys(animationPose(pattern, 0)).sort(), Object.keys(HOME_POSE).sort());
   }
 });
+
+test('loadLayout with invalid options throws before touching state and fires no notification', () => {
+  const notifications = [];
+  const controller = createSimulatorController({ onChange: state => notifications.push(state) });
+  const first = asymmetricJointFixture();
+  controller.loadLayout(first, { source: { kind: 'candidate', candidateId: 1 }, options: settings });
+  controller.requestPose({ z: 10 });
+  const before = controller.getState();
+  const count = notifications.length;
+  const next = { ...asymmetricJointFixture(), homeHeight: 555 };
+  for (const options of [{ ...settings, rodLengthTolerance: -1 }, { ...settings, conditionLimit: 'bad' }]) {
+    assert.throws(() => controller.loadLayout(next, { source: { kind: 'import' }, options }), RangeError);
+  }
+  assert.deepEqual(controller.getState(), before);
+  assert.equal(controller.getState().layout.homeHeight, first.homeHeight);
+  assert.equal(notifications.length, count);
+  const empty = createSimulatorController();
+  assert.throws(() => empty.loadLayout(next, { options: { ...settings, rodLengthTolerance: -1 } }), RangeError);
+  assert.equal(empty.getState().layout, null);
+});

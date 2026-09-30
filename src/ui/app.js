@@ -121,7 +121,10 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
     simCandidateSelect.addEventListener('change', () => {
         if (simCandidateSelect.value) resultsView.select(simCandidateSelect.value);
     });
+    // Candidate options of the current results, without any imported-reference entry.
+    let candidateOptions = '';
     function clearSimulatorSelection() {
+        candidateOptions = '';
         simCandidateSelect.innerHTML = '';
         simCandidateSelect.disabled = true;
     }
@@ -244,8 +247,9 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
             ?? selectBest(currentOptimizer.pareto, currentOptimizer.fitness);
         lastOutcome = { ...outcome, effective_settings: currentOptimizer.effectiveSettings?.() };
         resultsView.render(currentOptimizer.fitness, best?.layout.id);
-        simCandidateSelect.innerHTML = currentOptimizer.fitness.map(item =>
+        candidateOptions = currentOptimizer.fitness.map(item =>
             `<option value="${item.layout.id}">Candidate ${item.layout.id}</option>`).join('');
+        simCandidateSelect.innerHTML = candidateOptions;
         simCandidateSelect.disabled = !currentOptimizer.fitness.length;
         setResultOutput(best ? JSON.stringify({ run: lastOutcome, result: displayResult(best) }, null, 2) : '');
         dashboard.finish(thisRun, { status: outcome.status, partialResults: outcome.partialResults,
@@ -417,7 +421,7 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
         const saved = parsed.simulator;
         simulatorController.loadLayout(layout, { source: { kind: 'import', candidateId: layout.id ?? null },
             options: saved?.options ?? simulatorOptions(sourceRun?.effective_settings, layout) });
-        simCandidateSelect.innerHTML = `<option value="">Imported reference</option>${simCandidateSelect.innerHTML}`;
+        simCandidateSelect.innerHTML = `<option value="">Imported reference</option>${candidateOptions}`;
         simCandidateSelect.value = '';
         if (saved?.accepted) simulatorController.requestPose(saved.accepted, { source: 'replay' });
         if (saved?.requested) simulatorController.requestPose(saved.requested, { source: 'replay' });

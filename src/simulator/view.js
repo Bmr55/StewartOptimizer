@@ -61,13 +61,19 @@ export function createSimulatorView({ document, window, controller, isActive = (
     document.getElementById('simRendererError').hidden = false;
   }
 
-  function requestFields() {
-    try {
-      const pose = Object.fromEntries(POSE_AXES.map(axis => [axis,
-        modelValue(axis, Number(axisInput(document, axis).value))]));
-      controller.requestPose(pose);
-    } catch (error) { status.textContent = error.message; status.classList.add('error'); }
+  // Controller calls throw on invalid input (no layout, bad speed); surface the
+  // message in the pose status instead of leaving an uncaught error and a dead control.
+  function guarded(action) {
+    return (...args) => {
+      try { action(...args); }
+      catch (error) { status.textContent = error.message; status.classList.add('error'); }
+    };
   }
+  const requestFields = guarded(() => {
+    const pose = Object.fromEntries(POSE_AXES.map(axis => [axis,
+      modelValue(axis, Number(axisInput(document, axis).value))]));
+    controller.requestPose(pose);
+  });
   for (const axis of POSE_AXES) {
     axisInput(document, axis).addEventListener('change', requestFields);
     axisSlider(document, axis).addEventListener('input', () => {
@@ -75,7 +81,7 @@ export function createSimulatorView({ document, window, controller, isActive = (
       requestFields();
     });
   }
-  document.getElementById('simResetPose').addEventListener('click', () => controller.requestPose(HOME_POSE));
+  document.getElementById('simResetPose').addEventListener('click', guarded(() => controller.requestPose(HOME_POSE)));
   document.getElementById('simResetCamera').addEventListener('click', () => {
     camera = { yaw: 0.7, pitch: 0.38, distance: 600, target: camera.target };
     if (renderer.available) renderer.render(controller.getState(), camera);
@@ -83,16 +89,16 @@ export function createSimulatorView({ document, window, controller, isActive = (
   document.getElementById('simMarkers').addEventListener('change', event => controller.setMarkers(event.target.checked));
   document.getElementById('simTraces').addEventListener('change', event => controller.setTraces(event.target.checked));
   document.getElementById('simClearTrace').addEventListener('click', () => controller.clearTrace());
-  pattern.addEventListener('change', () => controller.setAnimation(pattern.value, false));
-  play.addEventListener('click', () => {
+  pattern.addEventListener('change', guarded(() => controller.setAnimation(pattern.value, false)));
+  play.addEventListener('click', guarded(() => {
     const state = controller.getState();
     controller.setAnimation(pattern.value, !state.animation.playing,
       { speed: Number(document.getElementById('simSpeed').value) });
-  });
-  document.getElementById('simSpeed').addEventListener('change', event => {
+  }));
+  document.getElementById('simSpeed').addEventListener('change', guarded(event => {
     const state = controller.getState();
     controller.setAnimation(state.animation.pattern, state.animation.playing, { speed: Number(event.target.value) });
-  });
+  }));
 
   canvas.addEventListener('pointerdown', event => {
     drag = { x: event.clientX, y: event.clientY };
