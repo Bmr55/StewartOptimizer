@@ -50,3 +50,22 @@ test('selected candidate transfers to simulator and reference JSON reimports wit
   assert.match(element('simPoseStatus').textContent, /Rejected request.*Z 500/);
   assert.match(element('simAcceptedPose').textContent, /Z 0 mm/);
 });
+
+test('a simulator saved before animation reloads with a playable pattern', async () => {
+  const element = await loadUI(FixtureOptimizer);
+  await element('runOptimization').handlers.click();
+  element('simUseReference').handlers.click();
+  const saved = JSON.parse(element('referenceLayoutInput').value);
+  assert.equal(saved.simulator.animation.pattern, 'none');
+  for (const pattern of ['none', 'wobble', 'pingpong', 'rotate', 'tilt', 'helical', 'unknown']) {
+    saved.simulator.animation.pattern = pattern;
+    saved.simulator.animation.speed = 2;
+    element('referenceLayoutInput').value = JSON.stringify(saved);
+    element('simLoadReference').handlers.click();
+    assert.equal(element('simPattern').value, ['none', 'unknown'].includes(pattern) ? 'wobble' : pattern);
+    assert.equal(element('simSpeed').value, '2');
+    assert.equal(element('simPlay').textContent, 'Play');
+    element('simPlay').handlers.click();
+    assert.equal(element('simPlay').textContent, 'Pause');
+  }
+});

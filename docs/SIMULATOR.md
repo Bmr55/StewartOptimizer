@@ -49,6 +49,10 @@ selected topology's anchor and beta-angle invariants. Horn/rod length, home
 height, and servo range are separate scalar controls; the servo range displays
 degrees and stores radians.
 
+Circular and Rectangular also expose an alternating horn offset. Newly generated
+layouts start at 30°; legacy imports without this parameter display 0° and keep
+their original directions until explicitly edited.
+
 **Edit anchors explicitly** preserves the current anchors and beta angles
 exactly while switching topology metadata to `free`. Explicit mode offers each
 base/platform XYZ coordinate and each horn direction. **Generate selected
@@ -83,6 +87,10 @@ the layout and ignores old scores; every pose is checked again by the current
 evaluator. If WebGL2 is unavailable, the simulator names the missing capability
 and suggests enabling hardware acceleration or a modern desktop browser;
 optimization remains usable.
+
+Loaded animations remain paused. A saved idle (`none`) or unrecognized pattern
+selects Wobble as the playable default, so Play works after a save/load before
+the first animation has been started.
 
 ## Live diagnostics
 

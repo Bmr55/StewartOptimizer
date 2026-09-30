@@ -8,11 +8,11 @@ const loadKey = state => state.layout == null ? null
   : JSON.stringify({ layout: state.layout, source: state.source });
 
 export const PARAMETER_FIELDS = Object.freeze({
-  circular: ['base_radius', 'platform_radius', 'base_orientation', 'platform_orientation', 'beta_offset'],
+  circular: ['base_radius', 'platform_radius', 'base_orientation', 'platform_orientation', 'beta_offset', 'beta_pair_offset'],
   c3_paired: ['base_radius', 'platform_radius', 'base_pair_gap', 'platform_pair_gap',
     'base_orientation', 'platform_orientation', 'beta_offset'],
   rectangular_paired: ['base_radius', 'platform_radius', 'base_aspect', 'platform_aspect',
-    'base_orientation', 'platform_orientation', 'beta_offset'],
+    'base_orientation', 'platform_orientation', 'beta_offset', 'beta_pair_offset'],
 });
 
 export function geometryMode(layout) {

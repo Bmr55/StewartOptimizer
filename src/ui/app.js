@@ -12,7 +12,7 @@ import { installTooltips } from './tooltips.js';
 import { createResultsView } from './results-view.js';
 import { buildConstructionSkeleton, canExportCad, skeletonToCSV, skeletonToFusionScript } from '../io/cad.js';
 import { createServoRatingControls } from './servo-ratings-controls.js';
-import { createSimulatorController } from '../simulator/controller.js';
+import { createSimulatorController, ANIMATION_PATTERNS } from '../simulator/controller.js';
 import { createSimulatorView } from '../simulator/view.js';
 import { createGeometryControls } from '../simulator/geometry-controls.js';
 import { mountSimulatorDiagnostics } from '../simulator/diagnostics.js';
@@ -382,8 +382,12 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
             if (saved?.requested) simulatorController.requestPose(saved.requested, { source: 'replay' });
             if (saved?.camera) simulatorView.setCamera(saved.camera);
             if (saved?.animation) {
-                document.getElementById('simPattern').value = saved.animation.pattern || 'wobble';
-                document.getElementById('simSpeed').value = String(saved.animation.speed || 1);
+                const pattern = saved.animation.pattern !== 'none' && ANIMATION_PATTERNS.includes(saved.animation.pattern)
+                    ? saved.animation.pattern : 'wobble';
+                const speed = saved.animation.speed || 1;
+                document.getElementById('simPattern').value = pattern;
+                document.getElementById('simSpeed').value = String(speed);
+                simulatorController.setAnimation(pattern, false, { speed });
             }
             if (saved?.pointerMode) document.getElementById('simPointerMode').value = saved.pointerMode;
             if (saved?.markers !== undefined) simulatorController.setMarkers(saved.markers);

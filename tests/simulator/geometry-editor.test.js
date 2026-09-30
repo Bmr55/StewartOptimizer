@@ -17,10 +17,10 @@ test('every parametric geometry control regenerates the intended shared topology
     for (const field of PARAMETER_FIELDS[topology]) {
       const before = structuredClone(original);
       const changed = editGeometry(original, { type: 'parameter', field,
-        value: before.topologyParameters[field] + (field.includes('orientation') || field === 'beta_offset' ? 0.05 : 0.5) });
+        value: before.topologyParameters[field] + (field.includes('orientation') || field.startsWith('beta_') ? 0.05 : 0.5) });
       assert.equal(validateTopology(changed), topology);
       assert.deepEqual(changed.topologyParameters[field], before.topologyParameters[field]
-        + (field.includes('orientation') || field === 'beta_offset' ? 0.05 : 0.5));
+        + (field.includes('orientation') || field.startsWith('beta_') ? 0.05 : 0.5));
       const expected = topologyGeometry(topology, changed.topologyParameters);
       assert.deepEqual(changed.baseAnchors, expected.baseAnchors);
       assert.deepEqual(changed.platformAnchors, expected.platformAnchors);
@@ -30,7 +30,7 @@ test('every parametric geometry control regenerates the intended shared topology
         assert.deepEqual(changed.baseAnchors, before.baseAnchors);
         assert.deepEqual(changed.betaAngles, before.betaAngles);
       }
-      if (field === 'beta_offset') {
+      if (field.startsWith('beta_')) {
         assert.deepEqual(changed.baseAnchors, before.baseAnchors);
         assert.deepEqual(changed.platformAnchors, before.platformAnchors);
         assert.notDeepEqual(changed.betaAngles, before.betaAngles);

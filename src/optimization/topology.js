@@ -1,5 +1,8 @@
 import { DEFAULT_TOPOLOGY, TOPOLOGIES } from '../contracts.js';
 
+export const PAIRED_HORN_TOPOLOGIES = Object.freeze(['circular', 'rectangular_paired']);
+export const DEFAULT_BETA_PAIR_OFFSET = Math.PI / 6;
+
 export function wrapAngle(angle) {
   return Math.atan2(Math.sin(angle), Math.cos(angle));
 }
@@ -46,6 +49,10 @@ export function topologyGeometry(topology, parameters) {
   for (const field of fields) {
     if (!Number.isFinite(parameters[field])) throw new Error(`topology_parameters.${field} must be finite.`);
   }
+  // Missing offsets retain the exact horn directions of previously exported layouts.
+  const pairOffset = PAIRED_HORN_TOPOLOGIES.includes(topology)
+    ? (parameters.beta_pair_offset === undefined ? 0 : parameters.beta_pair_offset) : 0;
+  if (!Number.isFinite(pairOffset)) throw new Error('topology_parameters.beta_pair_offset must be finite.');
   for (const field of ['base_radius', 'platform_radius']) {
     if (parameters[field] <= 0) throw new Error(`topology_parameters.${field} must be positive.`);
   }
@@ -70,8 +77,11 @@ export function topologyGeometry(topology, parameters) {
     parameters.base_pair_gap, parameters.base_aspect);
   const platformAnchors = make(parameters.platform_radius, parameters.platform_orientation,
     parameters.platform_pair_gap, parameters.platform_aspect);
-  const betaAngles = baseAnchors.map(([x, y]) =>
-    wrapAngle(Math.atan2(y, x) + Math.PI / 2 + parameters.beta_offset));
+  // Alternating horn directions preserve the plate geometry without forcing
+  // the Circular and Rectangular home Jacobians to have dependent rows.
+  const betaAngles = baseAnchors.map(([x, y], i) =>
+    wrapAngle(Math.atan2(y, x) + Math.PI / 2 + parameters.beta_offset
+      + (i % 2 ? pairOffset : -pairOffset)));
   return { baseAnchors, platformAnchors, betaAngles };
 }
 

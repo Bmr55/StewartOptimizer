@@ -68,9 +68,31 @@ try {
   state = await page.evaluate(() => window.geometryCheck.controller.getState());
   assert.equal(state.layout.topology, 'circular');
   assert.notDeepEqual(state.layout.baseAnchors, original.baseAnchors);
+  assert.ok(Math.abs(Number(await page.locator('#sim-beta-pair-offset-number').inputValue()) - 30) < 1e-10);
+  const circularAnchors = state.layout.baseAnchors;
+  const circularBetas = state.layout.betaAngles;
+  await page.locator('#sim-beta-pair-offset-number').fill('45');
+  await page.locator('#sim-beta-pair-offset-number').press('Tab');
+  state = await page.evaluate(() => window.geometryCheck.controller.getState());
+  assert.equal(state.layout.topologyParameters.beta_pair_offset, Math.PI / 4);
+  assert.deepEqual(state.layout.baseAnchors, circularAnchors);
+  assert.notDeepEqual(state.layout.betaAngles, circularBetas);
+  const circularLayout = state.layout;
   await page.locator('#sim-reset-geometry').click();
   state = await page.evaluate(() => window.geometryCheck.controller.getState());
   assert.deepEqual(state.layout, original);
+  // An older layout without the optional field still exposes a zero-valued
+  // control, even when replacing a new layout of the same topology.
+  await page.evaluate(layout => window.geometryCheck.controller.loadLayout(layout), circularLayout);
+  await page.evaluate(async () => {
+    const { topologyGeometry } = await import('/src/optimization/topology.js');
+    const { controller } = window.geometryCheck;
+    const layout = controller.getReferenceLayout();
+    delete layout.topologyParameters.beta_pair_offset;
+    Object.assign(layout, topologyGeometry(layout.topology, layout.topologyParameters));
+    controller.loadLayout(layout);
+  });
+  assert.equal(await page.locator('#sim-beta-pair-offset-number').inputValue(), '0');
   console.log('Browser geometry sliders, explicit mode, editable copy, diagnostics, and reset passed.');
 } finally {
   await browser?.close();
