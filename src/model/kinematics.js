@@ -39,7 +39,10 @@ export function solveServoAngle(base, platformPoint, hornLength, rodLength, beta
   if (!Number.isFinite(ratio) || Math.abs(ratio) > 1 + 1e-6) {
     return { violation: { type: 'invalidGeometry', value: ratio } };
   }
-  return { alpha: Math.asin(clamp(ratio, -1, 1)) - Math.atan2(f, e) };
+  const raw = Math.asin(clamp(ratio, -1, 1)) - Math.atan2(f, e);
+  // asin - atan2 spans (-3pi/2, 3pi/2]; wrap into (-pi, pi] so the same horn
+  // position is never reported as, say, -270 deg instead of +90 deg.
+  return { alpha: Math.atan2(Math.sin(raw), Math.cos(raw)) };
 }
 
 export function computeHornTip(base, hornLength, beta, alpha) {
