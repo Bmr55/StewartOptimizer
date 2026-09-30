@@ -90,7 +90,7 @@ export function validateDesignSpace(space) {
 
 export const cloneLayout = layout => JSON.parse(JSON.stringify(layout));
 
-export function createRandomLayout({ designSpace: space, servoRangeRad, id, topology = DEFAULT_TOPOLOGY, random = Math.random }) {
+export function createRandomLayout({ designSpace: space, servoRangeRad, servoRangeDeg, id, topology = DEFAULT_TOPOLOGY, random = Math.random }) {
   if (!TOPOLOGIES.includes(topology)) throw new Error(`topology must be one of ${TOPOLOGIES.join(', ')}.`);
   const layout = {
     id, topology, topologyParameters: topology === 'free' ? {} : randomParameters(topology, space, random),
@@ -112,10 +112,13 @@ export function createRandomLayout({ designSpace: space, servoRangeRad, id, topo
         + randomNormal(random) * space.betaJitterRad));
     }
   } else Object.assign(layout, topologyGeometry(topology, layout.topologyParameters));
-  return finalizeLayout(layout, { designSpace: space, servoRangeRad });
+  return finalizeLayout(layout, { designSpace: space, servoRangeRad, servoRangeDeg });
 }
 
-export function finalizeLayout(layout, { designSpace: space, servoRangeRad }) {
+// servoRangeDeg is the degree form of servoRangeRad when the caller has one (the
+// Optimizer's servo_travel_bounds_deg); exported servo_range then matches the run
+// settings exactly instead of the radians converted back.
+export function finalizeLayout(layout, { designSpace: space, servoRangeRad, servoRangeDeg = null }) {
   const topology = validateTopology(layout);
   layout.topology = topology;
   layout.topologyParameters ??= topology === 'free' ? {} : layout.topology_parameters;
@@ -138,11 +141,12 @@ export function finalizeLayout(layout, { designSpace: space, servoRangeRad }) {
   }
   layout.servoRangeRad = servoRangeRad.slice();
   // The imported-degree copy would otherwise shadow the finalized range on export.
-  delete layout.servoRangeDeg;
+  if (servoRangeDeg) layout.servoRangeDeg = servoRangeDeg.slice();
+  else delete layout.servoRangeDeg;
   return layout;
 }
 
-export function mutateLayout(source, { designSpace: space, servoRangeRad, random = Math.random }) {
+export function mutateLayout(source, { designSpace: space, servoRangeRad, servoRangeDeg, random = Math.random }) {
   validateTopology(source);
   const layout = cloneLayout(source);
   if ((layout.topology ?? 'free') === 'free') {
@@ -185,10 +189,10 @@ export function mutateLayout(source, { designSpace: space, servoRangeRad, random
   layout.hornLength += randomNormal(random) * space.mutationHorn;
   layout.rodLength += randomNormal(random) * space.mutationRod;
   layout.homeHeight += randomNormal(random) * space.mutationHeight;
-  return finalizeLayout(layout, { designSpace: space, servoRangeRad });
+  return finalizeLayout(layout, { designSpace: space, servoRangeRad, servoRangeDeg });
 }
 
-export function crossoverLayouts(a, b, { designSpace: space, servoRangeRad, random = Math.random }) {
+export function crossoverLayouts(a, b, { designSpace: space, servoRangeRad, servoRangeDeg, random = Math.random }) {
   validateTopology(a); validateTopology(b);
   if ((a.topology ?? 'free') !== (b.topology ?? 'free')) {
     throw new Error('Cannot cross layouts with different topologies.');
@@ -217,5 +221,5 @@ export function crossoverLayouts(a, b, { designSpace: space, servoRangeRad, rand
   layout.hornLength = (a.hornLength + b.hornLength) / 2;
   layout.rodLength = (a.rodLength + b.rodLength) / 2;
   layout.homeHeight = random() < 0.5 ? a.homeHeight : b.homeHeight;
-  return finalizeLayout(layout, { designSpace: space, servoRangeRad });
+  return finalizeLayout(layout, { designSpace: space, servoRangeRad, servoRangeDeg });
 }

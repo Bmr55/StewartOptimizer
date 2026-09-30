@@ -107,7 +107,9 @@ test('exported layouts round-trip topology, parameters, geometry, units, and hom
     assert.equal(json.home_height, layout.homeHeight);
     assert.equal(json.horn_length, layout.hornLength);
     assert.equal(json.rod_length, layout.rodLength);
-    assert.deepEqual(json.servo_range, layout.servoRangeRad.map(radians => radians * 180 / Math.PI));
+    // Generated layouts export the run's exact degree bounds, not the radians converted back.
+    assert.deepEqual(json.servo_range, [-120, 120]);
+    assert.deepEqual(layout.servoRangeRad, [-120, 120].map(degrees => degrees * Math.PI / 180));
     assert.equal(validateTopology(json), topology);
   }
 });

@@ -75,7 +75,7 @@ The download is `optimized_layout.json` with these top-level fields:
 | platform_anchors | Six local moving-platform coordinates, mm |
 | beta_angles | Six horn-plane orientation angles, radians |
 | horn_length / rod_length | Shared horn and rod lengths, mm |
-| servo_range | Shared [minimum, maximum] travel, degrees |
+| servo_range | Shared [minimum, maximum] travel, degrees. Generated and evolved candidates carry the run's `servo_travel_bounds_deg` exactly, equal to `run.effective_settings.servoRangeDeg`; an exact imported reference keeps its own imported degrees |
 | home_height | Platform home offset along Z, mm |
 | schema_version / model_version | Layout format and physical model versions |
 | id / topology / topology_parameters / mounting / migration | Selected candidate identity, geometry/model metadata, effective socket directions and sources, and the import migration record (`upgraded` true with the legacy-upgrade note for a pre-version-2 import, false with a derived-sockets note when a current-version import omitted `mounting`) when present |

@@ -15,7 +15,8 @@ export function formatDuration(milliseconds) {
 export function bestCandidateText(best) {
   if (!best) return 'No completed population yet';
   const result = best.passing ? 'passing' : `diagnostic${best.failedCategories?.length ? ` (${best.failedCategories.join(', ')})` : ''}`;
-  return `#${best.id} · ${result} · coverage ${metric(best.coverage)}% · torque ${metric(best.torque)} N m · speed ${metric(best.speedDemand)} rad/s · conditioning ${metric(best.conditioningQuality)}`;
+  const coverage = Number.isFinite(best.coverage) ? `${metric(best.coverage)}%` : 'unavailable';
+  return `#${best.id} · ${result} · coverage ${coverage} · torque ${metric(best.torque)} N m · speed ${metric(best.speedDemand)} rad/s · conditioning ${metric(best.conditioningQuality)}`;
 }
 
 export function createRunDashboard(document, { now = () => performance.now() } = {}) {
