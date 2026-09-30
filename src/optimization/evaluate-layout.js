@@ -78,6 +78,10 @@ export async function evaluateLayout(layout, options) {
       && !(stats.conditioningCounts?.numericalSingularity || stats.conditioningCounts?.engineeringLimit
         || stats.conditioningCounts?.unavailable)
       && !cycle.violations?.some(v => ['numericalSingularity', 'conditionLimit'].includes(v.type)),
+    // Budget exhaustion before convergence is inconclusive, never a convergence pass.
+    cycleConvergence: cycle.sampling?.status ?? null,
+    cycleConvergenceSatisfied: cycle.sampling?.status !== 'budget-limited'
+      || cycle.sampling?.inconclusivePolicy === 'advisory',
     servoCapacitySatisfied: !servoCapacity.hasRatings || servoCapacity.compliant === true,
     servoCapacityEnforced: servoCapacity.hasRatings && servoCapacity.policy === 'enforced',
     scope: 'Sampled poses under the modeled geometry, servo, rod, ball-joint and conditioning constraints',
@@ -120,12 +124,12 @@ export async function evaluateLayout(layout, options) {
 }
 
 export function evaluateCycle(layout, { payload, stroke, frequency, cycleAxis, trajectory, trajectorySource,
-  massProperties, ballJointLimitDeg,
+  massProperties, cycleSampling, ballJointLimitDeg,
   lowerBallJointLimitDeg, upperBallJointLimitDeg, conditionLimit, mounting, signal, onPose }) {
   // A legacy-cycle trajectory keeps the single-axis identity in exported results.
   const supplied = trajectorySource === 'supplied' ? trajectory : undefined;
   return computeCycleDemand(layout, { mass: payload, stroke,
-    frequency, axis: cycleAxis, trajectory: supplied, trajectorySource, massProperties,
+    frequency, axis: cycleAxis, trajectory: supplied, trajectorySource, massProperties, sampling: cycleSampling,
     ballJointLimitDeg, lowerBallJointLimitDeg,
     upperBallJointLimitDeg, conditionLimit, mounting, signal, onPose });
 }

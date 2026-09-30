@@ -24,5 +24,5 @@ export const METRICS = Object.freeze({
 });
 
 export const FAILURE_CATEGORIES = Object.freeze([
-  'geometry', 'home', 'workspace', 'cycle', 'joint', 'conditioning', 'servo_capacity',
+  'geometry', 'home', 'workspace', 'cycle', 'cycle_convergence', 'joint', 'conditioning', 'servo_capacity',
 ]);

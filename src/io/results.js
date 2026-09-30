@@ -12,6 +12,7 @@ export function failureCategories(evaluation) {
   if (flags.sampledWorkspaceSatisfied === false) categories.add('workspace');
   if (flags.cycleSatisfied === false || evaluation?.cycle?.valid === false) categories.add('cycle');
   if (flags.conditionSatisfied === false) categories.add('conditioning');
+  if (flags.cycleConvergenceSatisfied === false) categories.add('cycle_convergence');
   if (flags.servoCapacityEnforced && flags.servoCapacitySatisfied === false) categories.add('servo_capacity');
   return [...categories].sort();
 }

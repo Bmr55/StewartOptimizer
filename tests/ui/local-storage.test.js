@@ -64,3 +64,19 @@ test('corrupt browser save reports an error without overwriting current inputs',
   assert.equal(element('optSeed').value, '77');
   assert.match(element('optStatus').textContent, /Could not restore browser save/);
 });
+
+test('cycle sampling is saved, and saves from before that control still restore', async () => {
+  const { captureLocalWorkspace, parseLocalWorkspace, applyLocalWorkspace } = await import('../../src/ui/local-workspace.js');
+  const values = new Map();
+  const document = { getElementById: id => {
+    if (!values.has(id)) values.set(id, { value: '', checked: false });
+    return values.get(id);
+  } };
+  document.getElementById('optCycleSampling').value = 'uniform-64';
+  const saved = captureLocalWorkspace(document);
+  assert.equal(saved.inputs.optCycleSampling, 'uniform-64');
+  delete saved.inputs.optCycleSampling;
+  document.getElementById('optCycleSampling').value = 'adaptive';
+  applyLocalWorkspace(document, parseLocalWorkspace(JSON.stringify(saved)));
+  assert.equal(document.getElementById('optCycleSampling').value, 'adaptive');
+});

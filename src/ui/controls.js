@@ -1,6 +1,13 @@
 // Keep defaults separate from input values so explicit user edits survive JSON changes.
 import { normalizeSeed } from '../optimization/random.js';
 import { SAMPLE_PRESETS } from '../workspace/sampling.js';
+import { DEFAULT_CYCLE_SAMPLING, LEGACY_CYCLE_SAMPLING } from '../model/cycle-sampling.js';
+
+export const CYCLE_SAMPLING_PRESETS = Object.freeze({
+    adaptive: DEFAULT_CYCLE_SAMPLING,
+    'adaptive-fine': { ...DEFAULT_CYCLE_SAMPLING, maxSamples: 1024, tolerance: 0.001 },
+    'uniform-64': LEGACY_CYCLE_SAMPLING,
+});
 
 export function createControls(document) {
     const ballJointLimitInput = document.getElementById('ballJointLimit');
@@ -100,6 +107,13 @@ export function createControls(document) {
         return { seed, sampling: { strategy: 'halton', sampleCount } };
     }
 
+    function readCycleSampling() {
+        const selected = document.getElementById('optCycleSampling').value || 'adaptive';
+        const policy = CYCLE_SAMPLING_PRESETS[selected];
+        if (!policy) throw new RangeError('Choose a supported cycle sampling preset.');
+        return { ...policy };
+    }
+
     function randomizeSeed(crypto = globalThis.crypto) {
         if (!crypto?.getRandomValues) throw new Error('Secure randomization is unavailable in this browser. Enter a seed manually.');
         const input = document.getElementById('optSeed');
@@ -113,5 +127,5 @@ export function createControls(document) {
     }
 
     return { populateRequirementsDefaults, readWorkspaceRanges, readHomeHeightBounds,
-        readSamplingSettings, randomizeSeed };
+        readSamplingSettings, readCycleSampling, randomizeSeed };
 }

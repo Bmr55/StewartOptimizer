@@ -17,6 +17,7 @@ import { normalizeObjectiveSet, objectiveDefinitions } from './objectives.js';
 import { trajectoryFromRequirements, trajectoryIdentity, trajectorySummary } from '../model/trajectory.js';
 import { normalizeMassProperties, RIGID_BODY_FIELDS } from '../model/mass-properties.js';
 import { CYCLE_MODEL_VERSION } from '../contracts.js';
+import { DEFAULT_CYCLE_SAMPLING, LEGACY_CYCLE_SAMPLING, normalizeCycleSampling } from '../model/cycle-sampling.js';
 
 // Owns run state and population lifecycle. Numerical work and browser I/O live elsewhere.
 export class Optimizer {
@@ -31,6 +32,8 @@ export class Optimizer {
     }
     return new Optimizer(settings.requirements ?? {}, {
       ...settings,
+      // Runs saved before adaptive sampling used the fixed 64-sample schedule.
+      cycleSampling: settings.cycleSampling ?? LEGACY_CYCLE_SAMPLING,
       ranges: settings.bounds,
       referenceLayout: settings.reference_layout ?? null,
       onProgress,
@@ -42,6 +45,7 @@ export class Optimizer {
     generations = 5,
     ranges = {},
     sampling = { strategy: 'halton' },
+    cycleSampling = DEFAULT_CYCLE_SAMPLING,
     seed = 1,
     mutationRate = 0.35,
     objectiveSet = 'compact',
@@ -72,6 +76,7 @@ export class Optimizer {
     this.sampling = normalizeSampling(sampling.strategy === 'halton'
       ? { ...sampling, sequenceStart: sampling.sequenceStart ?? this.seed } : sampling);
     this.random = createRandom(this.seed);
+    this.cycleSampling = normalizeCycleSampling(cycleSampling);
     if (!Number.isFinite(mutationRate) || mutationRate < 0 || mutationRate > 1) {
       throw new RangeError('mutationRate must be a finite probability in [0, 1].');
     }
@@ -175,6 +180,7 @@ export class Optimizer {
     return { ranges: this.ranges, signal: this.abortController?.signal,
       payload: this.payload, stroke: this.stroke, frequency: this.frequency, cycleAxis: this.cycleAxis,
       trajectory: this.trajectory, trajectorySource: this.trajectorySource, massProperties: this.massProperties,
+      cycleSampling: this.cycleSampling,
       ballJointLimitDeg: this.ballJointLimitDeg,
       lowerBallJointLimitDeg: this.lowerBallJointLimitDeg,
       upperBallJointLimitDeg: this.upperBallJointLimitDeg,
@@ -283,8 +289,7 @@ export class Optimizer {
         this.referenceEvaluation = result;
       }
       results.push(result);
-      this.completedPoseWork += result.workspace.total + 1
-        + (result.cycle.failedSample ?? result.cycle.samples - 1) + 1;
+      this.completedPoseWork += result.workspace.total + 1 + result.cycle.samples;
       this.completedEvaluations += 1;
       this.onProgress?.({ completed: this.completedPoseWork,
         total: this.workEstimate.totalPoses, budgeted: this.workEstimate.totalPoses, generation: this.activeGeneration });
@@ -294,6 +299,7 @@ export class Optimizer {
 
   estimateWork() {
     return estimateWork({ ranges: this.ranges, sampling: this.sampling, trajectory: this.trajectory,
+      cycleSampling: this.cycleSampling,
       populationSize: this.populationSize, generations: this.generations });
   }
 
@@ -302,6 +308,7 @@ export class Optimizer {
       requirements: this.requirements,
       bounds: this.ranges,
       sampling: this.sampling,
+      cycleSampling: this.cycleSampling,
       seed: this.seed,
       randomAlgorithm: RANDOM_ALGORITHM,
       populationSize: this.populationSize,

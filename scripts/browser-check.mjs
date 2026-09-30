@@ -16,7 +16,7 @@ try {
   await page.waitForFunction(() => document.querySelector('#requirementsInput').value.includes('mass_kg'));
   assert.equal(await page.locator('#copyResultOutput').isEnabled(), false);
   const infoButtons = page.locator('.info-button');
-  assert.equal(await infoButtons.count(), 30);
+  assert.equal(await infoButtons.count(), 31);
   assert.equal(await infoButtons.first().getAttribute('aria-label'), 'More information');
   assert.match(await infoButtons.first().evaluate(button => getComputedStyle(button, '::before').maskImage), /info\.svg/);
   await infoButtons.first().click();

@@ -111,7 +111,7 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
     document.getElementById('optimizeTab').addEventListener('click', () => setTab('optimize'));
     document.getElementById('simulateTab').addEventListener('click', () => setTab('simulate'));
     const { populateRequirementsDefaults, readWorkspaceRanges, readHomeHeightBounds,
-        readSamplingSettings, randomizeSeed } = createControls(document);
+        readSamplingSettings, readCycleSampling, randomizeSeed } = createControls(document);
     const ratingControls = createServoRatingControls(document);
     function populate(parsed, preserveEdits = false) {
         populateRequirementsDefaults(parsed, preserveEdits);
@@ -211,7 +211,7 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
     function setRunning(running) {
         ratingControls.setDisabled(running);
         for (const id of ['runOptimization', 'loadSampleRequirements', 'clearRequirements',
-            'optSampling', 'optSeed', 'randomizeSeed', 'optPopulation', 'optGenerations',
+            'optSampling', 'optCycleSampling', 'optSeed', 'randomizeSeed', 'optPopulation', 'optGenerations',
             'optObjectiveSet', 'optMutationRate', 'clearReferenceLayout', 'referenceLayoutFile',
             'saveLocalWorkspace', 'restoreLocalWorkspace', 'deleteLocalWorkspace']) {
             document.getElementById(id).disabled = running;
@@ -326,6 +326,7 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
                 referenceLayout: referenceLayoutInput.value.trim() || null,
                 homeHeightBounds: readHomeHeightBounds(),
                 sampling,
+                cycleSampling: readCycleSampling(),
                 seed,
                 servoRatings,
                 ballJointLimitDeg: Number(ballJointLimitInput.value),
