@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { Optimizer } from '../../src/optimization/optimizer.js';
 import { DEFAULT_DESIGN_SPACE } from '../../src/optimization/layout-operators.js';
 import { topologyGeometry, validateTopology } from '../../src/optimization/topology.js';
+import { layoutToJSON } from '../../src/io/results.js';
 
 const families = ['circular', 'c3_paired', 'rectangular_paired', 'free'];
 
@@ -88,6 +89,25 @@ test('declared topology parameters recreate geometry exactly and inconsistent me
   const malformed = JSON.parse(JSON.stringify(layout));
   malformed.topologyParameters.base_pair_gap = -1;
   assert.throws(() => validateTopology(malformed), /topology_parameters\.base_pair_gap/);
+});
+
+test('exported layouts round-trip topology, parameters, geometry, units, and home height', () => {
+  for (const topology of families) {
+    const layout = new Optimizer({}, { topology }).createRandomLayout();
+    const json = JSON.parse(JSON.stringify(layoutToJSON(layout)));
+    assert.equal(json.schema_version, 2);
+    assert.equal(json.model_version, 2);
+    assert.equal(json.topology, topology);
+    assert.deepEqual(json.topology_parameters, layout.topologyParameters);
+    assert.deepEqual(json.base_anchors, layout.baseAnchors);
+    assert.deepEqual(json.platform_anchors, layout.platformAnchors);
+    assert.deepEqual(json.beta_angles, layout.betaAngles);
+    assert.equal(json.home_height, layout.homeHeight);
+    assert.equal(json.horn_length, layout.hornLength);
+    assert.equal(json.rod_length, layout.rodLength);
+    assert.deepEqual(json.servo_range, layout.servoRangeRad.map(radians => radians * 180 / Math.PI));
+    assert.equal(validateTopology(json), topology);
+  }
 });
 
 test('new searches default to C3 paired and reject unsupported topology and invalid height bounds', () => {
