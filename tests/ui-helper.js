@@ -6,7 +6,7 @@ export async function loadUI(Optimizer) {
   const elements = new Map();
   const element = id => {
     if (!elements.has(id)) elements.set(id, {
-      value: '', checked: false, disabled: false, handlers: {}, textContent: '',
+      _value: '', get value() { return this._value; }, set value(value) { this._value = String(value); }, checked: false, disabled: false, handlers: {}, textContent: '',
       classList: { toggle() {}, contains() { return false; }, remove() {}, add() {} },
       addEventListener(type, fn) { this.handlers[type] = fn; },
       setAttribute() {}, style: {}

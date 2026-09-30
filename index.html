@@ -466,14 +466,19 @@
                 rz: { min: 0, max: 0, step: 1 },
             };
             const parseValue = (id, fallbackValue) => {
-                const raw = Number(document.getElementById(id).value);
-                return Number.isFinite(raw) ? raw : fallbackValue;
+                const text = document.getElementById(id).value.trim();
+                if (!text) return fallbackValue;
+                const value = Number(text);
+                if (!Number.isFinite(value)) throw new Error(`${id} must be a finite number.`);
+                return value;
             };
-            const read = (prefix, defaults) => ({
-                min: parseValue(`opt${prefix}Min`, defaults.min),
-                max: parseValue(`opt${prefix}Max`, defaults.max),
-                step: Math.abs(parseValue(`opt${prefix}Step`, defaults.step)) || defaults.step,
-            });
+            const read = (prefix, defaults) => {
+                const min = parseValue(`opt${prefix}Min`, defaults.min);
+                const max = parseValue(`opt${prefix}Max`, defaults.max);
+                const step = parseValue(`opt${prefix}Step`, defaults.step);
+                if (max < min || step <= 0) throw new Error(`${prefix} range requires max >= min and step > 0.`);
+                return { min, max, step };
+            };
             return {
                 x: read('X', fallback.x),
                 y: read('Y', fallback.y),
@@ -558,8 +563,8 @@
                 const { normalized, workspace } = parseRequirements(text);
                 populateRequirementsDefaults({ normalized, workspace }, true);
 
-                const generations = Math.max(1, parseInt(document.getElementById('optGenerations').value, 10) || 1);
-                const populationSize = Math.max(4, parseInt(document.getElementById('optPopulation').value, 10) || 4);
+                const generations = Number(document.getElementById('optGenerations').value);
+                const populationSize = Number(document.getElementById('optPopulation').value);
                 const ranges = readWorkspaceRanges();
 
                 currentOptimizer = new Optimizer(normalized, {
