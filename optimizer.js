@@ -75,7 +75,7 @@ export class Optimizer {
     ranges = {},
     mutationRate = 0.35,
     designSpace = {},
-    ballJointLimitDeg = 52,
+    ballJointLimitDeg,
     ballJointClamp = true,
   } = {}) {
     this.requirements = requirements;
@@ -83,7 +83,7 @@ export class Optimizer {
     this.generations = Math.max(1, generations);
     this.ranges = ranges;
     this.mutationRate = clamp(mutationRate, 0, 1);
-    this.ballJointLimitDeg = requirements.ball_joint_max_deg ?? ballJointLimitDeg;
+    this.ballJointLimitDeg = ballJointLimitDeg ?? requirements.ball_joint_max_deg ?? 52;
     this.ballJointClamp = ballJointClamp;
     this.payload = requirements.mass_kg ?? 0;
     this.stroke = requirements.cycle_mm ?? 0;
