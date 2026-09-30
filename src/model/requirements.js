@@ -17,6 +17,8 @@ const LEGACY_CYCLE = ['cycle_mm', 'frequency_hz', 'cycle_axis'];
 const PAYLOAD_OPTIONAL = ['trajectory', ...RIGID_BODY_FIELDS];
 const TRANSLATIONS = ['x_range_mm', 'y_range_mm', 'z_range_mm'];
 const ROTATIONS = ['rx_range_deg', 'ry_range_deg', 'rz_range_deg'];
+const CONSTRAINTS = [...Object.keys(DEFAULTS), 'servo_max_deg', ...SERVO_RATING_KEYS, 'stiffness_model',
+  'workspace_payload_support'];
 
 function object(value, name) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -63,6 +65,19 @@ export function validatePhysicalRequirements(data) {
   range(data.servo_travel_bounds_deg, 'servo_travel_bounds_deg');
 }
 
+// A grouped document may still carry constraint keys at the top level; they are
+// merged rather than silently dropped, and a key present in both places is an error.
+function nestedConstraints(data) {
+  const grouped = 'constraints' in data ? object(data.constraints, 'constraints') : {};
+  const constraints = { ...grouped };
+  for (const key of CONSTRAINTS) {
+    if (!(key in data)) continue;
+    if (key in grouped) throw new Error(`Requirements ${key} appears both at the top level and in constraints.`);
+    constraints[key] = data[key];
+  }
+  return constraints;
+}
+
 export function parseRequirements(text) {
   let data;
   try { data = JSON.parse(text); }
@@ -89,7 +104,7 @@ export function parseRequirements(text) {
       source[key] = part[key];
     }
   }
-  const constraints = nested ? ('constraints' in data ? object(data.constraints, 'constraints') : {}) : data;
+  const constraints = nested ? nestedConstraints(data) : data;
   for (const key of [...SERVO_RATING_KEYS, 'stiffness_model', 'workspace_payload_support']) {
     if (key in constraints && constraints[key] === null) throw new Error(`${key} must not be null.`);
   }
@@ -102,8 +117,7 @@ export function parseRequirements(text) {
       }
     });
   }
-  for (const key of [...Object.keys(DEFAULTS), 'servo_max_deg', ...SERVO_RATING_KEYS, 'stiffness_model',
-    'workspace_payload_support']) {
+  for (const key of CONSTRAINTS) {
     if (key in constraints) source[key] = constraints[key];
   }
   const normalized = { ...source };

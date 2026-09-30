@@ -7,9 +7,9 @@ const FAILING_SAMPLE_LIMIT = 50;
 export function normalizePayloadSupport(input) {
   if (input == null) return null;
   if (typeof input !== 'object' || Array.isArray(input)) throw new TypeError('workspace_payload_support must be an object.');
-  const rating = input.rating ?? 'continuous';
+  const rating = input.rating === undefined ? 'continuous' : input.rating;
   if (!['continuous', 'peak'].includes(rating)) throw new RangeError('workspace_payload_support.rating must be continuous or peak.');
-  const policy = input.policy ?? 'enforced';
+  const policy = input.policy === undefined ? 'enforced' : input.policy;
   if (!['enforced', 'advisory'].includes(policy)) throw new RangeError('workspace_payload_support.policy must be enforced or advisory.');
   return { rating, policy };
 }

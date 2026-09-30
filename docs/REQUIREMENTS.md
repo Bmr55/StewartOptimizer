@@ -1,6 +1,6 @@
 # Requirements and validation
 
-Requirements may be flat or grouped into `payload`, `workspace`, `rotations`, and optional `constraints`. Nested payload/workspace/rotations must be objects containing their required fields. Both formats undergo the same validation. Errors identify the invalid field before evaluation begins. Numeric strings and null values are rejected; omission of an optional field uses its default.
+Requirements may be flat or grouped into `payload`, `workspace`, `rotations`, and optional `constraints`. Nested payload/workspace/rotations must be objects containing their required fields. In the grouped format, constraint keys may also sit at the top level and are merged into `constraints`; a key present in both places is rejected. Both formats undergo the same validation. Errors identify the invalid field before evaluation begins. Numeric strings and null values are rejected, including for optional sub-fields such as `trajectory.type`, `phase_deg`, `quadrants`, `servo_actuator` terms, `stiffness_model` options and `workspace_payload_support.rating`/`policy`; only `per_servo_ratings` entries may be null. Omission of an optional field uses its default.
 
 | Field | Domain / meaning | Default |
 | --- | --- | --- |

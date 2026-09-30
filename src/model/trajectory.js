@@ -17,7 +17,7 @@ export function normalizeTrajectory(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
     throw new TypeError('trajectory must be an object.');
   }
-  const type = input.type ?? 'sinusoid';
+  const type = input.type === undefined ? 'sinusoid' : input.type;
   if (type !== 'sinusoid') throw new RangeError('trajectory.type must be sinusoid.');
   const frequency = finiteNumber(input.frequency_hz, 'trajectory.frequency_hz');
   if (frequency < 0) throw new RangeError('trajectory.frequency_hz must be >= 0.');
@@ -38,7 +38,7 @@ export function normalizeTrajectory(input) {
     if (wrongKey in component) throw new RangeError(`${name} uses ${wrongKey}; ${axis} requires ${amplitudeKey}.`);
     const amplitude = finiteNumber(component[amplitudeKey], `${name}.${amplitudeKey}`);
     if (amplitude < 0) throw new RangeError(`${name}.${amplitudeKey} must be >= 0.`);
-    const phase = finiteNumber(component.phase_deg ?? 0, `${name}.phase_deg`);
+    const phase = finiteNumber(component.phase_deg === undefined ? 0 : component.phase_deg, `${name}.phase_deg`);
     return { axis, [amplitudeKey]: amplitude, phase_deg: phase };
   });
   return { type, frequency_hz: frequency, components };

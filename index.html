@@ -21,7 +21,7 @@
             <details class="requirements-guide">
                 <summary>Requirements reference</summary>
                 <div class="requirements-guide-content">
-                    <p>Requirements may be flat or grouped into <code>payload</code>, <code>workspace</code>, <code>rotations</code>, and optional <code>constraints</code>. Nested payload, workspace, and rotations must be objects containing their required fields. Both formats use the same validation. Errors identify the invalid field before evaluation begins. Numeric strings and null values are rejected; omitting an optional field uses its default.</p>
+                    <p>Requirements may be flat or grouped into <code>payload</code>, <code>workspace</code>, <code>rotations</code>, and optional <code>constraints</code>. Nested payload, workspace, and rotations must be objects containing their required fields. In the grouped format, constraint keys may also sit at the top level and are merged into <code>constraints</code>; a key present in both places is rejected. Both formats use the same validation. Errors identify the invalid field before evaluation begins. Numeric strings and null values are rejected, including optional sub-fields (only <code>per_servo_ratings</code> entries may be null); omitting an optional field uses its default.</p>
                     <div class="requirements-table-wrap">
                         <table>
                             <thead><tr><th scope="col">Field</th><th scope="col">Domain / meaning</th><th scope="col">Default</th></tr></thead>
