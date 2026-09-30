@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import { asymmetricJointFixture } from '../fixtures/layout.js';
 import { createSimulatorController } from '../../src/simulator/controller.js';
 import { buildSceneGeometry, createWebGLRenderer, projectPoint } from '../../src/simulator/renderer.js';
-import { GHOST_FAILURE_DEPTH_BIAS_MM, NEAR_LIMIT_MARGIN_RAD, OVERLAY_DEFAULTS, OVERLAY_NAMES, SCENE_BACKGROUND, SCENE_BUILDERS,
+import { GHOST_DEPTH_BIAS_MM, NEAR_LIMIT_MARGIN_RAD, OVERLAY_DEFAULTS, OVERLAY_NAMES, SCENE_BACKGROUND, SCENE_BUILDERS,
   SCENE_COLORS } from '../../src/simulator/scene.js';
 import { computeHornTip, hornLocalToWorld } from '../../src/model/kinematics.js';
 import { rotateVector, vectorAdd } from '../../src/math.js';
@@ -457,26 +457,29 @@ test('a failure is coloured once: on the ghost when it can draw it, otherwise on
   assert.deepEqual(heldLegColors(controller.requestPose({})), Array(6).fill(NORMAL_LEG));
 });
 
-test('ghost failure lines carry a depth bias that moves only their depth toward the camera', () => {
+test('ghost failure lines win depth ties with the held pose and dimmed ghost lines lose them', () => {
   const controller = createSimulatorController();
   controller.loadLayout(asymmetricJointFixture(), { options: { ballJointLimitDeg: 180,
     lowerBallJointLimitDeg: 180, upperBallJointLimitDeg: 3 } });
   const state = controller.requestPose({ x: 3, y: -2, z: 5, rx: 0.05, ry: -0.03, rz: 0.04 });
   const ghost = ghostOf(state);
-  assert.ok(ghost.some(line => line.color === SCENE_COLORS.failure));
+  assert.ok(ghost.some(line => line.color === SCENE_COLORS.failure) && ghost.some(line => isDimmed(line.color)));
   for (const line of ghost) {
-    assert.equal(line.depthBias, line.color === SCENE_COLORS.failure ? GHOST_FAILURE_DEPTH_BIAS_MM : undefined);
+    assert.equal(line.depthBias, line.color === SCENE_COLORS.failure ? GHOST_DEPTH_BIAS_MM : -GHOST_DEPTH_BIAS_MM);
   }
   const global = { ...state, assessment: { ...state.assessment, violations: [{ type: 'conditionLimit' }] } };
-  assert.ok(ghostOf(global).slice(0, 6).every(line => line.depthBias === GHOST_FAILURE_DEPTH_BIAS_MM));
-  assert.ok(ghostOf(global).slice(6).every(line => line.depthBias === undefined));
+  assert.ok(ghostOf(global).slice(0, 6).every(line => line.depthBias === GHOST_DEPTH_BIAS_MM));
+  assert.ok(ghostOf(global).slice(6).every(line => line.depthBias === -GHOST_DEPTH_BIAS_MM));
   // No other builder biases its lines.
   assert.ok(buildSceneGeometry({ ...state, overlays: { ...state.overlays, requestedGhost: false } })
     .lines.every(line => line.depthBias === undefined));
-  // The bias shifts depth by exactly its length in the depth mapping and leaves x and y alone.
+  // The bias shifts depth by exactly its length in the depth mapping, either
+  // way, and leaves x and y alone.
   const camera = { target: [0, 0, 100], yaw: 0.7, pitch: 0.4, distance: 600 };
   const plainPoint = projectPoint([10, -20, 150], camera, 800, 500);
-  const biased = projectPoint([10, -20, 150], camera, 800, 500, GHOST_FAILURE_DEPTH_BIAS_MM);
-  assert.deepEqual(biased.slice(0, 2), plainPoint.slice(0, 2));
-  assert.ok(Math.abs((plainPoint[2] - biased[2]) - GHOST_FAILURE_DEPTH_BIAS_MM * 2 / 2000) < 1e-12);
+  for (const bias of [GHOST_DEPTH_BIAS_MM, -GHOST_DEPTH_BIAS_MM]) {
+    const biased = projectPoint([10, -20, 150], camera, 800, 500, bias);
+    assert.deepEqual(biased.slice(0, 2), plainPoint.slice(0, 2));
+    assert.ok(Math.abs((plainPoint[2] - biased[2]) - bias * 2 / 2000) < 1e-12);
+  }
 });

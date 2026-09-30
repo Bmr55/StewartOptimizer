@@ -20,9 +20,11 @@ const COLORS = SCENE_COLORS;
 // The canvas clear colour; the ghost dims toward it instead of blending.
 export const SCENE_BACKGROUND = Object.freeze([0.055, 0.075, 0.11]);
 const GHOST_BRIGHTNESS = 0.35;
-// A small overshoot puts the ghost almost on top of the held pose; its failure
-// lines are drawn this far (mm) toward the camera so they are not hidden there.
-export const GHOST_FAILURE_DEPTH_BIAS_MM = 10;
+// A small overshoot puts the ghost almost on top of the held pose, where equal
+// depths would flicker between the two as the camera moves. Ghost failure lines
+// are drawn this far (mm) toward the camera and dimmed ghost lines this far away
+// from it, so there the held pose shows with any failure on top.
+export const GHOST_DEPTH_BIAS_MM = 10;
 const dim = color => color.map((value, k) => SCENE_BACKGROUND[k] + (value - SCENE_BACKGROUND[k]) * GHOST_BRIGHTNESS);
 
 // Toggleable overlays and whether each is drawn when a state or saved file
@@ -192,21 +194,22 @@ function requestedGhost(state, layout) {
   const platformFailure = violations.some(violation => !Number.isInteger(violation.leg));
   const platformPoints = layout.platformAnchors.map(anchor =>
     vectorAdd(requested.translation, rotateVector(requested.rotationMatrix, anchor)));
-  const outlineStart = lines.length;
   polygon(lines, platformPoints, platformFailure ? COLORS.globalFailure : dim(COLORS.platform));
-  if (platformFailure) lines.slice(outlineStart).forEach(line => { line.depthBias = GHOST_FAILURE_DEPTH_BIAS_MM; });
   const hornTips = requested.hornTips ?? [];
   for (let i = 0; i < 6; i++) {
     if (!hornTips[i]) continue;
     const failed = failedLegs.has(i);
-    const emphasis = failed ? { depthBias: GHOST_FAILURE_DEPTH_BIAS_MM } : {};
-    lines.push({ from: layout.baseAnchors[i], to: hornTips[i], color: failed ? COLORS.failure : dim(COLORS.horn), ...emphasis });
-    lines.push({ from: hornTips[i], to: platformPoints[i], color: failed ? COLORS.failure : dim(COLORS.rod), ...emphasis });
+    lines.push({ from: layout.baseAnchors[i], to: hornTips[i], color: failed ? COLORS.failure : dim(COLORS.horn) });
+    lines.push({ from: hornTips[i], to: platformPoints[i], color: failed ? COLORS.failure : dim(COLORS.rod) });
   }
   const axis = Math.max(18, layout.hornLength * 0.35);
   const column = index => requested.rotationMatrix.map(row => row[index]);
   for (const [index, color] of [[0, COLORS.x], [1, COLORS.y], [2, COLORS.z]]) {
     lines.push({ from: requested.translation, to: vectorAdd(requested.translation, vectorScale(column(index), axis)), color: dim(color) });
+  }
+  for (const line of lines) {
+    const failure = line.color === COLORS.failure || line.color === COLORS.globalFailure;
+    line.depthBias = failure ? GHOST_DEPTH_BIAS_MM : -GHOST_DEPTH_BIAS_MM;
   }
   return { lines, points: [] };
 }

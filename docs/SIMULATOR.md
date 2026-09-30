@@ -215,11 +215,13 @@ brightness, and a whole-platform failure outlines the ghost platform in the
 global-failure colour. An accepted request draws no ghost. Each failure is
 coloured once, on the geometry that failed: while the ghost draws a failing leg
 or the whole-platform failure, the held accepted pose keeps its normal colours
-for it (see Live diagnostics). The ghost's failure-coloured lines are drawn
-with a depth bias of `GHOST_FAILURE_DEPTH_BIAS_MM` (10 mm) toward the camera, which
-changes only their depth value, not where they appear: a request just past a
-limit puts the ghost almost on top of the held legs, and without the bias the
-held legs would hide its red legs.
+for it (see Live diagnostics). A request just past a limit puts the ghost almost on top
+of the held pose, where equal depths would make the lines flicker between the
+two layers as the camera moves. Each ghost line therefore carries a depth bias
+of `GHOST_DEPTH_BIAS_MM` (10 mm), which changes only its depth value, not where
+it appears: failure-coloured ghost lines are pulled toward the camera so they
+show on top, and dimmed ghost lines are pushed away so the held pose shows
+wherever the two overlap.
 
 ## Live diagnostics
 
