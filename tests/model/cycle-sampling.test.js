@@ -18,7 +18,11 @@ const dense = { strategy: 'uniform', samples: 1024 };
 const relativeError = (reference, value) => Math.abs(reference - value) / reference;
 
 test('policies validate and the legacy uniform schedule reproduces 64-phase outputs', () => {
-  assert.deepEqual(normalizeCycleSampling(), DEFAULT_CYCLE_SAMPLING);
+  // The documented default (docs/CYCLE_MODEL.md), spelled out so a drifted constant cannot agree with itself.
+  const documentedDefault = { strategy: 'adaptive', initialSamples: 32, maxSamples: 256, tolerance: 0.005, inconclusivePolicy: 'enforced' };
+  assert.deepEqual(DEFAULT_CYCLE_SAMPLING, documentedDefault);
+  assert.deepEqual(normalizeCycleSampling(), documentedDefault);
+  assert.deepEqual(normalizeCycleSampling({ strategy: 'adaptive' }), documentedDefault);
   for (const bad of [{ strategy: 'random' }, { strategy: 'adaptive', initialSamples: 32, maxSamples: 40 },
     { strategy: 'adaptive', tolerance: 0 }, { strategy: 'uniform', samples: 2000 },
     { strategy: 'adaptive', inconclusivePolicy: 'ignore' }]) {
@@ -142,7 +146,7 @@ test('nonuniform samples receive trapezoidal time weights', () => {
   assert.deepEqual(periodicSampleWeights([0], 0), [1]);
 });
 
-test('saved effective policies replay sample decisions; older runs replay the legacy schedule', async () => {
+test('a replayed effective policy is deterministic (samples and torques replay identically); older runs replay the legacy schedule', async () => {
   const requirements = { mass_kg: 2, cycle_mm: 12, frequency_hz: 2, cycle_axis: 'x' };
   const settings = { populationSize: 4, generations: 1, ranges: {}, sampling: { strategy: 'grid' }, seed: 5,
     cycleSampling: { strategy: 'adaptive', initialSamples: 16, maxSamples: 128, tolerance: 0.0005 } };
