@@ -1,4 +1,6 @@
 import { vectorAdd, vectorScale } from '../math.js';
+import { hornFrameAxes } from '../model/kinematics.js';
+import { effectiveServoRange } from '../model/pose.js';
 
 // The scene is a list of builders, each `(state, layout, solved) => { lines, points }`.
 // `solved` is the accepted assessment (it may be null); nothing here evaluates a
@@ -12,13 +14,18 @@ export const SCENE_COLORS = Object.freeze({
   failure: [1, 0.26, 0.32], globalFailure: [1, 0.38, 0.8],
   servo: [1, 0.42, 0.39], trace: [0.72, 0.5, 1],
   x: [1, 0.38, 0.38], y: [0.39, 0.92, 0.47], z: [0.42, 0.62, 1],
+  limitRange: [0.5, 0.56, 0.66], nearLimit: [1, 0.88, 0.2],
 });
 const COLORS = SCENE_COLORS;
 
 // Toggleable overlays and whether each is drawn when a state or saved file
 // does not say. New overlays default off unless their issue says otherwise.
-export const OVERLAY_DEFAULTS = Object.freeze({ platformAxes: true, worldAxes: true });
+export const OVERLAY_DEFAULTS = Object.freeze({ servoArcs: true, platformAxes: true, worldAxes: true });
 export const OVERLAY_NAMES = Object.freeze(Object.keys(OVERLAY_DEFAULTS));
+// Limit overlays (servo travel, socket cones) tint a value this close to its
+// limit as a warning before the evaluator rejects it: 5°, in radians.
+export const NEAR_LIMIT_MARGIN_RAD = 5 * Math.PI / 180;
+const SERVO_ARC_SEGMENTS = 24;
 
 function polygon(lines, points, color) {
   points.forEach((point, i) => lines.push({ from: point, to: points[(i + 1) % points.length], color }));
@@ -71,6 +78,35 @@ function legs(state, layout, solved) {
   return { lines, points };
 }
 
+// Each servo's allowed travel drawn as an arc of horn-length radius about the
+// base anchor, in the horn plane the evaluator uses, with ticks at both stops
+// and a marker across the arc at the accepted horn angle. Failure colour when
+// the requested pose breaks this servo's range, a warning tint when the
+// accepted angle is within NEAR_LIMIT_MARGIN_RAD of a stop.
+function servoArcs(state, layout, solved) {
+  const lines = [];
+  const [min, max] = effectiveServoRange(layout, state.options ?? {});
+  const violations = state.assessment?.violations ?? [];
+  const at = (i, alpha, scale) => vectorAdd(layout.baseAnchors[i],
+    vectorScale(hornFrameAxes(layout.betaAngles[i], alpha)[0], layout.hornLength * scale));
+  for (let i = 0; i < 6; i++) {
+    const angle = solved?.servoAngles?.[i];
+    const color = violations.some(violation => violation.type === 'servoLimit' && violation.leg === i) ? COLORS.failure
+      : Number.isFinite(angle) && Math.min(angle - min, max - angle) < NEAR_LIMIT_MARGIN_RAD ? COLORS.nearLimit
+        : COLORS.limitRange;
+    for (let step = 0; step < SERVO_ARC_SEGMENTS; step++) {
+      const alpha = min + (max - min) * step / SERVO_ARC_SEGMENTS;
+      const next = step + 1 === SERVO_ARC_SEGMENTS ? max : min + (max - min) * (step + 1) / SERVO_ARC_SEGMENTS;
+      lines.push({ from: at(i, alpha, 1), to: at(i, next, 1), color });
+    }
+    for (const stop of [min, max]) lines.push({ from: at(i, stop, 0.85), to: at(i, stop, 1.15), color });
+    if (Number.isFinite(angle)) {
+      lines.push({ from: at(i, angle, 0.8), to: at(i, angle, 1.25), color: color === COLORS.limitRange ? COLORS.horn : color });
+    }
+  }
+  return { lines, points: [] };
+}
+
 function platformAxes(state, layout, solved) {
   const lines = [];
   if (!hasSolvedLegs(solved)) return { lines, points: [] };
@@ -100,6 +136,7 @@ export const SCENE_BUILDERS = Object.freeze([
   { name: 'base', build: base },
   { name: 'platform', build: platform },
   { name: 'legs', build: legs },
+  { name: 'servoArcs', overlay: 'servoArcs', build: servoArcs },
   { name: 'platformAxes', overlay: 'platformAxes', build: platformAxes },
   { name: 'worldAxes', overlay: 'worldAxes', build: worldAxes },
   { name: 'trace', build: trace },

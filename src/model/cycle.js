@@ -1,4 +1,4 @@
-import { evaluatePose } from './pose.js';
+import { effectiveServoRange, evaluatePose } from './pose.js';
 import { resolveMounting } from './mounting.js';
 import { vectorNormalize, vectorCross, vectorDot, vectorScale, vectorAdd, vectorSub,
   rotateVector } from '../math.js';
@@ -190,7 +190,7 @@ export function computeCycleDemand(layout, { mass = 0, stroke = 0, frequency = 0
   const stationary = isStationary(effectiveTrajectory);
   const period = stationary ? 0 : 1 / effectiveTrajectory.frequency_hz;
   const effectiveMounting = mounting ?? resolveMounting(layout).mounting;
-  const servoRange = layout.servoRangeRad || [-Math.PI / 2, Math.PI / 2];
+  const servoRange = effectiveServoRange(layout);
   const identity = {
     trajectory: effectiveTrajectory, trajectoryId: trajectoryIdentity(effectiveTrajectory),
     trajectorySource: trajectorySource ?? (trajectory ? 'supplied' : 'legacy-cycle'),
