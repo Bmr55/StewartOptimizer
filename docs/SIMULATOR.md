@@ -84,7 +84,9 @@ shown.
 
 The native WebGL2 renderer reads only the accepted evaluator geometry: base
 anchors, solved horn tips, actual rods, platform points, servo orientation
-angles and platform frame. Orbit camera is the initial mouse mode: dragging changes yaw and pitch, the
+angles and platform frame. Orbit camera is the initial mouse mode: dragging with the primary button or
+first touch changes yaw and pitch (a right click or second finger does not
+reset the drag), the
 wheel zooms between 80 and 2,500 units, and **Reset camera** restores the
 default view. The projected depth range follows the camera distance so a
 zoomed-out view keeps near/far line ordering instead of saturating the depth

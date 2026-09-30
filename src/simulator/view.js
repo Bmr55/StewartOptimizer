@@ -106,6 +106,8 @@ export function createSimulatorView({ document, window, controller, isActive = (
   }));
 
   canvas.addEventListener('pointerdown', event => {
+    // A right click or a second touch must not reset the drag origin.
+    if ((event.button ?? 0) !== 0 || event.isPrimary === false) return;
     drag = { x: event.clientX, y: event.clientY };
     canvas.setPointerCapture?.(event.pointerId);
     event.preventDefault?.();

@@ -33,6 +33,16 @@ try {
   const optimizationPanel = page.locator('#optimizationParameters');
   assert.equal(await optimizationPanel.getAttribute('open'), null);
   assert.equal(await page.locator('#optPopulation').isVisible(), false);
+  // The off-screen info button is scrolled into view and clicked in the same
+  // frame; the deferred scroll event must not close the popup (#109).
+  await page.evaluate(() => { const button = document.querySelector('.optimization-info'); button.scrollIntoView(); button.click(); });
+  assert.equal(await page.locator('.info-popup.visible').count(), 1);
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  assert.equal(await page.locator('.info-popup.visible').count(), 1, 'the scroll event after the opening click closed the popup');
+  assert.equal(await page.locator('.optimization-info').getAttribute('aria-expanded'), 'true');
+  await page.evaluate(() => window.scrollBy(0, -40));
+  await page.waitForFunction(() => !document.querySelector('.info-popup.visible'));
+  assert.equal(await page.locator('.optimization-info').getAttribute('aria-expanded'), 'false');
   await page.locator('.optimization-info').click();
   assert.equal(await optimizationPanel.getAttribute('open'), null);
   assert.match(await page.locator('.info-popup.visible').innerText(), /genetic algorithm/i);

@@ -95,8 +95,10 @@ export function mountSimulatorDiagnostics({ document, controller, host = documen
     setValue('simUpperJointLimit', diagnostics.upperLimitDeg);
     setValue('simRodTolerance', diagnostics.rodLengthToleranceMm);
     field('simConditionPolicy').textContent = `Condition limit: ${diagnostics.conditionLimit ?? 'none'}; mandatory reciprocal cutoff: ${diagnostics.numericalThreshold}. Joint limits ${diagnostics.lowerLimitDeg}° lower / ${diagnostics.upperLimitDeg}° upper; rod tolerance ±${diagnostics.rodLengthToleranceMm} mm.`;
-    field('simGlobalFailures').textContent = diagnostics.globalFailures.length
+    const globalFailures = diagnostics.globalFailures.length
       ? `Whole-platform failure: ${diagnostics.globalFailures.map(failure => failure.type).join(', ')}.` : 'No whole-platform failure.';
+    // aria-live: rewrite only on change so animation frames do not re-announce it.
+    if (field('simGlobalFailures').textContent !== globalFailures) field('simGlobalFailures').textContent = globalFailures;
     field('simDiagnosticRows').innerHTML = diagnostics.legs.map(leg => {
       const labels = leg.failures.map(failure => `${failure.type}${failure.joint ? ` (${failure.joint})` : ''}`);
       return `<tr data-leg="${leg.leg}" class="${leg.failures.length ? 'sim-leg-failure' : ''}">
