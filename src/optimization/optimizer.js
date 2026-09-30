@@ -249,7 +249,6 @@ export class Optimizer {
       child.id = this.nextLayoutId++;
       child.seedOrigin = 'offspring';
       delete child.referenceDiagnostics;
-      delete child.servoRangeDeg;
       delete child.migration;
       offspring.push(child);
     }

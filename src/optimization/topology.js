@@ -33,19 +33,29 @@ function rectangle(radius, aspect, orientation) {
     rotate([column * halfWidth, row * halfDepth, 0], orientation)));
 }
 
+const COMMON_FIELDS = ['base_radius', 'platform_radius', 'base_orientation', 'platform_orientation', 'beta_offset'];
+const TOPOLOGY_FIELDS = Object.freeze({
+  circular: Object.freeze([...COMMON_FIELDS, 'beta_pair_offset']),
+  c3_paired: Object.freeze([...COMMON_FIELDS, 'base_pair_gap', 'platform_pair_gap']),
+  rectangular_paired: Object.freeze([...COMMON_FIELDS, 'beta_pair_offset', 'base_aspect', 'platform_aspect']),
+  free: Object.freeze([]),
+});
+
+// The parameter fields of a topology in a fixed order (the order generated
+// layouts have always used), independent of the key order of an imported
+// topology_parameters object. beta_pair_offset is optional and defaults to 0.
+export function topologyFields(topology) {
+  if (!TOPOLOGIES.includes(topology)) throw new Error(`topology must be one of ${TOPOLOGIES.join(', ')}.`);
+  return TOPOLOGY_FIELDS[topology];
+}
+
 export function topologyGeometry(topology, parameters) {
   if (!TOPOLOGIES.includes(topology)) throw new Error(`topology must be one of ${TOPOLOGIES.join(', ')}.`);
   if (topology === 'free') throw new Error('Free topology has no parametric geometry.');
   if (!parameters || typeof parameters !== 'object' || Array.isArray(parameters)) {
     throw new Error('topology_parameters must be an object.');
   }
-  const fields = topology === 'c3_paired'
-    ? ['base_radius', 'platform_radius', 'base_pair_gap', 'platform_pair_gap',
-      'base_orientation', 'platform_orientation', 'beta_offset']
-    : topology === 'rectangular_paired'
-      ? ['base_radius', 'platform_radius', 'base_aspect', 'platform_aspect',
-        'base_orientation', 'platform_orientation', 'beta_offset']
-      : ['base_radius', 'platform_radius', 'base_orientation', 'platform_orientation', 'beta_offset'];
+  const fields = topologyFields(topology).filter(field => field !== 'beta_pair_offset');
   for (const field of fields) {
     if (!Number.isFinite(parameters[field])) throw new Error(`topology_parameters.${field} must be finite.`);
   }
