@@ -136,6 +136,22 @@
                     </div>
                 </label>
             </div>
+            <div class="section-title"><h2>Servo ratings</h2></div>
+            <p>Optional capacity limits. Speed is entered in degrees per second and compared with cycle demand in radians per second. Per-servo values override shared values.</p>
+            <div class="grid result-controls">
+                <label class="field">Shared torque (N m)<input type="number" id="servoTorqueRating" min="0" step="any" placeholder="Unrated"></label>
+                <label class="field">Shared speed (deg/s)<input type="number" id="servoSpeedRating" min="0" step="any" placeholder="Unrated"></label>
+                <label class="field">Rating policy<select id="servoRatingPolicy"><option value="enforced">Enforced</option><option value="advisory">Advisory</option></select></label>
+            </div>
+            <div class="servo-rating-grid" aria-label="Per-servo rating overrides">
+                <span>Servo</span><span>Torque (N m)</span><span>Speed (deg/s)</span>
+                <label for="servoTorque1">1</label><input type="number" id="servoTorque1" step="any" placeholder="Shared"><input type="number" id="servoSpeed1" step="any" placeholder="Shared">
+                <label for="servoTorque2">2</label><input type="number" id="servoTorque2" step="any" placeholder="Shared"><input type="number" id="servoSpeed2" step="any" placeholder="Shared">
+                <label for="servoTorque3">3</label><input type="number" id="servoTorque3" step="any" placeholder="Shared"><input type="number" id="servoSpeed3" step="any" placeholder="Shared">
+                <label for="servoTorque4">4</label><input type="number" id="servoTorque4" step="any" placeholder="Shared"><input type="number" id="servoSpeed4" step="any" placeholder="Shared">
+                <label for="servoTorque5">5</label><input type="number" id="servoTorque5" step="any" placeholder="Shared"><input type="number" id="servoSpeed5" step="any" placeholder="Shared">
+                <label for="servoTorque6">6</label><input type="number" id="servoTorque6" step="any" placeholder="Shared"><input type="number" id="servoSpeed6" step="any" placeholder="Shared">
+            </div>
         </section>
 
         <section>

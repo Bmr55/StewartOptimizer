@@ -1,3 +1,5 @@
+import { normalizeServoRatings } from './servo-ratings.js';
+
 const DEFAULTS = {
   ball_joint_max_deg: 45,
   servo_travel_bounds_deg: [-120, 120],
@@ -63,7 +65,20 @@ export function parseRequirements(text) {
     }
   }
   const constraints = nested ? ('constraints' in data ? object(data.constraints, 'constraints') : {}) : data;
-  for (const key of [...Object.keys(DEFAULTS), 'servo_max_deg']) {
+  for (const key of ['servo_torque_rating_nm', 'servo_speed_rating_deg_s', 'servo_rating_policy', 'per_servo_ratings']) {
+    if (key in constraints && constraints[key] === null) throw new Error(`${key} must not be null.`);
+  }
+  if (Array.isArray(constraints.per_servo_ratings)) {
+    constraints.per_servo_ratings.forEach((entry, index) => {
+      for (const key of ['torque_nm', 'speed_deg_s']) {
+        if (entry && typeof entry === 'object' && key in entry && entry[key] === null) {
+          throw new Error(`per_servo_ratings[${index}].${key} must not be null.`);
+        }
+      }
+    });
+  }
+  for (const key of [...Object.keys(DEFAULTS), 'servo_max_deg', 'servo_torque_rating_nm',
+    'servo_speed_rating_deg_s', 'per_servo_ratings', 'servo_rating_policy']) {
     if (key in constraints) source[key] = constraints[key];
   }
   const normalized = { ...source };
@@ -81,6 +96,8 @@ export function parseRequirements(text) {
     normalized[key] = range(normalized[key], key);
   }
   validatePhysicalRequirements(normalized);
+  normalizeServoRatings(normalized);
+  normalized.servo_rating_policy ??= 'enforced';
   const workspace = {};
   [...TRANSLATIONS, ...ROTATIONS].forEach((key, index) => {
     const [min, max] = normalized[key];

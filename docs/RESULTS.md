@@ -12,6 +12,8 @@ Strict mode is the default. In optional soft-ball-joint mode, `metadata.relaxed_
 
 The three feasibility flags report sampled workspace satisfaction, home-pose satisfaction and cycle satisfaction independently. They describe the implemented checks only. The candidate browser includes every retained candidate, including diagnostic failures and coincident chart points. Passing candidates rank ahead of diagnostics. Diagnostics rank by fewer failed categories, then greater feasible coverage, then lower available torque/speed demand. Initial selection among passing candidates is lowest torque, then speed, then better conditioning; with no passing candidate, it uses diagnostic order. The X/Y chart defaults to torque versus speed and can use other available metrics. The keyboard-accessible candidate list changes the displayed and downloaded layout. A new run clears the prior selection.
 
+Supplied servo ratings add a separate capacity check to the feasibility flags. Enforced mode is the default: a rated demand that exceeds its limit or is unavailable makes the candidate diagnostic and affects ranking. Advisory mode keeps the capacity status and warning visible without disqualifying the candidate for capacity alone. No ratings means demand-only results.
+
 ## Metric meanings
 
 | Export metadata | Calculation / interpretation |
@@ -48,12 +50,16 @@ The download is `optimized_layout.json` with these top-level fields:
 | diagnostic | True when this result fails an enforced requirement |
 | metadata | Metrics described above |
 | cycle | Validity, axis, phase count, peak demands, per-servo peaks/model when valid, failure reason when invalid |
+| conditioning | Compact home, workspace, cycle, limit, and numerical threshold summary; nonfinite values are null |
+| servo_capacity | Effective shared and per-servo ratings, source (`shared`, `override`, `unrated`), policy, per-servo torque/speed status and margins, worst fractional headroom |
 | feasibility | Independent sampled-workspace, home-pose and cycle flags, passing status, failed categories, and scope text |
 | constraint_policy | Strict/soft workspace policy, effective joint limits, mandatory numerical cutoff, and optional engineering condition limit |
 | workspace_counts / workspace_stats | Full sweep counters and aggregated statistics |
 | run | completed/cancelled status, completed generation count, partial flag, and effective replay settings |
 
 The on-screen JSON has a `run`/`result` wrapper and includes bounded example poses; it is not byte-for-byte identical to the download. Pose samples store translation offsets in mm and Euler angles in radians. Internal servo angles/statistics are radians. Cycles are always checked strictly, even when workspace exploration is soft. Unavailable demand is null with an explicit reason, never an implicit zero.
+
+Servo-capacity torque demand and rating use N m; speed demand and effective rating use rad/s. Each rated metric reports `below`, `at`, `above`, or `unavailable`; an unrated metric reports `unrated`. Headroom is rating minus demand, and fractional headroom divides by rating. Negative headroom means an exceeded rating. The worst fraction is the minimum across rated metrics when all rated demands are available; otherwise it is null. An invalid cycle cannot pass an enforced rating. The run's effective settings record the final rating policy and all effective per-servo ratings for replay.
 
 Replay uses the saved normalized requirements, bounds, sampling strategy/count and sequence start, seed, random algorithm, population and generation counts, mutation rate, design space, and effective joint/servo policies. `mulberry32-v1` drives candidate evolution and bounded example-pose retention. A seed is reused until changed explicitly; Randomize draws a new 32-bit seed from the browser. Equal effective settings reproduce candidate layouts and sampled results in the same model version. The work budget reserves all workspace poses, one home check and up to 64 cycle checks per candidate; early cycle failure may leave actual work below the budget.
 

@@ -12,6 +12,7 @@ import { validateConditionLimit } from '../model/conditioning.js';
 import { importLayout } from '../io/layout-import.js';
 import { evaluatePose } from '../model/pose.js';
 import { initialPopulation, referenceBoundsConflicts, seedComposition } from './reference-seeding.js';
+import { normalizeServoRatings } from '../model/servo-ratings.js';
 
 // Owns run state and population lifecycle. Numerical work and browser I/O live elsewhere.
 export class Optimizer {
@@ -48,6 +49,7 @@ export class Optimizer {
     upperBallJointLimitDeg,
     conditionLimit = null,
     ballJointClamp = false,
+    servoRatings,
     onProgress,
   } = {}) {
     if (!Number.isSafeInteger(populationSize) || populationSize < 4
@@ -75,6 +77,12 @@ export class Optimizer {
     this.upperBallJointLimitDeg = upperBallJointLimitDeg ?? this.ballJointLimitDeg;
     this.conditionLimit = validateConditionLimit(conditionLimit);
     this.ballJointClamp = ballJointClamp;
+    const ratingKeys = ['servo_torque_rating_nm', 'servo_speed_rating_deg_s',
+      'per_servo_ratings', 'servo_rating_policy'];
+    this.servoRatingsInput = Object.fromEntries(ratingKeys
+      .filter(key => Object.hasOwn(servoRatings ?? {}, key) || Object.hasOwn(requirements, key))
+      .map(key => [key, Object.hasOwn(servoRatings ?? {}, key) ? servoRatings[key] : requirements[key]]));
+    this.servoRatings = normalizeServoRatings(this.servoRatingsInput);
     this.payload = requirements.mass_kg ?? 0;
     this.stroke = requirements.cycle_mm ?? 0;
     this.frequency = requirements.frequency_hz ?? 0;
@@ -154,7 +162,8 @@ export class Optimizer {
       upperBallJointLimitDeg: this.upperBallJointLimitDeg,
       conditionLimit: this.conditionLimit,
       ballJointClamp: this.ballJointClamp,
-      servoRangeRad: this.servoRangeRad, sampling: this.sampling };
+      servoRangeRad: this.servoRangeRad, sampling: this.sampling,
+      servoRatings: this.servoRatings };
   }
 
   evaluateLayout(layout) {
@@ -284,9 +293,11 @@ export class Optimizer {
       conditionLimit: this.conditionLimit,
       ballJointClamp: this.ballJointClamp,
       servoRangeDeg: this.servoRangeDeg,
+      servoRatings: this.servoRatingsInput,
+      effectiveServoRatings: this.servoRatings,
+      servoRatingPolicy: this.servoRatings.policy,
       objectiveSet: ['coverage', 'relaxedCoverage', 'dexterity', 'stiffness', 'loadBalance',
         'isotropy', 'limitMargin', 'torque', 'speedDemand', 'fatigue'],
-      servoRatingPolicy: 'not-enforced',
       reference_layout: this.referenceLayout ? layoutToJSON(this.referenceLayout) : null,
       seed_composition: this.referenceLayout ? seedComposition(this.populationSize) : null,
     }));

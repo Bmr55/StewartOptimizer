@@ -245,6 +245,13 @@ button.primary:hover {
     gap: 12px;
 }
 
+.servo-rating-grid {
+    display: grid;
+    grid-template-columns: 50px repeat(2, minmax(120px, 1fr));
+    align-items: center;
+    gap: 8px;
+}
+
 .result-controls {
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }

@@ -12,13 +12,13 @@ export function failureCategories(evaluation) {
   if (flags.sampledWorkspaceSatisfied === false) categories.add('workspace');
   if (flags.cycleSatisfied === false || evaluation?.cycle?.valid === false) categories.add('cycle');
   if (flags.conditionSatisfied === false) categories.add('conditioning');
-  if (flags.servoCapacitySatisfied === false) categories.add('servo_capacity');
+  if (flags.servoCapacityEnforced && flags.servoCapacitySatisfied === false) categories.add('servo_capacity');
   return [...categories].sort();
 }
 
 export function isPassing(evaluation) {
-  if (typeof evaluation?.feasibility?.passing === 'boolean') return evaluation.feasibility.passing;
-  return failureCategories(evaluation).length === 0;
+  if (failureCategories(evaluation).length) return false;
+  return evaluation?.feasibility?.passing !== false;
 }
 
 function compareAvailableDemand(a, b) {
@@ -91,6 +91,12 @@ function metricValues(evaluation, json = false) {
   return Object.fromEntries(Object.entries(METRICS).map(([key, info]) => [json ? info.json : key, finite(evaluation[key])]));
 }
 
+function conditioningSummary(evaluation) {
+  if (!evaluation.conditioning) return null;
+  const { jacobianRows: _rows, ...home } = evaluation.conditioning.home ?? {};
+  return JSON.parse(JSON.stringify({ ...evaluation.conditioning, home }));
+}
+
 export function resultFeasibility(evaluation) {
   return {
     ...evaluation.feasibility,
@@ -107,6 +113,8 @@ export function displayResult(evaluation) {
     metrics: metricValues(evaluation),
     layout: layoutToJSON(evaluation.layout, rad => rad * 180 / Math.PI),
     cycle: evaluation.cycle,
+    conditioning: conditioningSummary(evaluation),
+    servo_capacity: evaluation.servoCapacity ?? null,
     feasibility: resultFeasibility(evaluation),
     constraint_policy: evaluation.workspace?.constraintPolicy,
     workspace_stats: evaluation.workspace?.stats,
@@ -122,6 +130,8 @@ export function exportResult(evaluation, run) {
     reference_diagnostics: evaluation.referenceDiagnostics ?? null,
     metadata: metricValues(evaluation, true),
     cycle: evaluation.cycle ?? null,
+    conditioning: conditioningSummary(evaluation),
+    servo_capacity: evaluation.servoCapacity ?? null,
     feasibility: resultFeasibility(evaluation),
     constraint_policy: evaluation.workspace?.constraintPolicy ?? null,
     workspace_counts: evaluation.workspace?.counts ?? null,
