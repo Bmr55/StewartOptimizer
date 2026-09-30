@@ -8,13 +8,13 @@ const EPS = 1e-9;
 
 export async function evaluateLayout(layout, options) {
   const { ranges, signal, onProgress, payload, stroke, frequency, ballJointLimitDeg, ballJointClamp,
-    lowerBallJointLimitDeg, upperBallJointLimitDeg } = options;
+    lowerBallJointLimitDeg, upperBallJointLimitDeg, sampling, random, onPoseWork } = options;
   const mounting = resolveMounting(layout).mounting;
   layout.mounting = mounting;
   const workspaceResult = await computeWorkspace(layout, ranges, {
     signal, onProgress,
     payload, stroke, frequency, ballJointLimitDeg, lowerBallJointLimitDeg,
-    upperBallJointLimitDeg, ballJointClamp, mounting,
+    upperBallJointLimitDeg, ballJointClamp, mounting, sampling, random,
   });
 
   const coverage = Number.isFinite(workspaceResult.coverage) ? workspaceResult.coverage : 0;
@@ -33,6 +33,7 @@ export async function evaluateLayout(layout, options) {
     servoRangeRad: layout.servoRangeRad,
     recordLegData: true,
   });
+  onPoseWork?.();
 
   let dexterity = 0;
   let stiffness = 0;
@@ -48,7 +49,7 @@ export async function evaluateLayout(layout, options) {
     }
   }
 
-  const cycle = evaluateCycle(layout, { ...options, mounting });
+  const cycle = evaluateCycle(layout, { ...options, mounting, onPose: onPoseWork });
   const torque = cycle.torqueNm;
   const speedDemand = cycle.speedRadPerSec;
   const loadBalance = stats.loadBalanceScore ?? 0;
@@ -108,10 +109,10 @@ export async function evaluateLayout(layout, options) {
 }
 
 export function evaluateCycle(layout, { payload, stroke, frequency, cycleAxis, ballJointLimitDeg,
-  lowerBallJointLimitDeg, upperBallJointLimitDeg, mounting, signal }) {
+  lowerBallJointLimitDeg, upperBallJointLimitDeg, mounting, signal, onPose }) {
   return computeCycleDemand(layout, { mass: payload, stroke,
     frequency, axis: cycleAxis, ballJointLimitDeg, lowerBallJointLimitDeg,
-    upperBallJointLimitDeg, mounting, signal });
+    upperBallJointLimitDeg, mounting, signal, onPose });
 }
 
 export function computeFatigue(stats, { ballJointLimitDeg, lowerBallJointLimitDeg,

@@ -9,9 +9,9 @@ function runningMean() {
 }
 
 // Owns aggregation and reservoir sampling; it never schedules or evaluates poses.
-export function createWorkspaceStatistics({ totalPoses, sampleLimit = 200, violationSampleLimit = sampleLimit }) {
-  const normalizedSampleLimit = Math.max(0, Math.floor(sampleLimit));
-  const normalizedViolationSampleLimit = Math.max(0, Math.floor(violationSampleLimit));
+export function createWorkspaceStatistics({ totalPoses, sampleLimit = 200, violationSampleLimit = sampleLimit, random = Math.random }) {
+  const normalizedSampleLimit = Math.min(200, Math.max(0, Math.floor(sampleLimit)));
+  const normalizedViolationSampleLimit = Math.min(200, Math.max(0, Math.floor(violationSampleLimit)));
   const reachableSamples = [];
   const unreachableSamples = [];
   const violationSamples = [];
@@ -31,7 +31,7 @@ export function createWorkspaceStatistics({ totalPoses, sampleLimit = 200, viola
     if (collection.length < limit) {
       collection.push(sample);
     } else {
-      const replaceIndex = Math.floor(Math.random() * seenCount);
+      const replaceIndex = Math.floor(random() * seenCount);
       if (replaceIndex < limit) {
         collection[replaceIndex] = sample;
       }

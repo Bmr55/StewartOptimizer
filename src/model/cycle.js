@@ -53,7 +53,7 @@ export function evaluateCyclePose(layout, pose, velocity, acceleration, mass, op
 
 export function computeCycleDemand(layout, { mass = 0, stroke = 0, frequency = 0, axis = 'z',
   ballJointLimitDeg = 52, lowerBallJointLimitDeg = ballJointLimitDeg,
-  upperBallJointLimitDeg = ballJointLimitDeg, mounting, signal } = {}) {
+  upperBallJointLimitDeg = ballJointLimitDeg, mounting, signal, onPose } = {}) {
   const axisIndex = ['x', 'y', 'z'].indexOf(axis);
   if (axisIndex < 0) throw new RangeError('Unsupported cycle axis.');
   const amplitude = stroke / 2000;
@@ -74,6 +74,7 @@ export function computeCycleDemand(layout, { mass = 0, stroke = 0, frequency = 0
     const result = evaluateCyclePose(layout, pose, velocity, acceleration, mass, {
       ballJointLimitDeg, lowerBallJointLimitDeg, upperBallJointLimitDeg, mounting: effectiveMounting,
     });
+    onPose?.();
     if (!result.valid) return { valid: false, axis, samples, failedSample: i,
       failedPose: pose, reason: result.reason, violations: result.violations ?? [],
       torqueNm: null, speedRadPerSec: null };

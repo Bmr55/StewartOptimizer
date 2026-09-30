@@ -92,15 +92,15 @@ export function assignCrowdingDistance(fronts, evaluations) {
   }
 }
 
-export function tournamentSelect(evaluations) {
-  const pick = () => evaluations[Math.floor(Math.random() * evaluations.length)];
+export function tournamentSelect(evaluations, random = Math.random) {
+  const pick = () => evaluations[Math.floor(random() * evaluations.length)];
   const a = pick();
   const b = pick();
   if (a.rank < b.rank) return a;
   if (b.rank < a.rank) return b;
   if (a.crowding > b.crowding) return a;
   if (b.crowding > a.crowding) return b;
-  return Math.random() < 0.5 ? a : b;
+  return random() < 0.5 ? a : b;
 }
 
 export function selectFromFronts(evaluations, fronts, populationSize) {

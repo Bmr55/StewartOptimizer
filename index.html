@@ -64,11 +64,27 @@
                     <input type="number" id="optPopulation" value="12" min="4">
                 </label>
             </div>
+            <div class="grid">
+                <label class="field">
+                    <div class="field-header"><span>Workspace sampling</span><button type="button" class="info-button" data-info="Halton samples cover the six-dimensional bounds at a fixed count. Cartesian grid uses each axis step below. Coverage is measured at sampled poses only.">ⓘ</button></div>
+                    <select id="optSampling">
+                        <option value="1024" selected>Halton: 1,024 poses (default)</option>
+                        <option value="256">Halton: 256 poses</option>
+                        <option value="4096">Halton: 4,096 poses</option>
+                        <option value="grid">Cartesian grid (use axis steps)</option>
+                    </select>
+                </label>
+                <label class="field">
+                    <div class="field-header"><span>Run seed</span><button type="button" class="info-button" data-info="The seed controls Halton sequence start, candidate evolution, and retained example poses. Reuse it to replay the same settings.">ⓘ</button></div>
+                    <input type="number" id="optSeed" value="1" min="1" max="4294967295" step="1">
+                    <button type="button" id="randomizeSeed">Randomize</button>
+                </label>
+            </div>
             <div class="section-title">
                 <h2>Workspace Sweep Ranges</h2>
-                <button type="button" class="info-button" data-info="These bounds define the position and orientation grid sampled during workspace evaluation. Adjust them to focus the search on the region you care about.">ⓘ</button>
+                <button type="button" class="info-button" data-info="These bounds define the sampled position and orientation region. Steps apply to Cartesian grid only.">ⓘ</button>
             </div>
-            <p>These ranges are prefilled from the requirements but can be adjusted before execution.</p>
+            <p>These bounds are prefilled from the requirements. Steps apply only to Cartesian grid. Coverage measures sampled poses, not the continuous region.</p>
             <div class="range-rows">
                 <div class="axis-row">
                     <label class="field"><div class="field-header"><span>X Max</span><button type="button" class="info-button" data-info="Upper bound of the platform translation along X (millimetres).">ⓘ</button></div><input type="number" id="optXMax"></label>

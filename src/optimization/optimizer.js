@@ -6,6 +6,8 @@ import { evaluateLayout, evaluateCycle, computeFatigue } from './evaluate-layout
 import { estimateWork } from './budget.js';
 import { selectBest, exportResult } from '../io/results.js';
 import { DEFAULT_TOPOLOGY, TOPOLOGIES } from '../contracts.js';
+import { normalizeSampling } from '../workspace/sampling.js';
+import { createRandom, normalizeSeed, RANDOM_ALGORITHM } from './random.js';
 
 // Owns run state and population lifecycle. Numerical work and browser I/O live elsewhere.
 export class Optimizer {
@@ -13,6 +15,8 @@ export class Optimizer {
     populationSize = 12,
     generations = 5,
     ranges = {},
+    sampling = { strategy: 'halton' },
+    seed = 1,
     mutationRate = 0.35,
     designSpace = {},
     topology = DEFAULT_TOPOLOGY,
@@ -32,6 +36,10 @@ export class Optimizer {
     this.populationSize = Math.max(4, populationSize);
     this.generations = Math.max(1, generations);
     this.ranges = ranges;
+    this.seed = normalizeSeed(seed);
+    this.sampling = normalizeSampling(sampling.strategy === 'halton'
+      ? { ...sampling, sequenceStart: sampling.sequenceStart ?? this.seed } : sampling);
+    this.random = createRandom(this.seed);
     this.mutationRate = clamp(mutationRate, 0, 1);
     if (!TOPOLOGIES.includes(topology)) throw new Error(`topology must be one of ${TOPOLOGIES.join(', ')}.`);
     this.topology = topology;
@@ -86,7 +94,7 @@ export class Optimizer {
   }
 
   layoutOptions() { return { designSpace: this.designSpace, servoRangeRad: this.servoRangeRad,
-    topology: this.topology }; }
+    topology: this.topology, random: this.random }; }
   finalizeLayout(layout) { return finalizeLayout(layout, this.layoutOptions()); }
   mutateLayout(layout) { return mutateLayout(layout, this.layoutOptions()); }
   crossoverLayouts(a, b) { return crossoverLayouts(a, b, this.layoutOptions()); }
@@ -98,16 +106,27 @@ export class Optimizer {
       lowerBallJointLimitDeg: this.lowerBallJointLimitDeg,
       upperBallJointLimitDeg: this.upperBallJointLimitDeg,
       ballJointClamp: this.ballJointClamp,
-      servoRangeRad: this.servoRangeRad };
+      servoRangeRad: this.servoRangeRad, sampling: this.sampling };
   }
 
   evaluateLayout(layout) {
-    return evaluateLayout(layout, { ...this.evaluationOptions(),
+    const random = createRandom((this.seed ^ Math.imul(layout.id ?? 0, 0x9e3779b9)) >>> 0 || 1);
+    let workspaceCompleted = 0;
+    let extraCompleted = 0;
+    const report = () => this.onProgress?.({
+      completed: (this.completedPoseWork || 0) + workspaceCompleted + extraCompleted,
+      total: this.workEstimate?.totalPoses ?? this.workEstimate?.posesPerLayout ?? workspaceCompleted + extraCompleted,
+      budgeted: this.workEstimate?.totalPoses ?? null,
+      generation: this.activeGeneration ?? this.generation,
+    });
+    return evaluateLayout(layout, { ...this.evaluationOptions(), random,
       onProgress: ({ completed, total }) => this.onProgress?.({
-        completed: (this.completedEvaluations || 0) * (this.workEstimate?.posesPerLayout ?? total) + completed,
+        completed: (this.completedPoseWork || 0) + (workspaceCompleted = completed) + extraCompleted,
         total: this.workEstimate?.totalPoses ?? total,
+        budgeted: this.workEstimate?.totalPoses ?? null,
         generation: this.activeGeneration ?? this.generation,
       }),
+      onPoseWork: () => { extraCompleted++; report(); },
     });
   }
 
@@ -118,7 +137,7 @@ export class Optimizer {
   dominates(a, b) { return dominates(a, b); }
   fastNonDominatedSort(evaluations) { return fastNonDominatedSort(evaluations); }
   assignCrowdingDistance(fronts, evaluations) { return assignCrowdingDistance(fronts, evaluations); }
-  tournamentSelect(evaluations) { return tournamentSelect(evaluations); }
+  tournamentSelect(evaluations) { return tournamentSelect(evaluations, this.random); }
 
   createOffspring(evaluations) {
     const offspring = [];
@@ -126,7 +145,7 @@ export class Optimizer {
       const parentA = this.tournamentSelect(evaluations);
       const parentB = this.tournamentSelect(evaluations);
       let child = this.crossoverLayouts(parentA.layout, parentB.layout);
-      if (Math.random() < this.mutationRate) {
+      if (this.random() < this.mutationRate) {
         child = this.mutateLayout(child);
       }
       child.id = this.nextLayoutId++;
@@ -163,21 +182,49 @@ export class Optimizer {
     for (const layout of layouts) {
       this.abortController?.signal.throwIfAborted();
       results.push(await this.evaluateLayout(layout));
+      this.completedPoseWork += results.at(-1).workspace.total + 1 + (results.at(-1).cycle.failedSample ?? results.at(-1).cycle.samples - 1) + 1;
       this.completedEvaluations += 1;
-      this.onProgress?.({ completed: this.completedEvaluations * this.workEstimate.posesPerLayout,
-        total: this.workEstimate.totalPoses, generation: this.activeGeneration });
+      this.onProgress?.({ completed: this.completedPoseWork,
+        total: this.workEstimate.totalPoses, budgeted: this.workEstimate.totalPoses, generation: this.activeGeneration });
     }
     return results;
   }
 
   estimateWork() {
-    return estimateWork({ ranges: this.ranges, stroke: this.stroke, frequency: this.frequency,
+    return estimateWork({ ranges: this.ranges, sampling: this.sampling, stroke: this.stroke, frequency: this.frequency,
       populationSize: this.populationSize, generations: this.generations });
+  }
+
+  effectiveSettings() {
+    return JSON.parse(JSON.stringify({
+      requirements: this.requirements,
+      bounds: this.ranges,
+      sampling: this.sampling,
+      seed: this.seed,
+      randomAlgorithm: RANDOM_ALGORITHM,
+      populationSize: this.populationSize,
+      generations: this.generations,
+      mutationRate: this.mutationRate,
+      designSpace: this.designSpace,
+      topology: this.topology,
+      homeHeightBounds: this.designSpace.homeHeightBounds,
+      ballJointLimitDeg: this.ballJointLimitDeg,
+      lowerBallJointLimitDeg: this.lowerBallJointLimitDeg,
+      upperBallJointLimitDeg: this.upperBallJointLimitDeg,
+      ballJointClamp: this.ballJointClamp,
+      servoRangeDeg: this.servoRangeDeg,
+      objectiveSet: ['coverage', 'relaxedCoverage', 'dexterity', 'stiffness', 'loadBalance',
+        'isotropy', 'limitMargin', 'torque', 'speedDemand', 'fatigue'],
+      servoRatingPolicy: 'not-enforced',
+    }));
   }
 
   async executeRun() {
     this.workEstimate = this.estimateWork();
     this.completedEvaluations = 0;
+    this.completedPoseWork = 0;
+    this.nextLayoutId = 1;
+    this.random = createRandom(this.seed);
     this.population = Array.from({ length: this.populationSize }, () => this.createRandomLayout());
     let evaluations = await this.evaluatePopulation(this.population);
     let fronts = this.fastNonDominatedSort(evaluations);

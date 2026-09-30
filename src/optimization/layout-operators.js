@@ -10,7 +10,7 @@ export const DEFAULT_DESIGN_SPACE = {
   mutationHorn: 4, mutationRod: 6, mutationHeight: 15, mutationAngle: degToRad(4),
 };
 
-const randomInRange = ([min, max]) => min + Math.random() * (max - min);
+const randomInRange = ([min, max], random) => min + random() * (max - min);
 
 function pairGapRange(radius, space) {
   const [min, max] = space.pairGapBounds;
@@ -29,23 +29,23 @@ function clampPointRadius(anchor, bounds) {
   }
 }
 
-function randomParameters(topology, space) {
+function randomParameters(topology, space, random) {
   const radiusBounds = bounds => topology === 'c3_paired'
     ? [Math.max(bounds[0], space.pairGapBounds[0] / 1.2), bounds[1]] : bounds;
   const p = {
-    base_radius: randomInRange(radiusBounds(space.baseRadius)),
-    platform_radius: randomInRange(radiusBounds(space.platformRadius)),
-    base_orientation: randomInRange([-Math.PI, Math.PI]),
-    platform_orientation: randomInRange([-Math.PI, Math.PI]),
-    beta_offset: randomInRange([-space.betaJitterRad, space.betaJitterRad]),
+    base_radius: randomInRange(radiusBounds(space.baseRadius), random),
+    platform_radius: randomInRange(radiusBounds(space.platformRadius), random),
+    base_orientation: randomInRange([-Math.PI, Math.PI], random),
+    platform_orientation: randomInRange([-Math.PI, Math.PI], random),
+    beta_offset: randomInRange([-space.betaJitterRad, space.betaJitterRad], random),
   };
   if (topology === 'c3_paired') {
-    p.base_pair_gap = randomInRange(pairGapRange(p.base_radius, space));
-    p.platform_pair_gap = randomInRange(pairGapRange(p.platform_radius, space));
+    p.base_pair_gap = randomInRange(pairGapRange(p.base_radius, space), random);
+    p.platform_pair_gap = randomInRange(pairGapRange(p.platform_radius, space), random);
   }
   if (topology === 'rectangular_paired') {
-    p.base_aspect = randomInRange(space.rectangularAspectBounds);
-    p.platform_aspect = randomInRange(space.rectangularAspectBounds);
+    p.base_aspect = randomInRange(space.rectangularAspectBounds, random);
+    p.platform_aspect = randomInRange(space.rectangularAspectBounds, random);
   }
   return p;
 }
@@ -66,26 +66,26 @@ export function validateDesignSpace(space) {
 
 export const cloneLayout = layout => JSON.parse(JSON.stringify(layout));
 
-export function createRandomLayout({ designSpace: space, servoRangeRad, id, topology = DEFAULT_TOPOLOGY }) {
+export function createRandomLayout({ designSpace: space, servoRangeRad, id, topology = DEFAULT_TOPOLOGY, random = Math.random }) {
   if (!TOPOLOGIES.includes(topology)) throw new Error(`topology must be one of ${TOPOLOGIES.join(', ')}.`);
   const layout = {
-    id, topology, topologyParameters: topology === 'free' ? {} : randomParameters(topology, space),
+    id, topology, topologyParameters: topology === 'free' ? {} : randomParameters(topology, space, random),
     baseAnchors: [], platformAnchors: [], betaAngles: [],
-    hornLength: randomInRange(space.hornLengthBounds), rodLength: randomInRange(space.rodLengthBounds),
-    servoRangeRad: servoRangeRad.slice(), homeHeight: randomInRange(space.homeHeightBounds),
+    hornLength: randomInRange(space.hornLengthBounds, random), rodLength: randomInRange(space.rodLengthBounds, random),
+    servoRangeRad: servoRangeRad.slice(), homeHeight: randomInRange(space.homeHeightBounds, random),
   };
   if (topology === 'free') {
-    const baseOffset = Math.random() * 2 * Math.PI;
+    const baseOffset = random() * 2 * Math.PI;
     for (let i = 0; i < 6; i++) {
-      const angle = baseOffset + i * Math.PI / 3 + randomNormal() * degToRad(3);
-      const upperAngle = baseOffset + Math.PI / 6 + i * Math.PI / 3 + randomNormal() * degToRad(3);
-      const br = randomInRange(space.baseRadius);
-      const pr = randomInRange(space.platformRadius);
+      const angle = baseOffset + i * Math.PI / 3 + randomNormal(random) * degToRad(3);
+      const upperAngle = baseOffset + Math.PI / 6 + i * Math.PI / 3 + randomNormal(random) * degToRad(3);
+      const br = randomInRange(space.baseRadius, random);
+      const pr = randomInRange(space.platformRadius, random);
       layout.baseAnchors.push([br * Math.cos(angle), br * Math.sin(angle),
-        randomNormal() * space.baseZJitter]);
+        randomNormal(random) * space.baseZJitter]);
       layout.platformAnchors.push([pr * Math.cos(upperAngle), pr * Math.sin(upperAngle), 0]);
       layout.betaAngles.push(wrapAngle(angle + Math.PI / 2
-        + randomNormal() * space.betaJitterRad));
+        + randomNormal(random) * space.betaJitterRad));
     }
   } else Object.assign(layout, topologyGeometry(topology, layout.topologyParameters));
   return finalizeLayout(layout, { designSpace: space, servoRangeRad });
@@ -126,57 +126,57 @@ export function finalizeLayout(layout, { designSpace: space, servoRangeRad }) {
   return layout;
 }
 
-export function mutateLayout(source, { designSpace: space, servoRangeRad }) {
+export function mutateLayout(source, { designSpace: space, servoRangeRad, random = Math.random }) {
   validateTopology(source);
   const layout = cloneLayout(source);
   if ((layout.topology ?? 'free') === 'free') {
     for (let i = 0; i < 6; i++) {
-      layout.baseAnchors[i][0] += randomNormal() * space.anchorJitter;
-      layout.baseAnchors[i][1] += randomNormal() * space.anchorJitter;
-      layout.baseAnchors[i][2] += randomNormal() * space.baseZJitter;
-      layout.platformAnchors[i][0] += randomNormal() * space.platformJitter;
-      layout.platformAnchors[i][1] += randomNormal() * space.platformJitter;
+      layout.baseAnchors[i][0] += randomNormal(random) * space.anchorJitter;
+      layout.baseAnchors[i][1] += randomNormal(random) * space.anchorJitter;
+      layout.baseAnchors[i][2] += randomNormal(random) * space.baseZJitter;
+      layout.platformAnchors[i][0] += randomNormal(random) * space.platformJitter;
+      layout.platformAnchors[i][1] += randomNormal(random) * space.platformJitter;
       layout.betaAngles[i] = wrapAngle(layout.betaAngles[i]
-        + randomNormal() * space.mutationAngle);
+        + randomNormal(random) * space.mutationAngle);
     }
   } else {
     const p = layout.topologyParameters;
     const minimum = layout.topology === 'c3_paired' ? space.pairGapBounds[0] / 1.2 : 0;
-    p.base_radius = clamp(p.base_radius + randomNormal() * space.anchorJitter,
+    p.base_radius = clamp(p.base_radius + randomNormal(random) * space.anchorJitter,
       Math.max(space.baseRadius[0], minimum), space.baseRadius[1]);
-    p.platform_radius = clamp(p.platform_radius + randomNormal() * space.platformJitter,
+    p.platform_radius = clamp(p.platform_radius + randomNormal(random) * space.platformJitter,
       Math.max(space.platformRadius[0], minimum), space.platformRadius[1]);
-    p.base_orientation += randomNormal() * space.mutationAngle;
-    p.platform_orientation += randomNormal() * space.mutationAngle;
-    p.beta_offset += randomNormal() * space.mutationAngle;
+    p.base_orientation += randomNormal(random) * space.mutationAngle;
+    p.platform_orientation += randomNormal(random) * space.mutationAngle;
+    p.beta_offset += randomNormal(random) * space.mutationAngle;
     if (layout.topology === 'c3_paired') {
-      p.base_pair_gap = clamp(p.base_pair_gap + randomNormal() * space.anchorJitter,
+      p.base_pair_gap = clamp(p.base_pair_gap + randomNormal(random) * space.anchorJitter,
         ...pairGapRange(p.base_radius, space));
-      p.platform_pair_gap = clamp(p.platform_pair_gap + randomNormal() * space.platformJitter,
+      p.platform_pair_gap = clamp(p.platform_pair_gap + randomNormal(random) * space.platformJitter,
         ...pairGapRange(p.platform_radius, space));
     }
     if (layout.topology === 'rectangular_paired') {
-      p.base_aspect = clamp(p.base_aspect + randomNormal() * 0.05,
+      p.base_aspect = clamp(p.base_aspect + randomNormal(random) * 0.05,
         ...space.rectangularAspectBounds);
-      p.platform_aspect = clamp(p.platform_aspect + randomNormal() * 0.05,
+      p.platform_aspect = clamp(p.platform_aspect + randomNormal(random) * 0.05,
         ...space.rectangularAspectBounds);
     }
     Object.assign(layout, topologyGeometry(layout.topology, p));
   }
-  layout.hornLength += randomNormal() * space.mutationHorn;
-  layout.rodLength += randomNormal() * space.mutationRod;
-  layout.homeHeight += randomNormal() * space.mutationHeight;
+  layout.hornLength += randomNormal(random) * space.mutationHorn;
+  layout.rodLength += randomNormal(random) * space.mutationRod;
+  layout.homeHeight += randomNormal(random) * space.mutationHeight;
   return finalizeLayout(layout, { designSpace: space, servoRangeRad });
 }
 
-export function crossoverLayouts(a, b, { designSpace: space, servoRangeRad }) {
+export function crossoverLayouts(a, b, { designSpace: space, servoRangeRad, random = Math.random }) {
   validateTopology(a); validateTopology(b);
   if ((a.topology ?? 'free') !== (b.topology ?? 'free')) {
     throw new Error('Cannot cross layouts with different topologies.');
   }
   const layout = cloneLayout(a);
   if ((layout.topology ?? 'free') === 'free') {
-    const split = Math.floor(Math.random() * 6);
+    const split = Math.floor(random() * 6);
     for (let i = split; i < 6; i++) {
       layout.baseAnchors[i] = b.baseAnchors[i].slice();
       layout.platformAnchors[i] = b.platformAnchors[i].slice();
@@ -184,13 +184,13 @@ export function crossoverLayouts(a, b, { designSpace: space, servoRangeRad }) {
     }
   } else {
     for (const field of Object.keys(layout.topologyParameters)) {
-      layout.topologyParameters[field] = Math.random() < 0.5
+      layout.topologyParameters[field] = random() < 0.5
         ? a.topologyParameters[field] : b.topologyParameters[field];
     }
     Object.assign(layout, topologyGeometry(layout.topology, layout.topologyParameters));
   }
   layout.hornLength = (a.hornLength + b.hornLength) / 2;
   layout.rodLength = (a.rodLength + b.rodLength) / 2;
-  layout.homeHeight = Math.random() < 0.5 ? a.homeHeight : b.homeHeight;
+  layout.homeHeight = random() < 0.5 ? a.homeHeight : b.homeHeight;
   return finalizeLayout(layout, { designSpace: space, servoRangeRad });
 }

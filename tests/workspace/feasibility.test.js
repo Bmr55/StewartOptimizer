@@ -48,8 +48,8 @@ test('export discloses relaxed coverage, violations, and feasibility scope', asy
   assert.equal(output.feasibility.homePoseSatisfied, false);
   assert.equal(output.feasibility.cycleSatisfied, false);
   assert.equal(output.constraint_policy.mode, 'soft-ball-joint');
-  assert.equal(output.workspace_counts.violationPoses, 1);
-  assert.equal(output.workspace_stats.jointViolationCounts.lower, 1);
+  assert.equal(output.workspace_counts.violationPoses, 1024);
+  assert.equal(output.workspace_stats.jointViolationCounts.lower, 1024);
   assert.equal(output.schema_version, 2);
   assert.equal(output.model_version, 2);
   assert.equal(output.mounting.lower[0].source, 'supplied');

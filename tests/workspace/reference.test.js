@@ -8,7 +8,6 @@ import { jointFixture } from '../fixtures/layout.js';
 // Historical single-angle fixture is retained as comparative evidence for IK
 // and actual-rod geometry. Its joint coverage is intentionally superseded.
 const reference = JSON.parse(fs.readFileSync(new URL('../fixtures/workspace-reference.json', import.meta.url)));
-
 function close(actual, expected, tolerance = 1e-9) {
   if (Array.isArray(expected)) {
     assert.equal(actual.length, expected.length);
@@ -27,7 +26,9 @@ test('home-aligned sockets change historical joint coverage but preserve IK and 
     close(current[key], oldFeasible.expectedPose[key]);
   }
 
-  const workspace = await computeWorkspace(jointFixture(), reference.ranges, reference.cases[0].settings);
+  const workspace = await computeWorkspace(jointFixture(), reference.ranges,
+    { ...reference.cases[0].settings, sampling: { strategy: 'grid' } });
+  assert.deepEqual(workspace.sampling, { strategy: 'grid' });
   assert.equal(workspace.total, 9);
   assert.equal(workspace.coverage, 100);
   assert.equal(workspace.relaxedCoverage, 100);

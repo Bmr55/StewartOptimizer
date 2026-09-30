@@ -17,7 +17,8 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, load
     let currentOptimizer = null;
     let lastOutcome = null;
     let runSerial = 0;
-    const { populateRequirementsDefaults, readWorkspaceRanges, readHomeHeightBounds } = createControls(document);
+    const { populateRequirementsDefaults, readWorkspaceRanges, readHomeHeightBounds,
+        readSamplingSettings, randomizeSeed } = createControls(document);
     installTooltips(document, window);
     const resultsView = createResultsView(document, (candidate) => {
         if (!currentOptimizer || currentOptimizer.running) return;
@@ -54,8 +55,14 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, load
         showStatus('Requirements cleared.');
     });
 
+    document.getElementById('randomizeSeed').addEventListener('click', () => {
+        try {
+            showStatus(`Run seed set to ${randomizeSeed(window.crypto)}.`);
+        } catch (error) { showStatus(error.message, true); }
+    });
+
     function setRunning(running) {
-        for (const id of ['runOptimization', 'loadSampleRequirements', 'clearRequirements']) {
+        for (const id of ['runOptimization', 'loadSampleRequirements', 'clearRequirements', 'optSampling', 'optSeed', 'randomizeSeed']) {
             document.getElementById(id).disabled = running;
         }
         document.getElementById('cancelOptimization').disabled = !running;
@@ -85,6 +92,7 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, load
             const generations = Number(document.getElementById('optGenerations').value);
             const populationSize = Number(document.getElementById('optPopulation').value);
             const ranges = readWorkspaceRanges();
+            const { seed, sampling } = readSamplingSettings();
 
             currentOptimizer = new Optimizer(normalized, {
                 generations,
@@ -92,6 +100,8 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, load
                 ranges,
                 topology: document.getElementById('optTopology').value || 'c3_paired',
                 homeHeightBounds: readHomeHeightBounds(),
+                sampling,
+                seed,
                 ballJointLimitDeg: Number(ballJointLimitInput.value),
                 ballJointClamp: ballJointClampCheckbox.checked,
                 onProgress: ({ completed, total, generation }) => showStatus(
@@ -111,9 +121,9 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, load
             const pareto = currentOptimizer.pareto && currentOptimizer.pareto.length ? currentOptimizer.pareto : currentOptimizer.fitness;
             const best = currentOptimizer.getSelectedCandidate?.()
                 ?? selectBest(currentOptimizer.pareto, currentOptimizer.fitness);
-            lastOutcome = outcome;
+            lastOutcome = { ...outcome, effective_settings: currentOptimizer.effectiveSettings?.() };
             resultsView.render(currentOptimizer.fitness, best?.layout.id);
-            resultOutput.value = best ? JSON.stringify({ run: outcome, result: displayResult(best) }, null, 2) : '';
+            resultOutput.value = best ? JSON.stringify({ run: lastOutcome, result: displayResult(best) }, null, 2) : '';
             if (outcome.status === 'cancelled') {
                 showStatus(best ? 'Optimization cancelled. Showing partial results from the last completed population.' : 'Optimization cancelled before a population completed.');
                 return;
