@@ -1,6 +1,10 @@
 import fs from 'node:fs';
 import { createApp } from '../../src/ui/app.js';
 export const sampleText = fs.readFileSync(new URL('../../examples/sample-requirements.json', import.meta.url), 'utf8');
+class FakeChart {
+  constructor(_canvas, config) { this.data = config.data; this.options = config.options; }
+  update() {}
+}
 export async function loadUI(Optimizer, options = {}) {
   const elements = new Map();
   const element = id => {
@@ -15,7 +19,7 @@ export async function loadUI(Optimizer, options = {}) {
   const document = { getElementById: element, createElement: () => element('popup'),
     body: { appendChild() {} }, addEventListener() {} };
   const app = createApp({ document, window: { addEventListener() {} },
-    Optimizer, loadDefaultRequirements: async () => sampleText, ...options });
+    Optimizer, ChartClass: FakeChart, loadDefaultRequirements: async () => sampleText, ...options });
   await app.ready;
   element('optPopulation').value = '4';
   element('optGenerations').value = '1';

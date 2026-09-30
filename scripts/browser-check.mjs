@@ -57,8 +57,29 @@ try {
   assert.equal(JSON.parse(await page.locator('#resultOutput').inputValue()).result.id, Number(selected));
   await page.locator('#chartXAxis').selectOption('coverage');
   await page.locator('#chartYAxis').selectOption('coverage');
-  assert.match(await page.locator('#paretoChart').innerHTML(), /coverage \(percent\)/);
-  assert.equal(await page.locator(`#paretoChart circle[data-candidate-id="${selected}"]`).count(), 1);
+  assert.match(await page.locator('#paretoChart').getAttribute('aria-label'), /coverage \(percent\)/);
+  const plotted = await page.evaluate(() => Chart.getChart('paretoChart').data.datasets
+    .flatMap(dataset => dataset.data.map(point => point.id)));
+  assert.equal(plotted.length, 4);
+  assert.ok(plotted.includes(Number(selected)));
+  await page.locator('#chartXAxis').selectOption('torque');
+  await page.locator('#chartYAxis').selectOption('speedDemand');
+  await page.locator('#paretoChart').scrollIntoViewIfNeeded();
+  const chartPoint = await page.evaluate(id => {
+    const chart = Chart.getChart('paretoChart');
+    for (const [datasetIndex, dataset] of chart.data.datasets.entries()) {
+      const index = dataset.data.findIndex(point => point.id === Number(id));
+      if (index >= 0) {
+        const { x, y } = chart.getDatasetMeta(datasetIndex).data[index];
+        return { x, y };
+      }
+    }
+  }, options[0]);
+  const chartBounds = await page.locator('#paretoChart').boundingBox();
+  await page.mouse.click(chartBounds.x + chartPoint.x, chartBounds.y + chartPoint.y);
+  await page.waitForFunction(id => document.getElementById('candidateSelect').value === id, options[0]);
+  assert.equal(await candidateSelect.inputValue(), options[0]);
+  await candidateSelect.selectOption(selected);
 
   const downloadPromise = page.waitForEvent('download');
   await page.locator('#exportBestLayout').click();

@@ -242,7 +242,7 @@
                     <label class="field">Y axis<select id="chartYAxis" aria-label="Chart Y axis"></select></label>
                     <label class="field">Candidate<select id="candidateSelect" aria-label="Select candidate"></select></label>
                 </div>
-                <div id="paretoChart" class="pareto-chart"></div>
+                <div class="pareto-chart"><canvas id="paretoChart" role="img" aria-label="Candidate chart"></canvas></div>
                 <p id="candidateSummary" class="status" aria-live="polite">No completed candidate is available.</p>
             </div>
             <textarea id="resultOutput" spellcheck="false" readonly aria-label="Optimization output"></textarea>
@@ -293,6 +293,7 @@
         </div>
     </main>
 
+    <script src="./assets/vendor/chart.umd.js"></script>
     <script type="module" src="./src/main.js"></script>
 </body>
 </html>

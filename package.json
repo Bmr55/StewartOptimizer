@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "build:icons": "node scripts/build-icons.mjs",
+    "build:charts": "node scripts/build-charts.mjs",
     "dev": "node scripts/serve.mjs",
     "test": "node --test",
     "test:browser": "node scripts/browser-check.mjs",
@@ -16,6 +17,7 @@
     "node": ">=22"
   },
   "devDependencies": {
+    "chart.js": "^4.5.1",
     "lucide": "1.49.0",
     "playwright": "^1.63.0"
   }

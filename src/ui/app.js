@@ -30,6 +30,7 @@ function simulatorOptions(settings = {}, layout = {}) {
 
 export function createApp({ document, window, Optimizer = DefaultOptimizer, workerFactory,
     loadDefaultRequirements = loadSample, downloadFile = download,
+    ChartClass = globalThis.Chart,
     now = () => performance.now() }) {
     const requirementsInput = document.getElementById('requirementsInput');
     const referenceLayoutInput = document.getElementById('referenceLayoutInput');
@@ -103,7 +104,7 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
         resultOutput.value = JSON.stringify({ run: lastOutcome, result: displayResult(candidate) }, null, 2);
         loadCandidate(candidate);
         setRunning(false);
-    });
+    }, ChartClass);
     resultsView.clear();
     clearSimulatorSelection();
 

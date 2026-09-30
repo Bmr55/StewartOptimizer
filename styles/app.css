@@ -475,22 +475,12 @@ button.primary:hover {
     background: #111;
     border: 1px solid var(--border);
     border-radius: 8px;
-    min-height: 220px;
+    height: 320px;
+    padding: 12px;
 }
 
-.pareto-chart svg {
+.pareto-chart canvas {
     display: block;
-    width: 100%;
-}
-
-.pareto-chart circle {
-    cursor: pointer;
-}
-
-.pareto-chart circle:focus-visible {
-    outline: none;
-    stroke: white;
-    stroke-width: 3px;
 }
 
 #simGeometryControls {
