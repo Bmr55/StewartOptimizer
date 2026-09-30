@@ -78,7 +78,7 @@ The download is `optimized_layout.json` with these top-level fields:
 | servo_range | Shared [minimum, maximum] travel, degrees |
 | home_height | Platform home offset along Z, mm |
 | schema_version / model_version | Layout format and physical model versions |
-| id / topology / topology_parameters / mounting / migration | Selected candidate identity, geometry/model metadata, effective socket directions and sources, and legacy-upgrade note when present |
+| id / topology / topology_parameters / mounting / migration | Selected candidate identity, geometry/model metadata, effective socket directions and sources, and the import migration record (`upgraded` true with the legacy-upgrade note for a pre-version-2 import, false with a derived-sockets note when a current-version import omitted `mounting`) when present |
 | seed_origin / reference_diagnostics | Whether the candidate is the exact reference, a variation, fresh, or offspring; search-bound conflicts and home-pose reasons for the reference |
 | diagnostic | True when this result fails an enforced requirement |
 | metadata | Metrics described above |

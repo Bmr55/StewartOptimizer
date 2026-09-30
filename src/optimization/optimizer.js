@@ -120,8 +120,12 @@ export class Optimizer {
     ({ stroke: this.stroke, frequency: this.frequency } = trajectorySummary(trajectory));
     this.cycleAxis = requirements.cycle_axis ?? 'z';
 
-    const hornBounds = requirements.horn_length_bounds_mm || DEFAULT_DESIGN_SPACE.hornLengthBounds;
-    const rodBounds = requirements.rod_length_bounds_mm || DEFAULT_DESIGN_SPACE.rodLengthBounds;
+    // Requirement bounds win, then the headless designSpace option, then the defaults;
+    // the same order as homeHeightBounds below.
+    const hornBounds = requirements.horn_length_bounds_mm ?? designSpace.hornLengthBounds
+      ?? DEFAULT_DESIGN_SPACE.hornLengthBounds;
+    const rodBounds = requirements.rod_length_bounds_mm ?? designSpace.rodLengthBounds
+      ?? DEFAULT_DESIGN_SPACE.rodLengthBounds;
     this.servoRangeDeg = requirements.servo_travel_bounds_deg || [-120, 120];
 
     this.designSpace = {

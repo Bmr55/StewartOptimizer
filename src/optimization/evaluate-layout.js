@@ -10,7 +10,7 @@ import { evaluateCompliance } from '../model/compliance.js';
 import { computeWorkspace } from '../workspace/sweep.js';
 import { failureCategories } from '../io/results.js';
 import { DEFAULT_BALL_JOINT_LIMIT_DEG, MODEL_VERSION } from '../contracts.js';
-import { trajectorySummary } from '../model/trajectory.js';
+import { normalizeTrajectory, trajectorySummary } from '../model/trajectory.js';
 import { clamp, degToRad } from '../math.js';
 import { objectiveValues } from './objectives.js';
 
@@ -23,8 +23,12 @@ export function resolveEvaluationOptions(options) {
   if (trajectorySource === 'supplied' && !options.trajectory) {
     throw new TypeError("trajectorySource 'supplied' requires a trajectory.");
   }
-  const summary = trajectorySource === 'supplied' ? trajectorySummary(options.trajectory) : null;
+  // A direct caller may pass the JSON shape (no phase_deg, mixed-case axes); normalize it
+  // so the cycle identity and sampling see the same trajectory the Optimizer would build.
+  const trajectory = options.trajectory ? normalizeTrajectory(options.trajectory) : options.trajectory;
+  const summary = trajectorySource === 'supplied' ? trajectorySummary(trajectory) : null;
   return { ...options,
+    trajectory,
     ballJointLimitDeg,
     lowerBallJointLimitDeg: options.lowerBallJointLimitDeg ?? ballJointLimitDeg,
     upperBallJointLimitDeg: options.upperBallJointLimitDeg ?? ballJointLimitDeg,

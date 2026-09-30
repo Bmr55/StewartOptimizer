@@ -157,7 +157,7 @@ New Circular and Rectangular layouts start `beta_pair_offset` at 30°. A declare
 
 ### Design space and operator constants
 
-These values are fixed in `DEFAULT_DESIGN_SPACE` (`src/optimization/layout-operators.js`) and can only be changed through the headless `designSpace` option:
+These values are fixed in `DEFAULT_DESIGN_SPACE` (`src/optimization/layout-operators.js`) and can only be changed through the headless `designSpace` option. Horn, rod and home-height bounds supplied in the requirements JSON take precedence over the `designSpace` value:
 
 | Constant | Value | Role |
 | --- | --- | --- |
@@ -182,7 +182,7 @@ All stochastic choices use a seeded `mulberry32-v1` generator. The run seed driv
 
 ## 4. Candidate evaluation model
 
-`evaluateLayout` (`src/optimization/evaluate-layout.js`) runs four stages per candidate and assembles metrics, feasibility flags and objectives. Direct callers may omit what the `Optimizer` always supplies: a missing ball-joint limit resolves to the shared 45° default for the sweep, home pose, cycle, limit margin and fatigue alike; a `trajectory` passed without `trajectorySource` is treated as `supplied` (and `stroke`/`frequency` derive from it when omitted), while `trajectorySource: 'supplied'` without a trajectory is rejected.
+`evaluateLayout` (`src/optimization/evaluate-layout.js`) runs four stages per candidate and assembles metrics, feasibility flags and objectives. Direct callers may omit what the `Optimizer` always supplies: a missing ball-joint limit resolves to the shared 45° default for the sweep, home pose, cycle, limit margin and fatigue alike; a `trajectory` passed without `trajectorySource` is treated as `supplied` (and `stroke`/`frequency` derive from it when omitted), while `trajectorySource: 'supplied'` without a trajectory is rejected. Any supplied `trajectory` is run through `normalizeTrajectory`, so the JSON shape (omitted `phase_deg`, mixed-case axes) evaluates exactly as the `Optimizer` path does and a malformed trajectory throws instead of producing a silently invalid cycle.
 
 ### Workspace sweep
 
@@ -333,7 +333,7 @@ The Layout JSON contains the layout fields (`servo_range` in degrees), `schema_v
 
 ## 7. Reference-layout import and refinement
 
-Paste a layout into **Reference Layout JSON** or pick a file with **Load Layout JSON**; **Clear Reference** returns to a fresh search. Accepted shapes are a plain layout, a downloaded layout with metadata, a `{ layout }` wrapper and the on-screen `{ run, result: { layout } }` wrapper. Import validates six finite anchors per plate, six beta angles, positive lengths and height, servo bounds with max strictly greater than min, supported schema and model versions, and that any declared topology reproduces the actual geometry. Missing mounting data is upgraded to home-aligned sockets with a visible migration note. Imported metrics are discarded.
+Paste a layout into **Reference Layout JSON** or pick a file with **Load Layout JSON**; **Clear Reference** returns to a fresh search. Accepted shapes are a plain layout, a downloaded layout with metadata, a `{ layout }` wrapper and the on-screen `{ run, result: { layout } }` wrapper. Import validates six finite anchors per plate, six beta angles, positive lengths and height, servo bounds with max strictly greater than min, supported schema and model versions, and that any declared topology reproduces the actual geometry. Missing mounting data is derived as home-aligned sockets with a visible migration note; the note reports a legacy upgrade only when the file's `model_version` is older than the current model. Imported metrics are discarded.
 
 Seeding for population N places 1 exact reference, `round((N − 1) / 4)` fresh random layouts and the remainder as mutated variations (12 → 1 + 8 + 3). The exact reference is never finalized or repaired, is re-evaluated under the current model, is forced back into every survivor set, and is labelled **Exact reference** in the results. Its search-bound conflicts (lengths, height, servo range, radii, gaps, aspects, base Z, platform Z) and home-pose violations are recorded as reference diagnostics; bounds conflicts add the `geometry` failure category. Bounds are compared with a relative tolerance of 1e-9 (absolute 1e-9 near zero) so a downloaded candidate, whose `servo_range` degrees do not round-trip exactly through radians, re-imports without a conflict. The run's effective settings store the original reference and seed composition so the run can be replayed. See [IMPORT.md](./IMPORT.md).
 

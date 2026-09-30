@@ -134,6 +134,10 @@ test('missing parameters stay unavailable in ranking and export; validation is e
     [{ servo_torsional_stiffness_nm_per_rad: 10, rods: 'rigid', rod_axial_stiffness_n_per_m: 5 }, /exactly one/],
     [{ servo_torsional_stiffness_nm_per_rad: [1, 2], rods: 'rigid' }, /six/],
     [{ servo_torsional_stiffness_nm_per_rad: 10, rod_material: { youngs_modulus_gpa: 200 } }, /area_mm2 or diameter_mm/],
+    [{ servo_torsional_stiffness_nm_per_rad: 10, rod_material: { youngs_modulus_gpa: 200, area_mm2: null, diameter_mm: 5 } },
+      /area_mm2 or diameter_mm/],
+    [{ servo_torsional_stiffness_nm_per_rad: 10, rod_material: { youngs_modulus_gpa: 200, area_mm2: null } }, /area_mm2 must be/],
+    [{ servo_torsional_stiffness_nm_per_rad: 10, rod_material: { youngs_modulus_gpa: 200, diameter_mm: null } }, /diameter_mm must be/],
     [{ servo_torsional_stiffness_nm_per_rad: -1, rods: 'rigid' }, /positive/]]) {
     assert.throws(() => normalizeStiffnessModel(input), pattern);
   }

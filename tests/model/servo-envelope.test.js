@@ -125,9 +125,12 @@ test('reduced actuator inertia and friction match analytic terms; omission keeps
   const base = { ...cycleInput, mass: 0 };
   const ideal = computeCycleDemand(pairedFixture(), base);
   assert.equal(ideal.actuator.model, 'ideal');
+  assert.match(ideal.model, /actuator inertia\/friction omitted/);
   assert.deepEqual(ideal.actuator.perServoPeakTorqueNm, ideal.perServoTorqueNm);
   const inertia = computeCycleDemand(pairedFixture(), { ...base, actuators: new Array(6).fill({ outputInertiaKgM2: 2e-4, viscousNmSPerRad: 0, coulombNm: 0 }) });
   assert.equal(inertia.actuator.model, 'reduced');
+  assert.match(inertia.model, /reduced actuator model/);
+  assert.doesNotMatch(inertia.model, /omitted/);
   inertia.actuator.perServoPeakTorqueNm.forEach((value, i) => close(value, 2e-4 * inertia.perServoAccelerationRadPerSec2[i], 1e-12));
   const viscous = computeCycleDemand(pairedFixture(), { ...base, actuators: new Array(6).fill({ outputInertiaKgM2: 0, viscousNmSPerRad: 0.003, coulombNm: 0 }) });
   viscous.actuator.perServoPeakTorqueNm.forEach((value, i) => close(value, 0.003 * viscous.perServoSpeedRadPerSec[i], 1e-12));

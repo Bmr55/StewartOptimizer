@@ -142,11 +142,14 @@ export function evaluateCyclePose(layout, pose, velocity, acceleration, mass, op
     normalizeMassProperties({ mass_kg: mass }), options);
 }
 
-export function cycleModelDescription(massProperties, sampling) {
+export function cycleModelDescription(massProperties, sampling, actuatorModel = 'ideal') {
   const schedule = sampling.strategy === 'adaptive' ? `adaptive ${sampling.evaluatedSamples}-sample`
     : `${sampling.evaluatedSamples}-sample`;
+  const actuator = actuatorModel === 'reduced'
+    ? 'reduced actuator model (reflected inertia, viscous and Coulomb friction) added to output-shaft torque'
+    : 'actuator inertia/friction omitted';
   return `${schedule} rigid-rod Newton-Euler force balance; ${massPropertiesDescription(massProperties)}; `
-    + 'gravity along -Z; ideal massless rods/horns and joints; actuator inertia/friction omitted';
+    + `gravity along -Z; ideal massless rods/horns and joints; ${actuator}`;
 }
 
 // Quantities whose unresolved variation drives refinement: signed torque and speed,
@@ -317,7 +320,7 @@ export function computeCycleDemand(layout, { mass = 0, stroke = 0, frequency = 0
     conditioning: { ...conditionTrack, conditionLimit },
     sampling: samplingResult,
     ...identity,
-    model: cycleModelDescription(effectiveMass, samplingResult) };
+    model: cycleModelDescription(effectiveMass, samplingResult, actuator.model) };
   // Bounded per-sample operating points for capacity checks; not serialized with the result.
   Object.defineProperty(output, 'history', { enumerable: false, value: { times, weights, periodS: period,
     signedTorqueNm: signedActuatorTorque,
