@@ -1,7 +1,7 @@
-import { clamp, degToRad, radToDeg } from '../math.js';
+import { clamp, degToRad, radToDeg, vectorDot, vectorSub } from '../math.js';
 import { HOME_POSE, POSE_AXES } from './controller.js';
-import { createWebGLRenderer } from './renderer.js';
-import { OVERLAY_NAMES } from './scene.js';
+import { cameraFrame, createWebGLRenderer, projectSegment, VIEW_HALF_TANGENT } from './renderer.js';
+import { buildSceneGeometry, OVERLAY_NAMES } from './scene.js';
 import { markCommitted, syncInput } from './geometry-controls.js';
 
 const RADIAN_AXES = new Set(['rx', 'ry', 'rz']);
@@ -10,8 +10,12 @@ const axisSlider = (document, axis) => document.getElementById(`sim${axis.toUppe
 const displayValue = (axis, value) => RADIAN_AXES.has(axis) ? radToDeg(value) : value;
 const modelValue = (axis, value) => RADIAN_AXES.has(axis) ? degToRad(value) : value;
 const fmt = value => Number.isFinite(value) ? Number(value.toFixed(2)) : '—';
-export const CAMERA_DISTANCE_RANGE = Object.freeze([80, 2500]);
+// The near end lets a close-up separate lines a few millimetres apart; the
+// renderer clips lines at its 1 mm near plane rather than dropping them.
+export const CAMERA_DISTANCE_RANGE = Object.freeze([10, 2500]);
 export const CAMERA_PITCH_LIMIT = 1.4;
+// The wheel zooms toward a drawn line within this many CSS pixels of the cursor.
+export const ZOOM_PICK_RADIUS_PX = 30;
 // Each overlay toggle is a checkbox named after its builder: worldAxes -> simOverlayWorldAxes.
 export const overlayInputId = name => `simOverlay${name[0].toUpperCase()}${name.slice(1)}`;
 
@@ -56,6 +60,9 @@ export function createSimulatorView({ document, window, controller, isActive = (
   const renderer = createRenderer(canvas, { window, onContextChange: () => show(controller.getState()) });
   const synced = new WeakMap();
   let camera = { yaw: 0.7, pitch: 0.38, distance: 600, target: [0, 0, 100] };
+  // The layout-centred target; the view recentres only when this changes (a
+  // layout with a new home height), so zooming and panning survive pose updates.
+  let centre = null;
   let drag = null;
   let previousFrame = null;
   let frameHandle = null;
@@ -65,7 +72,11 @@ export function createSimulatorView({ document, window, controller, isActive = (
     + `Rx ${fmt(radToDeg(pose.rx))}, Ry ${fmt(radToDeg(pose.ry))}, Rz ${fmt(radToDeg(pose.rz))}°` : 'None';
 
   function show(state) {
-    if (state.layout) camera.target = [0, 0, state.layout.homeHeight / 2];
+    const layoutCentre = state.layout ? [0, 0, state.layout.homeHeight / 2] : null;
+    if (layoutCentre && layoutCentre.some((value, k) => value !== centre?.[k])) {
+      centre = layoutCentre;
+      camera.target = layoutCentre.slice();
+    }
     summary.textContent = state.layout
       ? `${state.source?.kind === 'candidate' ? `Candidate ${state.source.candidateId}` : state.source?.kind || 'Layout'} · ${state.layout.topology || 'free'} · home ${fmt(state.layout.homeHeight)} mm`
       : 'Select an optimizer candidate or import a layout to simulate.';
@@ -137,7 +148,7 @@ export function createSimulatorView({ document, window, controller, isActive = (
   }
   document.getElementById('simResetPose').addEventListener('click', guarded(() => controller.requestPose(HOME_POSE)));
   document.getElementById('simResetCamera').addEventListener('click', () => {
-    camera = { yaw: 0.7, pitch: 0.38, distance: 600, target: camera.target };
+    camera = { yaw: 0.7, pitch: 0.38, distance: 600, target: centre ? centre.slice() : camera.target };
     if (renderer.available) renderer.render(controller.getState(), camera);
   });
   markers.addEventListener('change', () => controller.setMarkers(markers.checked));
@@ -160,15 +171,24 @@ export function createSimulatorView({ document, window, controller, isActive = (
   canvas.addEventListener('pointerdown', event => {
     // A right click or a second touch must not reset the drag origin.
     if ((event.button ?? 0) !== 0 || event.isPrimary === false) return;
-    drag = { x: event.clientX, y: event.clientY };
+    drag = { x: event.clientX, y: event.clientY, pan: Boolean(event.shiftKey) };
     canvas.setPointerCapture?.(event.pointerId);
     event.preventDefault?.();
   });
   canvas.addEventListener('pointermove', event => {
     if (!drag) return;
     const dx = event.clientX - drag.x, dy = event.clientY - drag.y;
-    drag = { x: event.clientX, y: event.clientY };
-    if (pointerMode.value === 'platform') {
+    drag = { ...drag, x: event.clientX, y: event.clientY };
+    if (drag.pan) {
+      // Shift+drag pans in either mouse mode: the point under the cursor follows it.
+      const { height } = viewport();
+      if (height > 0) {
+        const frame = cameraFrame(camera);
+        const perPixel = 2 * camera.distance * VIEW_HALF_TANGENT / height;
+        camera.target = camera.target.map((value, k) => value - frame.right[k] * dx * perPixel + frame.up[k] * dy * perPixel);
+        if (renderer.available) renderer.render(controller.getState(), camera);
+      }
+    } else if (pointerMode.value === 'platform') {
       const state = controller.getState();
       if (state.layout) controller.requestPose({ ...state.requested, x: state.requested.x + dx * 0.35,
         y: state.requested.y - dy * 0.35 }, { source: 'pointer' });
@@ -182,8 +202,50 @@ export function createSimulatorView({ document, window, controller, isActive = (
   const releaseDrag = () => { drag = null; };
   canvas.addEventListener('pointerup', releaseDrag);
   canvas.addEventListener('pointercancel', releaseDrag);
+  // The canvas box in CSS pixels; a canvas without layout reports zero size.
+  function viewport() {
+    const box = canvas.getBoundingClientRect?.();
+    return { left: box?.left ?? 0, top: box?.top ?? 0,
+      width: box?.width || canvas.clientWidth || 0, height: box?.height || canvas.clientHeight || 0 };
+  }
+  // Depth (mm along the view direction) of the drawn line nearest the cursor
+  // within ZOOM_PICK_RADIUS_PX, or null over empty space.
+  function depthUnderCursor(clientX, clientY, { left, top, width, height }, frame) {
+    const toPage = ([x, y]) => [left + (x + 1) / 2 * width, top + (1 - y) / 2 * height];
+    let best = null;
+    for (const line of buildSceneGeometry(controller.getState()).lines) {
+      const segment = projectSegment(line.from, line.to, camera, width, height, 0, frame);
+      if (!segment) continue;
+      const [a, b] = segment.map(toPage);
+      const run = [b[0] - a[0], b[1] - a[1]];
+      const length2 = run[0] * run[0] + run[1] * run[1];
+      const s = length2 > 0 ? clamp(((clientX - a[0]) * run[0] + (clientY - a[1]) * run[1]) / length2, 0, 1) : 0;
+      const gap = Math.hypot(a[0] + run[0] * s - clientX, a[1] + run[1] * s - clientY);
+      if (gap > ZOOM_PICK_RADIUS_PX || (best && gap >= best.gap)) continue;
+      // Depth varies with 1/depth across the screen; interpolate it that way.
+      const depths = [line.from, line.to].map(point => Math.max(vectorDot(vectorSub(point, frame.eye), frame.forward), 1));
+      best = { gap, depth: 1 / ((1 - s) / depths[0] + s / depths[1]) };
+    }
+    return best?.depth ?? null;
+  }
+  // The wheel zooms toward what is under the cursor and keeps it there: the
+  // nearest drawn line's point, or over empty space the point on the plane
+  // through the target facing the camera.
   canvas.addEventListener('wheel', event => {
-    camera.distance = clamp(camera.distance * Math.exp(event.deltaY * 0.001), CAMERA_DISTANCE_RANGE[0], CAMERA_DISTANCE_RANGE[1]);
+    const distance = clamp(camera.distance * Math.exp(event.deltaY * 0.001), CAMERA_DISTANCE_RANGE[0], CAMERA_DISTANCE_RANGE[1]);
+    const box = viewport();
+    const { left, top, width, height } = box;
+    if (width > 0 && height > 0 && Number.isFinite(event.clientX) && Number.isFinite(event.clientY)) {
+      const frame = cameraFrame(camera);
+      const x = (event.clientX - left) / width * 2 - 1, y = 1 - (event.clientY - top) / height * 2;
+      const depth = depthUnderCursor(event.clientX, event.clientY, box, frame) ?? camera.distance;
+      // The cursor ray reaches this point at that depth.
+      const pointed = frame.eye.map((value, k) => value + depth * (frame.forward[k]
+        + frame.right[k] * x * VIEW_HALF_TANGENT * width / height + frame.up[k] * y * VIEW_HALF_TANGENT));
+      const ratio = distance / camera.distance;
+      camera.target = pointed.map((value, k) => value + (camera.target[k] - value) * ratio);
+    }
+    camera.distance = distance;
     if (renderer.available) renderer.render(controller.getState(), camera);
     event.preventDefault?.();
   }, { passive: false });

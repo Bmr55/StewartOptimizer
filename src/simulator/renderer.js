@@ -7,7 +7,15 @@ export { buildSceneGeometry };
 // `depthBias` (mm) pulls only the depth value toward the camera, so a line can
 // win the depth test against geometry lying almost on top of it without moving
 // on screen.
-export function projectPoint(point, camera, width, height, depthBias = 0) {
+// Tangent of half the vertical field of view (60°).
+export const VIEW_HALF_TANGENT = Math.tan(Math.PI / 6);
+// Geometry nearer the eye than this (mm along the view direction) is not drawn;
+// lines crossing it are clipped there rather than dropped.
+export const NEAR_PLANE_MM = 1;
+
+// Eye position and view basis of the orbit camera: it looks at `target` from
+// `distance` along the yaw/pitch direction, with +Z up.
+export function cameraFrame(camera) {
   const target = camera.target ?? [0, 0, 100];
   const yaw = camera.yaw ?? 0.7;
   const pitch = camera.pitch ?? 0.4;
@@ -17,17 +25,47 @@ export function projectPoint(point, camera, width, height, depthBias = 0) {
   const forward = vectorNormalize(vectorSub(target, eye));
   const right = vectorNormalize(vectorCross(forward, [0, 0, 1]));
   const up = vectorCross(right, forward);
-  const offset = vectorSub(point, eye);
-  const depth = vectorDot(offset, forward);
-  if (depth <= 1) return null;
-  const scale = 1 / (depth * Math.tan(Math.PI / 6));
+  return { target, distance, eye, forward, right, up };
+}
+
+const depthOf = (point, frame) => vectorDot(vectorSub(point, frame.eye), frame.forward);
+
+function projectInFrame(point, frame, width, height, depthBias) {
+  const offset = vectorSub(point, frame.eye);
+  const depth = vectorDot(offset, frame.forward);
+  if (depth <= NEAR_PLANE_MM) return null;
+  const scale = 1 / (depth * VIEW_HALF_TANGENT);
   // The far plane follows the camera distance so a zoomed-out view (up to
   // 2,500 units) still spreads the scene across the depth range instead of
   // saturating every vertex at the clamp.
-  const far = Math.max(2001, 2 * distance + 1);
-  return [vectorDot(offset, right) * scale * height / width,
-    vectorDot(offset, up) * scale,
-    Math.min(0.999, Math.max(-0.999, (depth - depthBias - 1) / (far - 1) * 2 - 1))];
+  const far = Math.max(2001, 2 * frame.distance + 1);
+  return [vectorDot(offset, frame.right) * scale * height / width,
+    vectorDot(offset, frame.up) * scale,
+    Math.min(0.999, Math.max(-0.999, (depth - depthBias - NEAR_PLANE_MM) / (far - NEAR_PLANE_MM) * 2 - 1))];
+}
+
+// `depthBias` (mm) pulls only the depth value toward the camera, so a line can
+// win the depth test against geometry lying almost on top of it without moving
+// on screen.
+export function projectPoint(point, camera, width, height, depthBias = 0) {
+  return projectInFrame(point, cameraFrame(camera), width, height, depthBias);
+}
+
+// Projects a line, first clipping it where it crosses the near plane, so a
+// close-up camera keeps the visible part of a line that passes beside it.
+export function projectSegment(from, to, camera, width, height, depthBias = 0, frame = cameraFrame(camera)) {
+  const clipAt = NEAR_PLANE_MM * (1 + 1e-6);
+  const depthFrom = depthOf(from, frame), depthTo = depthOf(to, frame);
+  if (depthFrom <= clipAt && depthTo <= clipAt) return null;
+  const clip = (inside, outside, depthIn, depthOut) => {
+    const t = (depthIn - clipAt) / (depthIn - depthOut);
+    return inside.map((value, k) => value + (outside[k] - value) * t);
+  };
+  const start = depthFrom > clipAt ? from : clip(to, from, depthTo, depthFrom);
+  const end = depthTo > clipAt ? to : clip(from, to, depthFrom, depthTo);
+  const a = projectInFrame(start, frame, width, height, depthBias);
+  const b = projectInFrame(end, frame, width, height, depthBias);
+  return a && b ? [a, b] : null;
 }
 
 const VERTEX_SOURCE = `#version 300 es
@@ -118,16 +156,16 @@ export function createWebGLRenderer(canvas, { window, onContextChange } = {}) {
     gl.useProgram(program);
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
     const geometry = buildSceneGeometry(state);
+    const frame = cameraFrame(camera);
     const lineData = [];
     for (const line of geometry.lines) {
-      const from = projectPoint(line.from, camera, width, height, line.depthBias);
-      const to = projectPoint(line.to, camera, width, height, line.depthBias);
-      if (from && to) lineData.push(...from, ...line.color, ...to, ...line.color);
+      const segment = projectSegment(line.from, line.to, camera, width, height, line.depthBias, frame);
+      if (segment) lineData.push(...segment[0], ...line.color, ...segment[1], ...line.color);
     }
     draw(lineData, gl.LINES, 1);
     const pointData = [];
     for (const point of geometry.points) {
-      const projected = projectPoint(point.at, camera, width, height);
+      const projected = projectInFrame(point.at, frame, width, height, 0);
       if (projected) pointData.push(...projected, ...point.color);
     }
     draw(pointData, gl.POINTS, 7);

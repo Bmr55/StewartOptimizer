@@ -346,7 +346,7 @@ The **Simulate** tab shares the retained candidate selection with Optimize and l
 - Six axis rows with paired sliders (±50 mm translation, ±30° rotation) and numeric fields that accept any finite value.
 - **Reset pose** returns to home.
 - Keyboard: arrows move X/Y, Page Up/Down move Z, W/S tilt about X, A/D tilt about Y, Q/E rotate about Z; Shift doubles the 1 mm / 1° step. Keys are ignored while typing in a field.
-- Mouse: **Orbit camera** (default) drags yaw/pitch and the wheel zooms between 80 and 2,500 units, with the renderer's depth range following the camera distance so far views keep near/far line ordering; **Move platform** drags X/Y pose requests instead. **Reset camera** restores the default view.
+- Mouse: **Orbit camera** (default) drags yaw/pitch; **Move platform** drags X/Y pose requests instead. In either mode the wheel zooms toward the point under the cursor, between 10 and 2,500 mm from the camera target, and Shift+drag pans. The renderer's depth range follows the camera distance so far views keep near/far line ordering, and lines crossing the near plane are clipped rather than dropped in a close-up. Pose changes keep a zoomed or panned view; the target recentres only when a layout with a different home height loads. **Reset camera** restores the default orientation and distance and recentres the target.
 - Gamepad (checkbox): left stick moves X/Y, right stick tilts, triggers move Z and shoulder buttons yaw, with a 0.15 dead zone.
 
 Every request is evaluated by the same pose evaluator as the optimizer. An accepted request becomes the rendered pose; a rejected request is reported with its violations while the last accepted pose stays rendered. Home failing at load leaves no accepted pose.
