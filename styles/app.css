@@ -24,10 +24,26 @@ body {
 }
 
 main {
-    width: min(1100px, 100%);
+    width: min(1320px, 100%);
     display: grid;
     gap: 20px;
 }
+
+.app-tabs { display: flex; gap: 8px; border-bottom: 1px solid var(--border); }
+.app-tabs button { border-radius: 8px 8px 0 0; min-width: 140px; }
+.app-tabs button.active { color: #081c2f; background: var(--accent); border-color: var(--accent); }
+.tab-panel { display: grid; gap: 20px; }
+.tab-panel[hidden] { display: none; }
+.sim-layout { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(300px, 1fr); gap: 18px; }
+.sim-stage, .sim-controls { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+#simCanvas { display: block; width: 100%; height: min(58vw, 600px); min-height: 360px;
+    border: 1px solid var(--border); border-radius: 8px; background: #0e131c; touch-action: none; }
+.sim-axis { display: grid; grid-template-columns: 30px minmax(80px, 1fr) 85px; gap: 8px; align-items: center; }
+.sim-axis input[type="range"] { width: 100%; }
+.sim-controls h2 { font-size: 18px; margin-top: 6px; }
+.sim-controls p { font-size: 13px; line-height: 1.5; }
+#simGeometryControls:empty, #simDiagnostics:empty { display: none; }
+@media (max-width: 820px) { .sim-layout { grid-template-columns: 1fr; } #simCanvas { height: 420px; } }
 
 section {
     background: var(--panel);
