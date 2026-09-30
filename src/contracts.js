@@ -15,6 +15,7 @@ export const METRICS = Object.freeze({
   conditioningQuality: { json: 'conditioning_quality', direction: 'max', unit: 'ratio' },
   dexterity: { json: 'dexterity', direction: 'max', unit: 'ratio' },
   stiffness: { json: 'stiffness', direction: 'max', unit: 'proxy' },
+  physicalStiffness: { json: 'physical_stiffness', direction: 'max', unit: 'N/m' },
   torque: { json: 'torque', direction: 'min', unit: 'N m' },
   speedDemand: { json: 'speed_demand', direction: 'min', unit: 'rad/s' },
   loadBalance: { json: 'load_balance', direction: 'max', unit: 'proxy' },
