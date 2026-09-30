@@ -94,6 +94,7 @@ export function createResultsView(document, onSelect) {
   });
 
   return {
+    select: choose,
     render(retained, initialId) {
       candidates = rankCandidates(retained);
       selectedId = initialId ?? candidates[0]?.layout.id ?? null;

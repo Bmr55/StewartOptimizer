@@ -7,6 +7,11 @@
 </head>
 <body>
     <main>
+        <div class="app-tabs" role="tablist" aria-label="Workspace">
+            <button id="optimizeTab" class="active" role="tab" aria-selected="true" aria-controls="optimizePanel">Optimize</button>
+            <button id="simulateTab" role="tab" aria-selected="false" aria-controls="simulatePanel">Simulate</button>
+        </div>
+        <div id="optimizePanel" class="tab-panel" role="tabpanel" aria-labelledby="optimizeTab">
         <section>
             <div class="section-title">
                 <h1>Requirements</h1>
@@ -194,6 +199,50 @@
             </div>
             <textarea id="resultOutput" spellcheck="false" readonly aria-label="Optimization output"></textarea>
         </section>
+        </div>
+
+        <div id="simulatePanel" class="tab-panel" role="tabpanel" aria-labelledby="simulateTab" hidden>
+            <section>
+                <div class="section-title"><h1>Active simulator</h1></div>
+                <p id="simCandidateSummary" class="status">Select an optimizer candidate or import a layout to simulate.</p>
+                <label class="field">Optimizer candidate<select id="simCandidateSelect" aria-label="Simulator candidate" disabled></select></label>
+                <div class="button-row">
+                    <button id="simLoadReference">Load optimizer reference</button>
+                    <button id="simUseReference">Use geometry as optimizer reference</button>
+                    <button id="simDownload" disabled>Download simulator JSON</button>
+                </div>
+                <div id="simRendererError" class="status error" role="alert" hidden></div>
+                <div class="sim-layout">
+                    <div class="sim-stage">
+                        <canvas id="simCanvas" aria-label="3D Stewart platform simulator"></canvas>
+                        <div class="button-row"><button id="simResetCamera">Reset camera</button>
+                            <label class="field">Mouse mode<select id="simPointerMode"><option value="orbit" selected>Orbit camera</option><option value="platform">Move platform</option></select></label></div>
+                        <p id="simPoseStatus" class="status" role="status" aria-live="polite">No layout loaded.</p>
+                        <p id="simAcceptedPose" class="status">Rendered pose: None</p>
+                    </div>
+                    <div class="sim-controls">
+                        <h2>Pose</h2>
+                        <p>Translations are millimetres; rotations are degrees. Arrow keys move X/Y, Page Up/Down moves Z, W/S and A/D tilt, and Q/E rotates about Z.</p>
+                        <div class="sim-axis"><label for="simXInput">X</label><input id="simXSlider" type="range" min="-50" max="50" step="0.1" value="0"><input id="simXInput" type="number" step="any" value="0"></div>
+                        <div class="sim-axis"><label for="simYInput">Y</label><input id="simYSlider" type="range" min="-50" max="50" step="0.1" value="0"><input id="simYInput" type="number" step="any" value="0"></div>
+                        <div class="sim-axis"><label for="simZInput">Z</label><input id="simZSlider" type="range" min="-50" max="50" step="0.1" value="0"><input id="simZInput" type="number" step="any" value="0"></div>
+                        <div class="sim-axis"><label for="simRXInput">Rx</label><input id="simRXSlider" type="range" min="-30" max="30" step="0.1" value="0"><input id="simRXInput" type="number" step="any" value="0"></div>
+                        <div class="sim-axis"><label for="simRYInput">Ry</label><input id="simRYSlider" type="range" min="-30" max="30" step="0.1" value="0"><input id="simRYInput" type="number" step="any" value="0"></div>
+                        <div class="sim-axis"><label for="simRZInput">Rz</label><input id="simRZSlider" type="range" min="-30" max="30" step="0.1" value="0"><input id="simRZInput" type="number" step="any" value="0"></div>
+                        <button id="simResetPose">Reset pose</button>
+                        <h2>Motion</h2>
+                        <div class="grid result-controls">
+                            <label class="field">Pattern<select id="simPattern"><option value="wobble">Wobble</option><option value="pingpong">Ping-pong</option><option value="rotate">Rotation</option><option value="tilt">Tilt</option><option value="helical">Helical</option></select></label>
+                            <label class="field">Speed<input id="simSpeed" type="number" min="0.1" max="5" step="0.1" value="1"></label>
+                        </div>
+                        <div class="button-row"><button id="simPlay" aria-pressed="false">Play</button><label><input id="simGamepad" type="checkbox"> Gamepad</label></div>
+                        <div class="button-row"><label><input id="simMarkers" type="checkbox" checked> Markers</label><label><input id="simTraces" type="checkbox"> Traces</label><button id="simClearTrace">Clear trace</button></div>
+                    </div>
+                </div>
+            </section>
+            <section id="simGeometryControls" aria-label="Geometry controls"></section>
+            <section id="simDiagnostics" aria-label="Pose diagnostics"></section>
+        </div>
     </main>
 
     <script type="module" src="./src/main.js"></script>

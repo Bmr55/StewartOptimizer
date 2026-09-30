@@ -39,6 +39,9 @@ export function evaluatePose(layout, pose = {}, options = {}) {
     conditionLimit = null,
   } = options;
   validateConditionLimit(conditionLimit);
+  if (!Number.isFinite(rodLengthTolerance) || rodLengthTolerance < 0) {
+    throw new RangeError('rodLengthTolerance must be a finite nonnegative length in mm.');
+  }
   const mounting = options.mounting ?? resolveMounting(layout).mounting;
   const jointLimits = {
     lower: degToRad(lowerBallJointLimitDeg),
