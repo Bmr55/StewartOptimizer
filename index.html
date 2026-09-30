@@ -273,14 +273,14 @@
                         <span>Generations</span>
                         <button type="button" class="info-button" data-info="Number of evolutionary iterations used to refine the population of layouts.">ⓘ</button>
                     </div>
-                    <input type="number" id="optGenerations" value="25" min="1">
+                    <input type="number" id="optGenerations" value="5" min="1">
                 </label>
                 <label class="field">
                     <div class="field-header">
                         <span>Population Size</span>
                         <button type="button" class="info-button" data-info="How many candidate layouts are evaluated in each generation of the optimizer.">ⓘ</button>
                     </div>
-                    <input type="number" id="optPopulation" value="40" min="4">
+                    <input type="number" id="optPopulation" value="12" min="4">
                 </label>
             </div>
             <div class="section-title">
@@ -552,10 +552,14 @@
                     ranges,
                     ballJointLimitDeg: Number(ballJointLimitInput.value),
                     ballJointClamp: ballJointClampCheckbox.checked,
+                    onProgress: ({ completed, total, generation }) => showStatus(
+                        `Generation ${generation}: ${completed.toLocaleString()} / ${total.toLocaleString()} pose evaluations (${(100 * completed / total).toFixed(1)}%).`
+                    ),
                 });
 
                 resultOutput.value = '';
-                showStatus('Optimization running...');
+                const work = currentOptimizer.estimateWork();
+                showStatus(`Optimization starting: ${work.totalPoses.toLocaleString()} pose evaluations.`);
                 await new Promise((resolve) => {
                     currentOptimizer.start(() => resolve());
                 });

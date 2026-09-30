@@ -75,19 +75,22 @@ export function rotateVector(matrix, vector) {
   ];
 }
 
+export function rangeCount(range) {
+  if (!range) return 1;
+  const { min, max, step } = range;
+  if (![min, max, step].every(Number.isFinite) || max < min || step <= 0) {
+    throw new RangeError('Sweep ranges require finite min/max, max >= min and a positive step.');
+  }
+  const count = Math.floor((max - min) / step + 1e-6) + 1;
+  if (!Number.isSafeInteger(count) || count < 1) throw new RangeError('Sweep range is too large.');
+  return count;
+}
+
 export function buildRange(range, fallback = 0) {
   if (!range) return [fallback];
-  let { min, max, step } = range;
-  if (!Number.isFinite(min) || !Number.isFinite(max) || max < min) {
-    return [fallback];
-  }
-  if (!Number.isFinite(step) || step <= 0) step = Math.max(1, Math.abs(max - min));
-  const values = [];
-  const inclusiveMax = max + step * 1e-6;
-  for (let v = min; v <= inclusiveMax; v += step) {
-    values.push(Number(v.toFixed(10)));
-  }
-  return values;
+  const count = rangeCount(range);
+  if (count > 100000) throw new RangeError('A sweep axis cannot exceed 100,000 samples.');
+  return Array.from({ length: count }, (_, index) => range.min + index * range.step);
 }
 
 export function cloneMatrix(matrix) {

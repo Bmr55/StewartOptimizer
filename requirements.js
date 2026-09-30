@@ -35,7 +35,7 @@ function validateRange(range, name) {
 function deriveStep(min, max, fallback) {
   const span = Math.abs(max - min);
   if (span === 0) return fallback;
-  const step = span / 10;
+  const step = span / 2;
   return step > 0 ? step : fallback;
 }
 
