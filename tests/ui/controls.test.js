@@ -21,11 +21,29 @@ test('run keeps explicit overrides and refreshes untouched defaults from JSON', 
   assert.equal(captured.options.ranges.x.step, 40);
   assert.equal(captured.options.ranges.x.min, -5);
   assert.equal(captured.options.ballJointLimitDeg, 10);
+  assert.equal(captured.options.topology, 'c3_paired');
+  assert.deepEqual(captured.options.homeHeightBounds, [50, 450]);
   assert.equal(captured.options.ranges.y.min, -10);
   assert.equal(captured.options.ranges.y.max, 20);
   await element('loadSampleRequirements').handlers.click();
   assert.equal(Number(element('optXMin').value), -40);
   assert.equal(Number(element('ballJointLimit').value), 52);
+});
+
+test('UI sends selected topology and edited height bounds to the core', async () => {
+  let options;
+  class StubOptimizer {
+    constructor(_requirements, incoming) { options = incoming; this.pareto = []; this.fitness = []; }
+    estimateWork() { return { totalPoses: 8 }; }
+    start() { return Promise.resolve({ status: 'completed' }); }
+  }
+  const element = await loadUI(StubOptimizer);
+  element('optTopology').value = 'rectangular_paired';
+  element('homeHeightMin').value = '90';
+  element('homeHeightMax').value = '300';
+  await element('runOptimization').handlers.click();
+  assert.equal(options.topology, 'rectangular_paired');
+  assert.deepEqual(options.homeHeightBounds, [90, 300]);
 });
 
 test('explicit joint option takes precedence, including zero', () => {

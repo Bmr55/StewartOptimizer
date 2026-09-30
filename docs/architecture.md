@@ -22,6 +22,7 @@ The p5/quaternion/Stewart scripts belong only to the [archived simulator](../arc
 | `src/workspace/statistics.js` | Running metrics, counters and reservoir samples |
 | `src/optimization/optimizer.js` | Run state and population lifecycle |
 | `src/optimization/layout-operators.js` | Generation, finalization, mutation and crossover |
+| `src/optimization/topology.js` | Symmetric anchor generators and declared-topology validation |
 | `src/optimization/nsga2.js` | Ranking, crowding, tournament and survivor selection |
 | `src/optimization/evaluate-layout.js` | Workspace/home/cycle scoring and objectives |
 | `src/optimization/budget.js` | Run workload estimate and limits |
@@ -53,8 +54,8 @@ These paths are relative to a caller at the repository root. The core keeps `sta
 
 1. `parseRequirements(text)` normalizes flat/nested input, validates it, and returns `{ normalized, workspace }`. Every nonzero axis initially gets min/midpoint/max samples. Bounds are inclusive when a step lands on the maximum; arbitrary steps do not force an extra endpoint.
 2. The UI fills defaults, retaining explicit overrides at Run. An explicit optimizer joint-limit option wins over normalized requirements. Loading the sample resets the controls.
-3. `Optimizer` generates six approximately circular base anchors, six offset platform anchors, and perturbed beta angles. All legs share a horn length, rod length and fixed servo range. Initial radii are 90-160 mm for the base and 40-120 mm for the platform (clamped below the base radius). Mutations move anchors and orientations; these initial radii are not hard bounds on later anchor mutations. Platform anchor Z stays zero.
-4. `finalizeLayout` clamps shared lengths and derives home height from the average square-root rod/horn geometry term. The initially sampled platform-height field is overwritten by this derived value; it is not an independent final design variable.
+3. `Optimizer` defaults to the C3 paired topology. Circular, C3 paired, and rectangular paired layouts are regenerated from symmetry-preserving parameters during mutation and crossover; Free layouts evolve individual anchors. See [layout topologies](./TOPOLOGIES.md) for exact invariants, parameter names, and bounds.
+4. `finalizeLayout` clamps shared lengths and the independently chosen home height to effective bounds. It preserves the topology's geometry; it never derives a replacement height from rods and horns.
 5. `evaluateLayout` sweeps workspace poses, evaluates home geometry, evaluates the required cycle, and assembles objectives. None of these loops are stubs.
 
 Direct `new Optimizer()` defaults are population 12, generations 5, mutation rate 0.35, joint limit 52 degrees, horn bounds [30,120] mm and rod bounds [160,420] mm. The UI passes parser-normalized requirements: omitted JSON limits instead use 45 degrees, [30,110] mm and [160,420] mm. The bundled sample explicitly specifies 52 degrees, [40,110] mm and [180,380] mm. Both entry paths use [-120,120] degrees servo travel unless overridden. Prefer parsing requirements rather than constructing incomplete data by hand.

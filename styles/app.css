@@ -157,6 +157,7 @@ textarea {
     transform: translateY(0);
 }
 
+select,
 input[type="number"],
 input[type="text"],
 select {

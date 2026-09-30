@@ -3,6 +3,7 @@ export function createControls(document) {
     const ballJointLimitInput = document.getElementById('ballJointLimit');
     let lastWorkspaceDefaults = null;
     let lastJointDefault = null;
+    let lastHeightDefaults = null;
     function populateWorkspaceInputs(workspace, preserveEdits = false) {
         const mappings = [
             ['X', workspace.x],
@@ -32,6 +33,25 @@ export function createControls(document) {
             ballJointLimitInput.value = jointDefault;
         }
         lastJointDefault = jointDefault;
+        const heights = parsed.normalized.home_height_bounds_mm ?? [50, 450];
+        for (const [id, value, previous] of [
+            ['homeHeightMin', heights[0], lastHeightDefaults?.[0]],
+            ['homeHeightMax', heights[1], lastHeightDefaults?.[1]],
+        ]) {
+            const input = document.getElementById(id);
+            if (!preserveEdits || previous === undefined || input.value === '' || Number(input.value) === previous) {
+                input.value = value;
+            }
+        }
+        lastHeightDefaults = heights.slice();
+    }
+
+    function readHomeHeightBounds() {
+        const bounds = ['homeHeightMin', 'homeHeightMax'].map(id => Number(document.getElementById(id).value));
+        if (!bounds.every(Number.isFinite) || bounds[0] <= 0 || bounds[1] < bounds[0]) {
+            throw new Error('home_height_bounds_mm must be positive finite bounds with max >= min.');
+        }
+        return bounds;
     }
 
     function readWorkspaceRanges() {
@@ -67,5 +87,5 @@ export function createControls(document) {
         };
     }
 
-        return { populateRequirementsDefaults, readWorkspaceRanges };
+        return { populateRequirementsDefaults, readWorkspaceRanges, readHomeHeightBounds };
 }
