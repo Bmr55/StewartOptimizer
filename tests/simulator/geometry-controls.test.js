@@ -141,3 +141,22 @@ test('a committed angle or differently formatted entry still counts as untouched
   explicit.controller.tick(0.016);
   assert.equal(horn.value, '', 'a cleared field was rewritten mid-edit');
 });
+
+test('in-progress typing that parses to the shown number is not rewritten by animation frames', () => {
+  const { document, controller, input } = mount(asymmetricJointFixture());
+  const horn = input('sim-hornLength-number');
+  assert.equal(horn.value, '50');
+  document.activeElement = horn;
+  controller.setAnimation('wobble', true);
+  for (const typed of ['50.0', '050', '5e1', '50.']) {
+    horn.value = typed;
+    controller.tick(0.016);
+    assert.equal(horn.value, typed, `typed ${typed} was rewritten while the user was still typing`);
+  }
+  // The text stays through further frames and the next keystroke lands on it.
+  horn.value = '50.05';
+  controller.tick(0.016);
+  assert.equal(horn.value, '50.05');
+  horn.dispatch('change');
+  assert.equal(controller.getState().layout.hornLength, 50.05);
+});
