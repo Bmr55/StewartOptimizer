@@ -90,8 +90,9 @@ names need a coordinated migration. Issue #35 remains outside this plan.
   before three completed candidates and is always marked approximate.
 - The active simulator separates a WebGL2 renderer, input/pose controller, and
   the existing active pose evaluator. A pose request returns both `requested`
-  and last valid `accepted` pose plus evaluator diagnostics. Rendering uses the
-  accepted pose only. Invalid requests hold the last valid pose and pause an
+  and last valid `accepted` pose plus evaluator diagnostics. The rendered
+  mechanism is the accepted pose; a rejected request appears only as a dimmed
+  ghost overlay. Invalid requests hold the last valid pose and pause an
   animation. Camera orbit is the default mouse mode; platform manipulation is
   explicit. Geometry controls (#33) and diagnostics (#34) consume this boundary
   in separate modules. Unsupported WebGL2 reports an actionable error while

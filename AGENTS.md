@@ -20,7 +20,7 @@ Run `npm test` after any change. Run `npm run smoke` when touching the optimizer
 
 - `src/model/`, `src/workspace/`, `src/optimization/`: numerical core. Never imports the UI or touches the DOM.
 - `src/ui/`: page controls, worker adapter and protocol, dashboard, results view, browser save.
-- `src/simulator/`: WebGL2 renderer, pose controller, geometry editor, diagnostics. The renderer only draws accepted poses; it never solves constraints.
+- `src/simulator/`: WebGL2 renderer, pose controller, geometry editor, diagnostics. The renderer draws accepted poses, plus the documented dimmed ghost of a rejected request; it never solves constraints.
 - `src/io/`: sample loading, layout import, result serialization, Fusion/CSV export.
 - `src/contracts.js`: schema and model versions, topology names, metric keys, units, failure categories. Add new metrics and versions here.
 - `tests/<area>/*.test.js` mirrors `src/`. UI tests import `createApp` into a DOM harness via `tests/ui/helpers.js`.

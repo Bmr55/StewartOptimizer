@@ -55,7 +55,7 @@ The p5/quaternion/Stewart scripts belong only to the [archived simulator](../arc
 | `src/io/cad.js` | Home-pose construction skeleton, Fusion script and coordinate CSV |
 | `src/math.js` | Shared numerical primitives |
 
-The UI depends on the optimizer; the optimizer composes search and evaluation functions. The simulator controller, cycle and workspace evaluation all depend on the same pose evaluator. The renderer reads accepted pose geometry and never solves constraints. Numerical modules never import the UI or manipulate the DOM. Abort signals and progress callbacks cross these boundaries explicitly. NSGA-II intentionally updates evaluation rank/crowding fields; layout mutation and crossover clone their inputs. See the [active simulator guide](./SIMULATOR.md).
+The UI depends on the optimizer; the optimizer composes search and evaluation functions. The simulator controller, cycle and workspace evaluation all depend on the same pose evaluator. The renderer draws accepted pose geometry, plus a dimmed ghost built from a rejected request's own evaluator result, and never solves constraints. Numerical modules never import the UI or manipulate the DOM. Abort signals and progress callbacks cross these boundaries explicitly. NSGA-II intentionally updates evaluation rank/crowding fields; layout mutation and crossover clone their inputs. See the [active simulator guide](./SIMULATOR.md).
 
 ## API compatibility
 

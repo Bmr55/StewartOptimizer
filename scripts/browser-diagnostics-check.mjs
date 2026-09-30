@@ -59,14 +59,19 @@ try {
       return count();
     };
     const all = toggle('simOverlayWorldAxes', true);
+    // The Z 100 request above is rejected, so its ghost is part of the scene.
+    const withoutGhost = toggle('simOverlayRequestedGhost', false);
+    const withGhost = toggle('simOverlayRequestedGhost', true);
     const narrowCones = upperLimit('20');
     const wideCones = upperLimit('120');
     const withoutCones = toggle('simOverlayJointCones', false);
     const withoutArcs = toggle('simOverlayServoArcs', false);
     const withoutAxes = toggle('simOverlayWorldAxes', false);
-    return { all, narrowCones, wideCones, withoutCones, withoutArcs, withoutAxes,
+    return { all, withoutGhost, withGhost, narrowCones, wideCones, withoutCones, withoutArcs, withoutAxes,
       withoutEither: toggle('simOverlayPlatformAxes', false), restored: toggle('simOverlayPlatformAxes', true) };
   });
+  assert.ok(overlayPixels.withoutGhost < overlayPixels.all, `the rejected request drew no ghost: ${JSON.stringify(overlayPixels)}`);
+  assert.equal(overlayPixels.withGhost, overlayPixels.all);
   assert.ok(overlayPixels.narrowCones < overlayPixels.all, `a narrower joint limit did not shrink the cones: ${JSON.stringify(overlayPixels)}`);
   assert.equal(overlayPixels.wideCones, overlayPixels.all);
   assert.ok(overlayPixels.all > overlayPixels.withoutCones, `joint cones toggle drew nothing: ${JSON.stringify(overlayPixels)}`);
@@ -83,7 +88,8 @@ try {
   assert.equal(exported.simulator.options.rodLengthTolerance, 0.01);
   assert.equal(exported.simulator.requested.z, 100);
   assert.equal(exported.simulator.accepted.z, 0);
-  assert.deepEqual(exported.simulator.overlays, { servoArcs: false, jointCones: false, platformAxes: true, worldAxes: false });
+  assert.deepEqual(exported.simulator.overlays, { servoArcs: false, jointCones: false, requestedGhost: true,
+    platformAxes: true, worldAxes: false });
   await page.locator('#optimizeTab').click();
   await page.locator('#referenceLayoutInput').fill(JSON.stringify(exported));
   await page.locator('#simulateTab').click();
@@ -91,6 +97,7 @@ try {
   assert.equal(await page.locator('#simRodTolerance').inputValue(), '0.01');
   assert.equal(await page.locator('#simOverlayServoArcs').isChecked(), false);
   assert.equal(await page.locator('#simOverlayJointCones').isChecked(), false);
+  assert.equal(await page.locator('#simOverlayRequestedGhost').isChecked(), true);
   assert.equal(await page.locator('#simOverlayWorldAxes').isChecked(), false);
   assert.equal(await page.locator('#simOverlayPlatformAxes').isChecked(), true);
   assert.match(await page.locator('#simRequestedDiagnostic').textContent(), /rejected/);

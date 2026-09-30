@@ -1,5 +1,5 @@
 import { vectorAdd, vectorCross, vectorDot, vectorNormalize, vectorSub } from '../math.js';
-import { buildSceneGeometry } from './scene.js';
+import { buildSceneGeometry, SCENE_BACKGROUND } from './scene.js';
 
 // The scene builders live in scene.js; re-exported for existing callers.
 export { buildSceneGeometry };
@@ -70,7 +70,7 @@ export function createWebGLRenderer(canvas, { window, onContextChange } = {}) {
     color = gl.getAttribLocation(program, 'aColor');
     pointSize = gl.getUniformLocation(program, 'uPointSize');
     gl.enable(gl.DEPTH_TEST);
-    gl.clearColor(0.055, 0.075, 0.11, 1);
+    gl.clearColor(...SCENE_BACKGROUND, 1);
   }
   setup();
 

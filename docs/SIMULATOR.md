@@ -18,8 +18,9 @@ reference input or JSON transfer.
 and calls `evaluatePose` with `recordLegData: true`. `getState()` returns the
 requested pose, evaluator `assessment`, last valid `accepted` pose, and
 `acceptedAssessment`. A failed request keeps its leg-specific diagnostics but
-does not change `accepted`; if home fails, `accepted` remains `null`. Rendering
-uses the accepted pose only. `setOptions(patch)` reevaluates both the accepted
+does not change `accepted`; if home fails, `accepted` remains `null`. The
+rendered mechanism is always the accepted pose; a rejected request is shown
+only as the dimmed ghost overlay described below. `setOptions(patch)` reevaluates both the accepted
 pose and current request. `subscribe(listener)` provides a snapshot immediately
 and after every change; its returned function unsubscribes. Geometry controls
 and diagnostics should use these calls rather than duplicating the evaluator.
@@ -88,9 +89,14 @@ gains an **Imported reference** entry, is enabled even without a run, and
 choosing that entry again reloads the imported document after a candidate was
 shown.
 
-The native WebGL2 renderer reads only the accepted evaluator geometry: base
-anchors, solved horn tips, actual rods, platform points, servo orientation
-angles and platform frame. Orbit camera is the initial mouse mode: dragging with the primary button or
+The native WebGL2 renderer draws two layers, both from evaluator output and
+never from its own constraint solving. The solid layer is the accepted pose:
+base anchors, solved horn tips, actual rods, platform points, servo orientation
+angles and platform frame, with legs that fail in the requested pose coloured
+as described under Live diagnostics. When the latest request was rejected, the
+**Rejected pose ghost** overlay adds a second, dimmed layer showing that
+request (see Scene builders and overlays). The ghost is the only geometry drawn
+from a pose the evaluator did not accept. Orbit camera is the initial mouse mode: dragging with the primary button or
 first touch changes yaw and pitch (a right click or second finger does not
 reset the drag), the
 wheel zooms between 80 and 2,500 units, and **Reset camera** restores the
@@ -146,13 +152,13 @@ where `solved` is the accepted assessment or `null`, so builders only draw data
 the evaluator already produced. The list order is the draw order: `base`
 (base polygon, servo direction stubs and base markers), `platform` (platform
 polygon), `legs` (horns, rods and their markers), `servoArcs`, `jointCones`,
-`platformAxes`, `worldAxes` and `trace`. Markers and traces keep their own controls.
+`requestedGhost`, `platformAxes`, `worldAxes` and `trace`. Markers and traces keep their own controls.
 
 A builder with an `overlay` key is drawn only when that key is on in
 `state.overlays`. `OVERLAY_DEFAULTS` lists every toggleable overlay and its
 default; today these are **Servo arcs** (`servoArcs`), **Joint cones**
-(`jointCones`), **Platform axes** (`platformAxes`) and **World axes**
-(`worldAxes`), all on. With only the two
+(`jointCones`), **Rejected pose ghost** (`requestedGhost`), **Platform axes**
+(`platformAxes`) and **World axes** (`worldAxes`), all on. With only the two
 axis overlays on, the scene matches the original single-function renderer line
 for line (a frozen fixture in `tests/fixtures/scene-geometry.json` checks this). The Simulate tab shows one checkbox per overlay in the
 **Overlays** group, with the id `simOverlay` plus the capitalised name (for
@@ -193,8 +199,23 @@ joint). The rod drawn by `legs` shows the current direction against the cone.
 The cones visualise the joint limit only; they are not a collision check, and
 the simulator still has no collision detection.
 
+**Rejected pose ghost** (on by default) draws the latest request faintly when
+the evaluator rejected it (`assessment.reachable` is false), so the pose that
+was asked for, or the animation frame that paused playback, is visible next to
+the held accepted pose. It reads only the rejected assessment: the platform
+outline is the requested `translation` and `rotationMatrix` applied to
+`layout.platformAnchors`, which the evaluator always returns, plus the
+requested platform axes; horns and rods are drawn only for legs where the
+solver produced a horn tip, because it stops at the first structural failure
+(a joint-limit failure still solves every leg). The ghost has no markers, and
+its colours are dimmed to 35 % of the way from the background colour
+(`SCENE_BACKGROUND`, also the canvas clear colour) toward the normal colour,
+instead of blending. Legs named in a violation use the failure colour at full
+brightness, and a whole-platform failure outlines the ghost platform in the
+global-failure colour. An accepted request draws no ghost.
+
 ## Live diagnostics
 
-The diagnostics panel subscribes to the same controller as the renderer. It reports the six-axis **requested** pose and last valid **rendered accepted** pose separately. A rejected request remains visible with its evaluator failures while the renderer holds the last accepted geometry. Red leg rows and matching WebGL leg colors mark failures in the requested pose; a whole-platform conditioning failure has a separate message and color. Highlighting does not imply that the rejected pose was rendered.
+The diagnostics panel subscribes to the same controller as the renderer. It reports the six-axis **requested** pose and last valid **rendered accepted** pose separately. A rejected request remains visible with its evaluator failures while the renderer holds the last accepted geometry. Red leg rows and matching WebGL leg colors mark failures in the requested pose; a whole-platform conditioning failure has a separate message and color. Highlighting the accepted legs does not mean the rejected pose was accepted; the rejected pose itself appears only as the dimmed ghost overlay.
 
 Each leg shows lower and upper socket deflection against their effective limits, maximum deflection, rod-length deviation against the editable tolerance, and servo angle. Unavailable measurements show a dash because the evaluator may stop at the first structural failure. Lower and upper joint limits and rod tolerance can be edited in the panel; changes reevaluate the current request and last accepted pose, a focused field keeps text the user has typed while an animation plays, an untouched focused field still follows loads and settings changes, and a rejected value is restored. The mandatory reciprocal conditioning cutoff and optional engineering condition limit are displayed. Simulator JSON saves these effective options with the requested and accepted poses, and loading that JSON restores them.
