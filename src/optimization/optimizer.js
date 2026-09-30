@@ -60,6 +60,7 @@ export class Optimizer {
     this.running = false;
     this.runStatus = 'idle';
     this.nextLayoutId = 1;
+    this.selectedCandidateId = null;
   }
 
   createRandomLayout() {
@@ -117,6 +118,21 @@ export class Optimizer {
     this.population = evaluations.map((ev) => cloneLayout(ev.layout));
     this.fitness = evaluations;
     this.pareto = fronts[0]?.map((idx) => evaluations[idx]) || [];
+    if (this.running || !this.fitness.some(ev => ev.layout.id === this.selectedCandidateId)) {
+      this.selectedCandidateId = selectBest(this.pareto, this.fitness)?.layout.id ?? null;
+    }
+  }
+
+  getSelectedCandidate() {
+    return this.fitness.find(ev => ev.layout.id === this.selectedCandidateId)
+      || selectBest(this.pareto, this.fitness);
+  }
+
+  selectCandidate(id) {
+    const selected = this.fitness.find(ev => String(ev.layout.id) === String(id));
+    if (!selected) throw new RangeError(`Candidate ${id} is not in the retained population.`);
+    this.selectedCandidateId = selected.layout.id;
+    return selected;
   }
 
   async evaluatePopulation(layouts) {
@@ -169,6 +185,7 @@ export class Optimizer {
     this.population = [];
     this.fitness = [];
     this.pareto = [];
+    this.selectedCandidateId = null;
     this.generation = 0;
     this.activeGeneration = 0;
     this.completedEvaluations = 0;
@@ -207,7 +224,7 @@ export class Optimizer {
       console.warn('No evaluated layouts available for export.');
       return;
     }
-    const best = selectBest(this.pareto, this.fitness);
+    const best = this.getSelectedCandidate();
     if (!best) {
       console.warn('Unable to determine best layout.');
       return;
@@ -218,6 +235,12 @@ export class Optimizer {
     }
     return JSON.stringify(exportResult(best, {
       status: this.runStatus, completedGenerations: this.generation, partial: this.runStatus !== 'completed',
+      effective_settings: this.effectiveSettings?.() ?? {
+        requirements: this.requirements, ranges: this.ranges,
+        populationSize: this.populationSize, generations: this.generations,
+        mutationRate: this.mutationRate, designSpace: this.designSpace,
+        ballJointLimitDeg: this.ballJointLimitDeg, ballJointClamp: this.ballJointClamp,
+      },
     }), null, 2);
   }
 }

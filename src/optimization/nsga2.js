@@ -1,3 +1,5 @@
+import { compareFeasibility } from '../io/results.js';
+
 function normalizedObjectives(objectives) {
   return objectives.map((value) => (Number.isFinite(value) ? value : -Infinity));
 }
@@ -27,9 +29,10 @@ export function fastNonDominatedSort(evaluations) {
     evaluations[i].rank = Infinity;
     for (let j = 0; j < n; j++) {
       if (i === j) continue;
-      if (dominates(evaluations[i].objectives, evaluations[j].objectives)) {
+      const constraintOrder = compareFeasibility(evaluations[i], evaluations[j]);
+      if (constraintOrder < 0 || (constraintOrder === 0 && dominates(evaluations[i].objectives, evaluations[j].objectives))) {
         dominatedSets[i].push(j);
-      } else if (dominates(evaluations[j].objectives, evaluations[i].objectives)) {
+      } else if (constraintOrder > 0 || (constraintOrder === 0 && dominates(evaluations[j].objectives, evaluations[i].objectives))) {
         dominationCounts[i] += 1;
       }
     }

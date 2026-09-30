@@ -8,7 +8,7 @@ Strict mode is the default. In optional soft-ball-joint mode, `metadata.relaxed_
 
 `constraint_policy` records mode and effective ball-joint limit. `workspace_counts` includes reachable, unreachable, relaxedReachable and violationPoses. Counts cover the full sweep; stored example poses are reservoir samples capped at 200 per class. `workspace_stats.violationCounts` counts observed violations by type; evaluation may stop at the first hard failure. `violationRate` counts poses with any violation, not the number of individual leg failures.
 
-The three feasibility flags report sampled workspace satisfaction, home-pose satisfaction and cycle satisfaction independently. They describe the implemented checks only. A candidate can be exported with false flags. Selection is highest feasible workspace coverage from the current Pareto front; it is not guaranteed to be the minimum-torque or cycle-valid candidate.
+The three feasibility flags report sampled workspace satisfaction, home-pose satisfaction and cycle satisfaction independently. They describe the implemented checks only. The candidate browser includes every retained candidate, including diagnostic failures and coincident chart points. Passing candidates rank ahead of diagnostics. Diagnostics rank by fewer failed categories, then greater feasible coverage, then lower available torque/speed demand. Initial selection among passing candidates is lowest torque, then speed, then better conditioning; with no passing candidate, it uses diagnostic order. The X/Y chart defaults to torque versus speed and can use other available metrics. The keyboard-accessible candidate list changes the displayed and downloaded layout. A new run clears the prior selection.
 
 ## Metric meanings
 
@@ -38,13 +38,16 @@ The download is `optimized_layout.json` with these top-level fields:
 | beta_angles | Six horn-plane orientation angles, radians |
 | horn_length / rod_length | Shared horn and rod lengths, mm |
 | servo_range | Shared [minimum, maximum] travel, degrees |
-| home_height | Derived platform home offset along Z, mm |
+| home_height | Platform home offset along Z, mm |
+| schema_version / model_version | Layout format and physical model versions |
+| id / topology / topology_parameters / mounting | Selected candidate identity and geometry/model metadata |
+| diagnostic | True when this result fails an enforced requirement |
 | metadata | Metrics described above |
 | cycle | Validity, axis, phase count, peak demands, per-servo peaks/model when valid, failure reason when invalid |
-| feasibility | Independent sampled-workspace, home-pose and cycle flags plus scope text |
+| feasibility | Independent sampled-workspace, home-pose and cycle flags, passing status, failed categories, and scope text |
 | constraint_policy | Strict/soft workspace policy and joint limit |
 | workspace_counts / workspace_stats | Full sweep counters and aggregated statistics |
-| run | completed/cancelled status, completed generation count, and partial flag |
+| run | completed/cancelled status, completed generation count, partial flag, and effective replay settings |
 
 The on-screen JSON has a `run`/`result` wrapper and includes bounded example poses; it is not byte-for-byte identical to the download. Pose samples store translation offsets in mm and Euler angles in radians. Internal servo angles/statistics are radians. Cycles are always checked strictly, even when workspace exploration is soft. Unavailable demand is null with an explicit reason, never an implicit zero.
 
