@@ -70,7 +70,10 @@ export function normalizeStiffnessModel(input) {
       forceN: vector3(wrench.force_n, `${name('test_wrenches')}[${i}].force_n`),
       momentNm: vector3(wrench.moment_nm, `${name('test_wrenches')}[${i}].moment_nm`) };
   });
-  const useAsObjective = input.use_as_objective === undefined ? false : input.use_as_objective;
+  // A supplied stiffness model carries the servo and rod stiffness the proxy
+  // cannot see (the proxy is scale-free), so it is the Full objective unless
+  // the caller keeps the proxy explicitly.
+  const useAsObjective = input.use_as_objective === undefined ? true : input.use_as_objective;
   if (typeof useAsObjective !== 'boolean') throw new TypeError(`${name('use_as_objective')} must be a boolean.`);
   return { servoStiffnessNmPerRad: servoStiffness, rod, characteristicLengthM, testWrenches, useAsObjective };
 }

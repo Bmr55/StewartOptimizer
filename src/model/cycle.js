@@ -311,12 +311,20 @@ export function computeCycleDemand(layout, { mass = 0, stroke = 0, frequency = 0
   };
   const loadSharing = createLoadSharingAccumulator();
   samples.forEach(({ time, result }, k) => loadSharing.add(result, weights[k], time));
+  // Time-weighted RMS excursion of each servo angle about its cycle mean (rad):
+  // the motion the trajectory actually demands, independent of the travel bounds.
+  const servoExcursionRmsRad = Array.from({ length: 6 }, (_, leg) => {
+    if (stationary) return 0;
+    const angles = samples.map(({ result }) => result.servoAngles[leg]);
+    const mean = angles.reduce((sum, angle, k) => sum + weights[k] * angle, 0);
+    return Math.sqrt(angles.reduce((sum, angle, k) => sum + weights[k] * (angle - mean) ** 2, 0));
+  });
   const samplingResult = samplingSummary(status, { maxUnresolved });
   const output = { valid: true, axis: legacyAxis, samples: evaluated, periodS: period,
     torqueNm: Math.max(...torque), speedRadPerSec: Math.max(...speed),
     accelerationRadPerSec2: Math.max(...acceleration),
     perServoTorqueNm: torque, perServoSpeedRadPerSec: speed, perServoAccelerationRadPerSec2: acceleration,
-    limiting, actuator, loadSharing: loadSharing.finish(),
+    limiting, actuator, loadSharing: loadSharing.finish(), servoExcursionRmsRad,
     conditioning: { ...conditionTrack, conditionLimit },
     sampling: samplingResult,
     ...identity,

@@ -22,6 +22,10 @@ export function createWorkspaceStatistics({ totalPoses, sampleLimit = 200, viola
   const ballJointMax = new Array(6).fill(0);
   const lowerJointMax = new Array(6).fill(0);
   const upperJointMax = new Array(6).fill(0);
+  // Socket maxima over reachable poses only; the all-pose maxima above include
+  // violating poses and exceed the limit whenever any sampled pose fails.
+  const reachableLowerJointMax = new Array(6).fill(0);
+  const reachableUpperJointMax = new Array(6).fill(0);
   const jointViolationCounts = { lower: 0, upper: 0 };
   const conditioningCounts = { valid: 0, numericalSingularity: 0,
     engineeringLimit: 0, unavailable: 0 };
@@ -73,6 +77,12 @@ export function createWorkspaceStatistics({ totalPoses, sampleLimit = 200, viola
       reachableCount += 1;
       reachableSeen += 1;
       recordSample(reachableSamples, normalizedSampleLimit, reachableSeen, { pose });
+      if (result.jointAngles) {
+        for (let leg = 0; leg < 6; leg++) {
+          reachableLowerJointMax[leg] = Math.max(reachableLowerJointMax[leg], result.jointAngles.lower?.[leg] ?? 0);
+          reachableUpperJointMax[leg] = Math.max(reachableUpperJointMax[leg], result.jointAngles.upper?.[leg] ?? 0);
+        }
+      }
 
       if (result.conditioning?.satisfied) {
         const { reciprocal, condition, sigmaMin } = result.conditioning;
@@ -148,6 +158,8 @@ export function createWorkspaceStatistics({ totalPoses, sampleLimit = 200, viola
       ballJointMax,
       lowerJointMax,
       upperJointMax,
+      reachableLowerJointMax,
+      reachableUpperJointMax,
       ballJointOverallMax: Math.max(0, ...ballJointMax),
       ballJointAverage: ballJointSamples.value(),
       jointViolationCounts,

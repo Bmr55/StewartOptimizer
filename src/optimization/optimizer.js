@@ -22,6 +22,19 @@ import { CYCLE_MODEL_VERSION } from '../contracts.js';
 import { LOAD_SHARING_MODEL } from '../model/load-sharing.js';
 import { DEFAULT_CYCLE_SAMPLING, LEGACY_CYCLE_SAMPLING, normalizeCycleSampling } from '../model/cycle-sampling.js';
 
+// Runs saved before the physical stiffness became the default Full objective
+// carry a stiffness model without use_as_objective and name the proxy in
+// objectiveDefinitions; replay keeps the proxy they were ranked with.
+function replayRequirements(settings) {
+  const requirements = settings.requirements ?? {};
+  const model = requirements.stiffness_model;
+  const keys = Array.isArray(settings.objectiveDefinitions) ? settings.objectiveDefinitions.map(definition => definition?.key) : [];
+  if (model && typeof model === 'object' && !Array.isArray(model) && !('use_as_objective' in model) && keys.includes('stiffness')) {
+    return { ...requirements, stiffness_model: { ...model, use_as_objective: false } };
+  }
+  return requirements;
+}
+
 // Owns run state and population lifecycle. Numerical work and browser I/O live elsewhere.
 export class Optimizer {
   static fromReplay(input, { onProgress } = {}) {
@@ -33,7 +46,7 @@ export class Optimizer {
     if (settings.randomAlgorithm !== RANDOM_ALGORITHM) {
       throw new RangeError(`run.effective_settings.randomAlgorithm must be ${RANDOM_ALGORITHM}.`);
     }
-    return new Optimizer(settings.requirements ?? {}, {
+    return new Optimizer(replayRequirements(settings), {
       ...settings,
       // Full runs saved before solved load sharing optimized the directional proxy.
       objectiveSet: settings.objectiveSet === 'full'
