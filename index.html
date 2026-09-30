@@ -173,6 +173,16 @@
                 <button id="exportCoordinateCsv" disabled>Download Coordinates CSV</button>
             </div>
             <div id="optStatus" class="status">Idle</div>
+            <div class="run-dashboard" id="runDashboard" aria-label="Live run metrics">
+                <div><span>State</span><strong id="runPhase">Idle</strong></div>
+                <div><span>Elapsed</span><strong id="runElapsed">0.0 s</strong></div>
+                <div><span>Candidates</span><strong id="runCandidates">0 / 0</strong></div>
+                <div><span>Generation</span><strong id="runGeneration">0 / 0</strong></div>
+                <div><span>Front size</span><strong id="runFrontSize">0</strong></div>
+                <div><span>Remaining</span><strong id="runEta">Unavailable</strong></div>
+                <div class="run-dashboard-wide"><span>Pose work</span><strong id="runPoseWork">0 actual / 0 budgeted</strong></div>
+                <div class="run-dashboard-wide"><span>Best completed candidate</span><strong id="runBestCandidate">No completed population yet</strong></div>
+            </div>
             <div class="result-browser" aria-label="Candidate results">
                 <div class="grid result-controls">
                     <label class="field">X axis<select id="chartXAxis" aria-label="Chart X axis"></select></label>

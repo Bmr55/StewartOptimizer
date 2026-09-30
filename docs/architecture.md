@@ -15,6 +15,7 @@ The p5/quaternion/Stewart scripts belong only to the [archived simulator](../arc
 | `src/ui/app.js` | Event handlers, status display and run/cancel control |
 | `src/ui/worker-optimizer.js` | Browser adapter retaining selection/export and completed checkpoints |
 | `src/ui/optimizer-worker.js`, `worker-runtime.js`, `worker-protocol.js` | Module worker entry, run lifecycle and serializable message shapes |
+| `src/ui/run-dashboard.js` | Live bounded metrics, 10 Hz UI cap and run-state transitions |
 | `src/ui/controls.js` | Workspace inputs and preservation of explicit overrides |
 | `src/ui/tooltips.js`, `download.js` | Browser-only interactions |
 | `src/model/requirements.js` | Parsing, normalization and physical input validation |

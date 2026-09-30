@@ -45,10 +45,16 @@ export function createWorkerRuntime({ postMessage, now = () => performance.now()
 
     try {
       const outcome = await optimizer.run();
-      postMessage({ type: 'result', runId, outcome, snapshot: checkpointSnapshot(optimizer) });
+      postMessage({ type: 'result', runId, outcome, snapshot: checkpointSnapshot(optimizer),
+        summary: progressSnapshot(optimizer, {
+          completed: optimizer.completedPoseWork, generation: optimizer.generation,
+        }, now() - startedAt) });
     } catch (error) {
       postMessage({ type: 'error', runId, phase: 'runtime', name: error.name, message: error.message,
-        snapshot: checkpointSnapshot(optimizer) });
+        snapshot: checkpointSnapshot(optimizer),
+        summary: progressSnapshot(optimizer, {
+          completed: optimizer.completedPoseWork, generation: optimizer.generation,
+        }, now() - startedAt) });
     } finally {
       if (active?.runId === runId) active = null;
     }
