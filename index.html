@@ -17,7 +17,41 @@
                 <h1>Requirements</h1>
                 <button type="button" class="info-button" data-info="Paste or edit your project\'s requirements JSON. The optimizer reads this structured document to derive payload, workspace, and constraint targets.">ⓘ</button>
             </div>
-            <p>Use the sample below or follow the <a href="./docs/REQUIREMENTS.md">requirements reference</a>. The optimizer will generate candidate layouts automatically.</p>
+            <p>Use the sample below or open the requirements reference for accepted fields and validation rules. The optimizer will generate candidate layouts automatically.</p>
+            <details class="requirements-guide">
+                <summary>Requirements reference</summary>
+                <div class="requirements-guide-content">
+                    <p>Requirements may be flat or grouped into <code>payload</code>, <code>workspace</code>, <code>rotations</code>, and optional <code>constraints</code>. Nested payload, workspace, and rotations must be objects containing their required fields. Both formats use the same validation. Errors identify the invalid field before evaluation begins. Numeric strings and null values are rejected; omitting an optional field uses its default.</p>
+                    <div class="requirements-table-wrap">
+                        <table>
+                            <thead><tr><th scope="col">Field</th><th scope="col">Domain / meaning</th><th scope="col">Default</th></tr></thead>
+                            <tbody>
+                                <tr><th scope="row"><code>mass_kg</code></th><td>Finite number ≥ 0; centered payload mass, kg</td><td>Required</td></tr>
+                                <tr><th scope="row"><code>cycle_mm</code></th><td>Finite number ≥ 0; peak-to-peak translation, mm</td><td>Required</td></tr>
+                                <tr><th scope="row"><code>frequency_hz</code></th><td>Finite number ≥ 0; zero means stationary</td><td>Required</td></tr>
+                                <tr><th scope="row"><code>cycle_axis</code></th><td>x, y, or z, case-insensitive</td><td>Required</td></tr>
+                                <tr><th scope="row"><code>x_range_mm</code>, <code>y_range_mm</code>, <code>z_range_mm</code></th><td>Finite min/max with max ≥ min; offsets from home, mm</td><td>Required</td></tr>
+                                <tr><th scope="row"><code>rx_range_deg</code>, <code>ry_range_deg</code>, <code>rz_range_deg</code></th><td>Finite min/max with max ≥ min; roll/pitch/yaw, degrees</td><td>Required</td></tr>
+                                <tr><th scope="row"><code>ball_joint_max_deg</code></th><td>Finite number in [0, 180]</td><td>45</td></tr>
+                                <tr><th scope="row"><code>rod_length_bounds_mm</code></th><td>Two positive finite lengths with max ≥ min</td><td>[160, 420]</td></tr>
+                                <tr><th scope="row"><code>horn_length_bounds_mm</code></th><td>Two positive finite lengths with max ≥ min</td><td>[30, 110]</td></tr>
+                                <tr><th scope="row"><code>home_height_bounds_mm</code></th><td>Two positive finite home heights, mm, with max ≥ min</td><td>[50, 450]</td></tr>
+                                <tr><th scope="row"><code>servo_travel_bounds_deg</code></th><td>Two finite angles with max ≥ min</td><td>[-120, 120]</td></tr>
+                                <tr><th scope="row"><code>servo_max_deg</code></th><td>Optional finite nonnegative symmetric travel limit; used only when explicit travel bounds are omitted</td><td>Omitted</td></tr>
+                                <tr><th scope="row"><code>servo_torque_rating_nm</code></th><td>Optional finite positive shared peak torque rating in N m</td><td>Omitted</td></tr>
+                                <tr><th scope="row"><code>servo_speed_rating_deg_s</code></th><td>Optional finite positive shared peak angular speed rating in deg/s</td><td>Omitted</td></tr>
+                                <tr><th scope="row"><code>per_servo_ratings</code></th><td>Optional six-entry array in servo order; each entry may set positive <code>torque_nm</code> and/or <code>speed_deg_s</code>, or be null</td><td>Omitted</td></tr>
+                                <tr><th scope="row"><code>servo_rating_policy</code></th><td><code>enforced</code> or <code>advisory</code>; supplied ratings constrain feasibility by default</td><td><code>enforced</code></td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <h3>Ranges and defaults</h3>
+                    <p>Ranges accept <code>[min, max]</code>, <code>{ "min": min, "max": max }</code>, or <code>{ "from": min, "to": max }</code>. Arrays must contain exactly two values. Equal bounds are allowed for a fixed length, stationary coordinate, or locked servo. A zero payload removes the modeled external load; zero stroke or frequency evaluates a stationary cycle. Valid input need not describe a feasible design.</p>
+                    <p>The parser initializes grid steps that produce three samples along each nonzero workspace or rotation range (min, midpoint, max). Zero-span ranges contain one grid sample. The default Halton strategy uses the bounds and ignores steps; select 256, 1,024, or 4,096 samples, or select Cartesian grid. Explicit UI overrides, including home-height bounds, take precedence over JSON defaults; untouched controls follow edits to the JSON. Loading the sample resets range and height controls. UI steps must be positive; population and generations must be integers ≥ 4 and ≥ 1 respectively. Workload limits apply independently of physical input validation.</p>
+                    <h3>Servo ratings</h3>
+                    <p>A per-servo value overrides the shared value for that servo and metric; an omitted per-servo value inherits the shared value. The UI rating fields use the JSON values as defaults. Edited UI values take precedence for the run; untouched fields refresh after JSON edits. Loading the sample resets rating controls. Clear a UI field to remove that rating. Speed ratings entered in deg/s are converted to rad/s for comparison with cycle demand. Ratings do not change the force-balance or servo-speed models.</p>
+                </div>
+            </details>
             <div class="button-row">
                 <button id="loadSampleRequirements">Load Sample Requirements</button>
                 <button id="clearRequirements">Clear</button>

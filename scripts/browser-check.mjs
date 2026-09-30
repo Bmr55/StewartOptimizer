@@ -12,6 +12,13 @@ try {
   await page.goto(`http://127.0.0.1:${server.address().port}/`);
   await page.locator('#requirementsInput').waitFor({ state: 'visible' });
   await page.waitForFunction(() => document.querySelector('#requirementsInput').value.includes('mass_kg'));
+  const requirementsGuide = page.locator('.requirements-guide');
+  assert.equal(await requirementsGuide.locator('table').isVisible(), false);
+  await requirementsGuide.locator('summary').click();
+  assert.equal(await requirementsGuide.locator('table').isVisible(), true);
+  assert.equal(await requirementsGuide.locator('tbody tr').count(), 16);
+  assert.equal(await page.locator('a[href="./docs/REQUIREMENTS.md"]').count(), 0);
+  await requirementsGuide.locator('summary').click();
   await page.locator('#optPopulation').fill('4');
   await page.locator('#optGenerations').fill('1');
   await page.locator('#optObjectiveSet').selectOption('full');
