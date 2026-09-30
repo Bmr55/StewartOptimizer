@@ -241,3 +241,17 @@ test('a startup timeout never silently invokes the fallback', async () => {
   assert.equal(opt.mode, 'worker');
   assert.equal(opt.running, false);
 });
+
+test('worker start propagates callback errors without leaving a pending run', async () => {
+  let worker;
+  const opt = new WorkerOptimizer({}, { populationSize: 4, generations: 1 }, {
+    workerFactory: () => (worker = { postMessage() {}, terminate() {}, onmessage: null, onerror: null }),
+  });
+  const pending = opt.start(() => { throw new Error('callback failed'); });
+  const runId = opt.runId;
+  worker.onmessage({ data: { type: 'started', runId } });
+  worker.onmessage({ data: { type: 'result', runId,
+    outcome: { status: 'completed' }, snapshot: { fitness: [] } } });
+  await assert.rejects(pending, /callback failed/);
+  assert.equal(opt.running, false);
+});

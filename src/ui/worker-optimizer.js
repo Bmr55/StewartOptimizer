@@ -84,8 +84,8 @@ export class WorkerOptimizer extends Optimizer {
           completedEvaluations: this.completedEvaluations, partialResults: this.fitness.length > 0,
           error: message };
         cleanup();
-        callback?.(this, outcome);
-        resolve(outcome);
+        try { callback?.(this, outcome); resolve(outcome); }
+        catch (error) { reject(error); }
       };
       try {
         worker = this.workerFactory(WORKER_URL, { type: 'module' });
@@ -115,8 +115,8 @@ export class WorkerOptimizer extends Optimizer {
               this.runStatus = message.outcome.status;
               const outcome = message.outcome;
               cleanup();
-              callback?.(this, outcome);
-              resolve(outcome);
+              try { callback?.(this, outcome); resolve(outcome); }
+              catch (error) { reject(error); }
               break;
             }
             case 'error':

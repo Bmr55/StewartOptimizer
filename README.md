@@ -30,7 +30,7 @@ The grid preset is deliberately coarse. A 100% sampled coverage result does not 
 - Axis-specific sampled cycle force-balance/servo-speed estimates, plus geometric stiffness/dexterity/load-balance/fatigue proxies.
 - Bounded work, progress, cancellation and JSON export.
 
-The root app has no integrated 3D viewer, CSV export, PSO/hybrid search or ML surrogate. Collision detection, actuator capacity, component inertia/friction, material fatigue and calibrated compliance models are absent.
+The root app has no integrated 3D viewer, PSO/hybrid search or ML surrogate. Collision detection, actuator capacity, component inertia/friction, material fatigue and calibrated compliance models are absent.
 
 ## Reference
 
