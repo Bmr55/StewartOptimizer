@@ -159,3 +159,20 @@ test('asymmetric reference run replays from exported effective settings and reim
   assert.deepEqual(displayedReplay.effectiveSettings(), original.effectiveSettings());
   assert.throws(() => Optimizer.fromReplay(source), /run.effective_settings/);
 });
+
+test('free-topology parameters must be an object, are copied, and version errors show the offending value', () => {
+  const plain = asymmetric();
+  for (const parameters of ['garbage', 42, true, [1, 2]]) {
+    assert.throws(() => importLayout({ ...plain, topology: 'free', topology_parameters: parameters }),
+      /topology_parameters must be an object/, JSON.stringify(parameters));
+  }
+  const input = { ...plain, topology: 'free', topology_parameters: { note: 'kept' } };
+  const { layout } = importLayout(input);
+  assert.deepEqual(layout.topologyParameters, { note: 'kept' });
+  input.topology_parameters.note = 'changed';
+  assert.equal(layout.topologyParameters.note, 'kept', 'topology_parameters were stored by reference');
+  assert.deepEqual(importLayout({ ...plain, topology_parameters: null }).layout.topologyParameters, {});
+  assert.throws(() => importLayout({ ...plain, schema_version: '2' }), /schema_version "2" is unsupported/);
+  assert.throws(() => importLayout({ ...plain, model_version: 1.5 }), /model_version 1.5 is unsupported/);
+  assert.throws(() => importLayout('{'), /Layout JSON is invalid/);
+});

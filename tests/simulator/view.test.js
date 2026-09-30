@@ -87,3 +87,16 @@ test('a lost WebGL2 context is reported in the pose status and cleared on restor
   assert.match(status.textContent, /Accepted request: X 0, Y 0, Z 5/);
   assert.equal(renderer.renders, before + 1);
 });
+
+test('setCamera takes only known finite fields and rejects anything else by name', () => {
+  const { view } = mount();
+  const before = view.getCamera();
+  for (const [camera, expected] of [['abc', /camera must be an object/], [{ yaw: 'abc' }, /camera.yaw must be a finite number/],
+    [{ distance: -1 }, /camera.distance must be a finite number from 80 to 2500/], [{ target: 'x' }, /camera.target must contain three/]]) {
+    assert.throws(() => view.setCamera(camera), expected);
+  }
+  assert.deepEqual(view.getCamera(), before);
+  view.setCamera({ yaw: 1.25, junk: 'x' });
+  assert.deepEqual(view.getCamera(), { ...before, yaw: 1.25 });
+  assert.equal('junk' in view.getCamera(), false);
+});

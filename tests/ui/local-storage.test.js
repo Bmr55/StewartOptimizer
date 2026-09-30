@@ -120,3 +120,27 @@ test('a run started before the sample fetch settles is not reset by the automati
   element('restoreLocalWorkspace').handlers.click();
   assert.match(element('optStatus').textContent, /Local workspace restored/);
 });
+
+test('a browser save that fails simulator validation is rejected before any input or layout changes', async () => {
+  const localStorage = storage();
+  const options = { window: { localStorage, addEventListener() {} } };
+  const first = await loadUI(FixtureOptimizer, options);
+  first('optSeed').value = '345';
+  await first('runOptimization').handlers.click();
+  first('saveLocalWorkspace').handlers.click();
+  const saved = JSON.parse(localStorage.getItem(LOCAL_WORKSPACE_KEY));
+  saved.simulator.simulator.animation.speed = -1;
+  localStorage.setItem(LOCAL_WORKSPACE_KEY, JSON.stringify(saved));
+
+  const second = await loadUI(FixtureOptimizer, options);
+  assert.match(second('optStatus').textContent, /Could not restore browser save: simulator.animation.speed must be a positive/);
+  assert.notEqual(second('optSeed').value, '345', 'inputs were applied before the save was rejected');
+  assert.match(second('simCandidateSummary').textContent, /Select an optimizer candidate/);
+  await second('runOptimization').handlers.click();
+  second('optSeed').value = '777';
+  second('restoreLocalWorkspace').handlers.click();
+  assert.match(second('optStatus').textContent, /Could not restore browser save: simulator.animation.speed/);
+  assert.equal(second('optSeed').value, '777');
+  assert.match(second('simCandidateSummary').textContent, /Candidate 19/, 'the loaded candidate was cleared by a rejected restore');
+  assert.equal(second('simCandidateSelect').disabled, false);
+});

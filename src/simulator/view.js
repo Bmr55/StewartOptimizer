@@ -9,6 +9,34 @@ const axisSlider = (document, axis) => document.getElementById(`sim${axis.toUppe
 const displayValue = (axis, value) => RADIAN_AXES.has(axis) ? radToDeg(value) : value;
 const modelValue = (axis, value) => RADIAN_AXES.has(axis) ? degToRad(value) : value;
 const fmt = value => Number.isFinite(value) ? Number(value.toFixed(2)) : '—';
+export const CAMERA_DISTANCE_RANGE = Object.freeze([80, 2500]);
+export const CAMERA_PITCH_LIMIT = 1.4;
+
+// Only the known camera fields are taken, each checked, so a saved camera from
+// hand-edited JSON cannot spread characters or store a non-finite view.
+export function parseCamera(next, field = 'camera') {
+  if (!next || typeof next !== 'object' || Array.isArray(next)) throw new TypeError(`${field} must be an object.`);
+  const camera = {};
+  const finite = (key, min = -Infinity, max = Infinity) => {
+    if (next[key] === undefined) return;
+    const value = next[key];
+    if (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max) {
+      throw new RangeError(`${field}.${key} must be a finite number${min === -Infinity ? '' : ` from ${min} to ${max}`}.`);
+    }
+    camera[key] = value;
+  };
+  finite('yaw');
+  finite('pitch', -CAMERA_PITCH_LIMIT, CAMERA_PITCH_LIMIT);
+  finite('distance', CAMERA_DISTANCE_RANGE[0], CAMERA_DISTANCE_RANGE[1]);
+  if (next.target !== undefined) {
+    if (!Array.isArray(next.target) || next.target.length !== 3
+      || !next.target.every(value => typeof value === 'number' && Number.isFinite(value))) {
+      throw new RangeError(`${field}.target must contain three finite coordinates.`);
+    }
+    camera.target = next.target.slice();
+  }
+  return camera;
+}
 
 export function createSimulatorView({ document, window, controller, isActive = () => true,
   createRenderer = createWebGLRenderer }) {
@@ -138,7 +166,7 @@ export function createSimulatorView({ document, window, controller, isActive = (
         y: state.requested.y - dy * 0.35 }, { source: 'pointer' });
     } else {
       camera.yaw += dx * 0.006;
-      camera.pitch = clamp(camera.pitch + dy * 0.006, -1.4, 1.4);
+      camera.pitch = clamp(camera.pitch + dy * 0.006, -CAMERA_PITCH_LIMIT, CAMERA_PITCH_LIMIT);
       if (renderer.available) renderer.render(controller.getState(), camera);
     }
     event.preventDefault?.();
@@ -147,7 +175,7 @@ export function createSimulatorView({ document, window, controller, isActive = (
   canvas.addEventListener('pointerup', releaseDrag);
   canvas.addEventListener('pointercancel', releaseDrag);
   canvas.addEventListener('wheel', event => {
-    camera.distance = clamp(camera.distance * Math.exp(event.deltaY * 0.001), 80, 2500);
+    camera.distance = clamp(camera.distance * Math.exp(event.deltaY * 0.001), CAMERA_DISTANCE_RANGE[0], CAMERA_DISTANCE_RANGE[1]);
     if (renderer.available) renderer.render(controller.getState(), camera);
     event.preventDefault?.();
   }, { passive: false });
@@ -211,7 +239,10 @@ export function createSimulatorView({ document, window, controller, isActive = (
   });
 
   return { renderer, getCamera: () => structuredClone(camera),
-    setCamera(next) { camera = { ...camera, ...next }; if (renderer.available) renderer.render(controller.getState(), camera); },
+    setCamera(next) {
+      camera = { ...camera, ...parseCamera(next) };
+      if (renderer.available) renderer.render(controller.getState(), camera);
+    },
     render() { show(controller.getState()); },
     dispose() { disposed = true; unsubscribe(); if (frameHandle != null) window.cancelAnimationFrame?.(frameHandle);
       document.removeEventListener?.('keydown', keydown); renderer.dispose(); } };

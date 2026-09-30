@@ -57,9 +57,11 @@ function normalizeCurve(input, field) {
     checkTorques(input.braking_torque_nm, 'braking_torque_nm');
     braking = input.braking_torque_nm.slice();
   }
-  if (Math.max(...torques) <= 0) throw new RangeError(`${field}.torque_nm must include a positive capacity.`);
+  // A loop rather than a spread: spreading a very long curve into Math.max overflows the call stack.
+  const peak = values => values.reduce((max, value) => value > max ? value : max, -Infinity);
+  if (peak(torques) <= 0) throw new RangeError(`${field}.torque_nm must include a positive capacity.`);
   return { quadrants, speedRadPerSec: speeds.map(degToRad), torqueNm: torques.slice(), brakingTorqueNm: braking,
-    peakTorqueNm: Math.max(...torques, ...(braking ?? [])) };
+    peakTorqueNm: Math.max(peak(torques), peak(braking ?? [])) };
 }
 
 function normalizeDurationRatings(input, field) {
