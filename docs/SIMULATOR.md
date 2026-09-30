@@ -145,13 +145,14 @@ renderer) concatenates the output of an ordered list of builders,
 where `solved` is the accepted assessment or `null`, so builders only draw data
 the evaluator already produced. The list order is the draw order: `base`
 (base polygon, servo direction stubs and base markers), `platform` (platform
-polygon), `legs` (horns, rods and their markers), `servoArcs`, `platformAxes`,
-`worldAxes` and `trace`. Markers and traces keep their own controls.
+polygon), `legs` (horns, rods and their markers), `servoArcs`, `jointCones`,
+`platformAxes`, `worldAxes` and `trace`. Markers and traces keep their own controls.
 
 A builder with an `overlay` key is drawn only when that key is on in
 `state.overlays`. `OVERLAY_DEFAULTS` lists every toggleable overlay and its
-default; today these are **Servo arcs** (`servoArcs`), **Platform axes**
-(`platformAxes`) and **World axes** (`worldAxes`), all on. With only the two
+default; today these are **Servo arcs** (`servoArcs`), **Joint cones**
+(`jointCones`), **Platform axes** (`platformAxes`) and **World axes**
+(`worldAxes`), all on. With only the two
 axis overlays on, the scene matches the original single-function renderer line
 for line (a frozen fixture in `tests/fixtures/scene-geometry.json` checks this). The Simulate tab shows one checkbox per overlay in the
 **Overlays** group, with the id `simOverlay` plus the capitalised name (for
@@ -172,6 +173,25 @@ and all three turn yellow when the accepted angle is within
 that servo's range (`servoLimit`). Other failures leave the arc colours alone;
 the leg itself is still coloured as described under Live diagnostics. The margin
 constant lives in `src/simulator/scene.js` for all limit overlays.
+
+**Joint cones** (on by default) draw each ball-joint socket's allowed cone at
+the accepted pose: 12 cones, a lower one with its apex at the horn tip and an
+upper one with its apex at the platform point. The axis is the socket normal
+in world coordinates from `socketNormalsInWorld` in `src/model/pose.js`, the
+same construction `evaluatePose` measures joint angles from (see
+[JOINT_MODEL.md](./JOINT_MODEL.md)), so the rod lies inside a cone exactly when
+its joint angle is within the limit. The half-angle is that socket's effective
+limit from the accepted assessment's `jointLimits`; an edit in the diagnostics
+panel reevaluates the accepted pose and the cones redraw in the same
+notification. Each cone is a ring at a fixed slant length of
+`max(12, 0.35 × hornLength)` mm from the apex, the same length as the axis
+markers, plus four generatrix lines; a fixed slant rather than a fixed height
+keeps wide limits, up to 180°, bounded. Cones are grey, yellow when the
+accepted joint angle is within `NEAR_LIMIT_MARGIN_RAD` (5°) of the limit, and
+red when the requested pose violates that socket (`ballJoint` for that leg and
+joint). The rod drawn by `legs` shows the current direction against the cone.
+The cones visualise the joint limit only; they are not a collision check, and
+the simulator still has no collision detection.
 
 ## Live diagnostics
 

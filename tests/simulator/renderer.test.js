@@ -5,7 +5,12 @@ import { asymmetricJointFixture } from '../fixtures/layout.js';
 import { createSimulatorController } from '../../src/simulator/controller.js';
 import { buildSceneGeometry, createWebGLRenderer, projectPoint } from '../../src/simulator/renderer.js';
 import { NEAR_LIMIT_MARGIN_RAD, OVERLAY_DEFAULTS, OVERLAY_NAMES, SCENE_BUILDERS, SCENE_COLORS } from '../../src/simulator/scene.js';
-import { computeHornTip } from '../../src/model/kinematics.js';
+import { computeHornTip, hornLocalToWorld } from '../../src/model/kinematics.js';
+import { rotateVector } from '../../src/math.js';
+import { resolveMounting } from '../../src/model/mounting.js';
+import { mountSimulatorDiagnostics } from '../../src/simulator/diagnostics.js';
+import { createSimulatorView } from '../../src/simulator/view.js';
+import { createFakeDocument } from './helpers.js';
 import { effectiveServoRange } from '../../src/model/pose.js';
 
 test('scene uses solved asymmetric anchor, horn, rod and platform frames', () => {
@@ -146,7 +151,7 @@ test('each overlay toggle removes only its own builder output', () => {
   const parts = Object.fromEntries(SCENE_BUILDERS.map(builder =>
     [builder.name, builder.build(accepted, accepted.layout, accepted.acceptedAssessment)]));
   assert.deepEqual(SCENE_BUILDERS.map(builder => builder.name),
-    ['base', 'platform', 'legs', 'servoArcs', 'platformAxes', 'worldAxes', 'trace']);
+    ['base', 'platform', 'legs', 'servoArcs', 'jointCones', 'platformAxes', 'worldAxes', 'trace']);
   assert.deepEqual(SCENE_BUILDERS.filter(builder => builder.overlay).map(builder => builder.overlay), OVERLAY_NAMES);
   assert.equal(parts.platformAxes.lines.length, 3);
   assert.equal(parts.worldAxes.lines.length, 3);
@@ -236,4 +241,103 @@ test('servo arcs are neutral, tinted near a stop and failure-coloured on a reque
   const otherFailure = { ...accepted, assessment: { ...accepted.assessment, violations: [{ type: 'ballJoint', leg: 2 }] } };
   assert.ok(legColors(otherFailure).flat().every(color => color === SCENE_COLORS.limitRange));
   assert.equal(NEAR_LIMIT_MARGIN_RAD, 5 * Math.PI / 180);
+});
+
+// Lower 30°, upper 45°: distinct so a swapped socket cannot pass.
+function coneState() {
+  const controller = createSimulatorController();
+  controller.loadLayout(asymmetricJointFixture(), { options: { ballJointLimitDeg: 180,
+    lowerBallJointLimitDeg: 30, upperBallJointLimitDeg: 45 } });
+  return { controller, state: controller.requestPose({ x: 3, y: -2, z: 5, rx: 0.05, ry: -0.03, rz: 0.04 }) };
+}
+const conesOf = state => SCENE_BUILDERS.find(builder => builder.name === 'jointCones')
+  .build(state, state.layout, state.acceptedAssessment).lines;
+const CONE_LINES = 24 + 4; // Ring segments and generatrices per socket.
+const normalize = vector => { const length = Math.hypot(...vector); return vector.map(v => v / length); };
+const dot = (a, b) => a.reduce((sum, v, k) => sum + v * b[k], 0);
+// Apex, unit axis and half-angle recovered from one socket's drawn lines.
+function readCone(lines) {
+  const ring = lines.slice(0, 24).map(line => line.from);
+  const apex = lines[24].from;
+  const center = [0, 1, 2].map(k => ring.reduce((sum, point) => sum + point[k], 0) / ring.length);
+  const axis = normalize(center.map((v, k) => v - apex[k]));
+  const edge = normalize(ring[0].map((v, k) => v - apex[k]));
+  return { apex, axis, halfAngle: Math.acos(dot(axis, edge)), ring };
+}
+
+test('joint cones sit on the socket normals of the mounting model with the effective limit as half-angle', () => {
+  const { state } = coneState();
+  const solved = state.acceptedAssessment;
+  assert.equal(state.rejected, false);
+  const lines = conesOf(state);
+  assert.equal(lines.length, 12 * CONE_LINES);
+  const { mounting } = resolveMounting(state.layout);
+  const close = (actual, expected, label) => actual.forEach((value, i) =>
+    assert.ok(Math.abs(value - expected[i]) < 1e-9, `${label}: ${actual} vs ${expected}`));
+  for (let leg = 0; leg < 6; leg++) {
+    const lower = readCone(lines.slice((2 * leg) * CONE_LINES, (2 * leg + 1) * CONE_LINES));
+    const upper = readCone(lines.slice((2 * leg + 1) * CONE_LINES, (2 * leg + 2) * CONE_LINES));
+    close(lower.apex, solved.hornTips[leg], `leg ${leg + 1} lower apex`);
+    close(upper.apex, solved.platformPoints[leg], `leg ${leg + 1} upper apex`);
+    close(lower.axis, hornLocalToWorld(state.layout.betaAngles[leg], solved.servoAngles[leg],
+      mounting.lower[leg].direction), `leg ${leg + 1} lower axis`);
+    close(upper.axis, rotateVector(solved.rotationMatrix, mounting.upper[leg].direction), `leg ${leg + 1} upper axis`);
+    assert.ok(Math.abs(lower.halfAngle - 30 * Math.PI / 180) < 1e-9, `leg ${leg + 1} lower half-angle ${lower.halfAngle}`);
+    assert.ok(Math.abs(upper.halfAngle - 45 * Math.PI / 180) < 1e-9, `leg ${leg + 1} upper half-angle ${upper.halfAngle}`);
+    // The evaluator's joint angle is the rod's angle from these same axes.
+    const rod = normalize(solved.rodVectors[leg]);
+    const angle = (axis, direction) => Math.acos(Math.max(-1, Math.min(1, dot(axis, direction))));
+    assert.ok(Math.abs(angle(lower.axis, rod) - solved.jointAngles.lower[leg]) < 1e-9);
+    assert.ok(Math.abs(angle(upper.axis, rod.map(v => -v)) - solved.jointAngles.upper[leg]) < 1e-9);
+  }
+  // A wide 180° limit stays bounded: every ring point is one slant length away.
+  const wide = createSimulatorController().loadLayout(asymmetricJointFixture(), { options: { ballJointLimitDeg: 180 } });
+  const slant = Math.max(12, wide.layout.hornLength * 0.35);
+  const first = readCone(conesOf(wide).slice(0, CONE_LINES));
+  for (const point of first.ring) assert.ok(Math.abs(Math.hypot(...point.map((v, k) => v - first.apex[k])) - slant) < 1e-9);
+  assert.deepEqual(conesOf({ ...wide, acceptedAssessment: null }), []);
+});
+
+test('joint cones are neutral, tinted near the limit and failure-coloured per socket', () => {
+  const { state } = coneState();
+  const solved = state.acceptedAssessment;
+  const socketColors = target => {
+    const lines = conesOf(target);
+    return Array.from({ length: 12 }, (_, socket) =>
+      lines.slice(socket * CONE_LINES, (socket + 1) * CONE_LINES).map(line => line.color));
+  };
+  const uniform = (colors, expected, label) => assert.ok(colors.every(color => color === expected), label);
+  socketColors(state).forEach((colors, socket) => uniform(colors, SCENE_COLORS.limitRange, `socket ${socket}`));
+  // A 12° lower limit puts some lower sockets (2.5° to 9.4° here) within the 5°
+  // margin and leaves the rest, and every upper socket, neutral.
+  const limit = 12 * Math.PI / 180;
+  const near = { ...state, acceptedAssessment: { ...solved, jointLimits: { ...solved.jointLimits, lower: limit } } };
+  const tinted = solved.jointAngles.lower.map(angle => limit - angle < NEAR_LIMIT_MARGIN_RAD);
+  assert.ok(tinted.includes(true) && tinted.includes(false), `fixture spread: ${tinted}`);
+  socketColors(near).forEach((colors, socket) => uniform(colors,
+    socket % 2 === 0 && tinted[socket / 2] ? SCENE_COLORS.nearLimit : SCENE_COLORS.limitRange, `near socket ${socket}`));
+  // Only the named socket turns red; the same leg's other socket and other failure types do not.
+  const failing = { ...state, assessment: { ...state.assessment,
+    violations: [{ type: 'ballJoint', leg: 1, joint: 'upper' }, { type: 'servoLimit', leg: 4 }] } };
+  socketColors(failing).forEach((colors, socket) => uniform(colors,
+    socket === 3 ? SCENE_COLORS.failure : SCENE_COLORS.limitRange, `failing socket ${socket}`));
+});
+
+test('a joint-limit edit in the diagnostics panel redraws the cones in the same notification', () => {
+  const document = createFakeDocument();
+  const controller = createSimulatorController();
+  const rendered = [];
+  const renderer = { available: true, contextLost: false, render(state) { rendered.push(state); }, dispose() {} };
+  createSimulatorView({ document, window: { addEventListener() {} }, controller, createRenderer: () => renderer });
+  mountSimulatorDiagnostics({ document, controller });
+  controller.loadLayout(asymmetricJointFixture(), { options: { ballJointLimitDeg: 180,
+    lowerBallJointLimitDeg: 30, upperBallJointLimitDeg: 45 } });
+  const upperHalfAngle = state => readCone(conesOf(state).slice(CONE_LINES, 2 * CONE_LINES)).halfAngle;
+  assert.ok(Math.abs(upperHalfAngle(rendered.at(-1)) - 45 * Math.PI / 180) < 1e-9);
+  const before = rendered.length;
+  const field = document.getElementById('simUpperJointLimit');
+  field.value = '20';
+  field.dispatch('change');
+  assert.ok(rendered.length > before, 'the edit did not redraw');
+  assert.ok(Math.abs(upperHalfAngle(rendered.at(-1)) - 20 * Math.PI / 180) < 1e-9);
 });

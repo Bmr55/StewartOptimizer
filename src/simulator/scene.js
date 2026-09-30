@@ -1,6 +1,6 @@
-import { vectorAdd, vectorScale } from '../math.js';
+import { vectorAdd, vectorCross, vectorNormalize, vectorScale } from '../math.js';
 import { hornFrameAxes } from '../model/kinematics.js';
-import { effectiveServoRange } from '../model/pose.js';
+import { effectiveServoRange, socketNormalsInWorld } from '../model/pose.js';
 
 // The scene is a list of builders, each `(state, layout, solved) => { lines, points }`.
 // `solved` is the accepted assessment (it may be null); nothing here evaluates a
@@ -20,12 +20,14 @@ const COLORS = SCENE_COLORS;
 
 // Toggleable overlays and whether each is drawn when a state or saved file
 // does not say. New overlays default off unless their issue says otherwise.
-export const OVERLAY_DEFAULTS = Object.freeze({ servoArcs: true, platformAxes: true, worldAxes: true });
+export const OVERLAY_DEFAULTS = Object.freeze({ servoArcs: true, jointCones: true, platformAxes: true, worldAxes: true });
 export const OVERLAY_NAMES = Object.freeze(Object.keys(OVERLAY_DEFAULTS));
 // Limit overlays (servo travel, socket cones) tint a value this close to its
 // limit as a warning before the evaluator rejects it: 5°, in radians.
 export const NEAR_LIMIT_MARGIN_RAD = 5 * Math.PI / 180;
 const SERVO_ARC_SEGMENTS = 24;
+const JOINT_CONE_SEGMENTS = 24;
+const JOINT_CONE_GENERATRICES = 4;
 
 function polygon(lines, points, color) {
   points.forEach((point, i) => lines.push({ from: point, to: points[(i + 1) % points.length], color }));
@@ -107,6 +109,50 @@ function servoArcs(state, layout, solved) {
   return { lines, points: [] };
 }
 
+// A cone of the given half-angle about a unit axis, as a ring at a fixed slant
+// length from the apex plus a few generatrix lines. A fixed slant rather than a
+// fixed height keeps wide limits (up to 180°) bounded.
+function cone(lines, apex, axis, halfAngle, slant, color) {
+  const u = vectorNormalize(vectorCross(axis, Math.abs(axis[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0]));
+  const v = vectorCross(axis, u);
+  const at = turn => vectorAdd(apex, vectorScale(vectorAdd(vectorScale(axis, Math.cos(halfAngle)),
+    vectorScale(vectorAdd(vectorScale(u, Math.cos(turn)), vectorScale(v, Math.sin(turn))), Math.sin(halfAngle))), slant));
+  const ring = Array.from({ length: JOINT_CONE_SEGMENTS }, (_, k) => at(2 * Math.PI * k / JOINT_CONE_SEGMENTS));
+  polygon(lines, ring, color);
+  for (let k = 0; k < JOINT_CONE_GENERATRICES; k++) {
+    lines.push({ from: apex, to: ring[k * JOINT_CONE_SEGMENTS / JOINT_CONE_GENERATRICES], color });
+  }
+}
+
+// Each ball-joint socket's allowed cone at the accepted pose: apex at the rod
+// end (horn tip for the lower socket, platform point for the upper), axis along
+// the socket normal from the evaluator's construction, half-angle equal to that
+// socket's effective limit. Failure colour when the requested pose breaks that
+// socket's limit, a warning tint when the accepted angle is within
+// NEAR_LIMIT_MARGIN_RAD of it. A limit picture, not a collision check.
+function jointCones(state, layout, solved) {
+  const lines = [];
+  if (!hasSolvedLegs(solved) || !solved.mounting || !solved.jointLimits) return { lines, points: [] };
+  const violations = state.assessment?.violations ?? [];
+  const slant = Math.max(12, layout.hornLength * 0.35);
+  for (let i = 0; i < 6; i++) {
+    const mounts = { lower: solved.mounting.lower[i]?.direction, upper: solved.mounting.upper[i]?.direction };
+    const alpha = solved.servoAngles?.[i];
+    if (!mounts.lower || !mounts.upper || !Number.isFinite(alpha)) continue;
+    const normals = socketNormalsInWorld(layout.betaAngles[i], alpha, solved.rotationMatrix, mounts);
+    for (const [joint, apex] of [['lower', solved.hornTips[i]], ['upper', solved.platformPoints[i]]]) {
+      const limit = solved.jointLimits[joint];
+      const angle = solved.jointAngles?.[joint]?.[i];
+      const failed = violations.some(violation => violation.type === 'ballJoint' && violation.leg === i
+        && violation.joint === joint);
+      const color = failed ? COLORS.failure
+        : Number.isFinite(angle) && limit - angle < NEAR_LIMIT_MARGIN_RAD ? COLORS.nearLimit : COLORS.limitRange;
+      cone(lines, apex, vectorNormalize(normals[joint]), limit, slant, color);
+    }
+  }
+  return { lines, points: [] };
+}
+
 function platformAxes(state, layout, solved) {
   const lines = [];
   if (!hasSolvedLegs(solved)) return { lines, points: [] };
@@ -137,6 +183,7 @@ export const SCENE_BUILDERS = Object.freeze([
   { name: 'platform', build: platform },
   { name: 'legs', build: legs },
   { name: 'servoArcs', overlay: 'servoArcs', build: servoArcs },
+  { name: 'jointCones', overlay: 'jointCones', build: jointCones },
   { name: 'platformAxes', overlay: 'platformAxes', build: platformAxes },
   { name: 'worldAxes', overlay: 'worldAxes', build: worldAxes },
   { name: 'trace', build: trace },

@@ -61,6 +61,14 @@ export function effectiveServoRange(layout, options = {}) {
     : layout.servoRangeRad || [-Math.PI / 2, Math.PI / 2];
 }
 
+// World directions of one leg's socket normals: the lower socket turns with the
+// horn at servo angle alpha, the upper with the platform. Each socket's joint
+// angle is measured from its normal to the rod (the upper one to the reversed
+// rod), so overlays drawing the sockets use this same construction.
+export function socketNormalsInWorld(beta, alpha, rotationMatrix, mounts) {
+  return { lower: hornLocalToWorld(beta, alpha, mounts.lower), upper: rotateVector(rotationMatrix, mounts.upper) };
+}
+
 export function evaluatePose(layout, pose = {}, options = {}) {
   ensureLayout(layout);
   if (!options || typeof options !== 'object' || Array.isArray(options)) throw new TypeError('Pose options must be an object.');
@@ -140,8 +148,8 @@ export function evaluatePose(layout, pose = {}, options = {}) {
       break;
     }
     const rodDirection = vectorNormalize(rodVector);
-    const lowerWorld = hornLocalToWorld(beta, alpha, lowerMount);
-    const upperWorld = rotateVector(rotationMatrix, upperMount);
+    const { lower: lowerWorld, upper: upperWorld } = socketNormalsInWorld(beta, alpha, rotationMatrix,
+      { lower: lowerMount, upper: upperMount });
     const lowerAngle = Math.acos(clamp(vectorDot(lowerWorld, rodDirection), -1, 1));
     const upperAngle = Math.acos(clamp(-vectorDot(upperWorld, rodDirection), -1, 1));
     jointAngles.lower.push(lowerAngle);
