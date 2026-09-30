@@ -1,12 +1,10 @@
 import { degToRad, rotationMatrixFromEuler, rotateVector, vectorAdd, vectorSub,
   vectorMagnitude, vectorNormalize, vectorCross, vectorDot, clamp } from '../math.js';
-
-const EPS = 1e-8;
+import { computeHornTip, hornLocalToWorld, solveServoAngle } from './kinematics.js';
+import { resolveMounting } from './mounting.js';
 
 export function ensureLayout(layout) {
-  if (!layout) {
-    throw new Error('Layout is required for workspace evaluation.');
-  }
+  if (!layout) throw new Error('Layout is required for workspace evaluation.');
   const { baseAnchors, platformAnchors, betaAngles, hornLength, rodLength } = layout;
   if (!Array.isArray(baseAnchors) || baseAnchors.length !== 6) {
     throw new Error('Layout must provide six base anchors.');
@@ -26,88 +24,56 @@ export function ensureLayout(layout) {
   return layout;
 }
 
-function computeHornTip(baseAnchor, hornLength, beta, alpha) {
-  const cosAlpha = Math.cos(alpha);
-  const sinAlpha = Math.sin(alpha);
-  const cosBeta = Math.cos(beta);
-  const sinBeta = Math.sin(beta);
-  return [
-    baseAnchor[0] + hornLength * cosAlpha * cosBeta,
-    baseAnchor[1] + hornLength * cosAlpha * sinBeta,
-    baseAnchor[2] + hornLength * sinAlpha,
-  ];
-}
-
-export function evaluatePose(layout, pose, options = {}) {
+export function evaluatePose(layout, pose = {}, options = {}) {
   ensureLayout(layout);
   const {
     ballJointLimitDeg = 45,
+    lowerBallJointLimitDeg = ballJointLimitDeg,
+    upperBallJointLimitDeg = ballJointLimitDeg,
     ballJointClamp = false,
     servoRangeRad = layout.servoRangeRad || [-Math.PI / 2, Math.PI / 2],
     rodLengthTolerance = 0.5,
     recordLegData = false,
   } = options;
-
-  const ballJointLimitRad = degToRad(ballJointLimitDeg);
+  const mounting = options.mounting ?? resolveMounting(layout).mounting;
+  const jointLimits = {
+    lower: degToRad(lowerBallJointLimitDeg),
+    upper: degToRad(upperBallJointLimitDeg),
+  };
+  if (!Object.values(jointLimits).every(v => Number.isFinite(v) && v >= 0 && v <= Math.PI)) {
+    throw new RangeError('Ball-joint limits must be finite angles from 0 to 180 degrees.');
+  }
   const translation = [pose.x || 0, pose.y || 0, pose.z || 0];
   const rotation = [pose.rx || 0, pose.ry || 0, pose.rz || 0];
-
-  const homeOffset = layout.homeHeight || 0;
-  const translated = [translation[0], translation[1], translation[2] + homeOffset];
+  const translated = [translation[0], translation[1], translation[2] + (layout.homeHeight || 0)];
   const rotationMatrix = rotationMatrixFromEuler(rotation[0], rotation[1], rotation[2]);
 
-  const servoAngles = [];
-  const rodLengths = [];
-  const legDirections = [];
-  const jacobianRows = [];
+  const servoAngles = [], rodLengths = [], legDirections = [], jacobianRows = [];
   const hornTips = recordLegData ? [] : null;
   const rodVectors = recordLegData ? [] : null;
   const platformPoints = recordLegData ? [] : null;
   const ballJointAngles = [];
+  const jointAngles = { lower: [], upper: [] };
   const violations = [];
-
-  let reachable = true;
+  let structurallyReachable = true;
 
   for (let i = 0; i < 6; i++) {
     const base = layout.baseAnchors[i];
-    const platformAnchor = layout.platformAnchors[i];
     const beta = layout.betaAngles[i];
+    const q = vectorAdd(translated, rotateVector(rotationMatrix, layout.platformAnchors[i]));
+    if (recordLegData) platformPoints.push(q);
 
-    const rotatedPlatform = rotateVector(rotationMatrix, platformAnchor);
-    const q = vectorAdd(translated, rotatedPlatform);
-    if (recordLegData) {
-      platformPoints.push(q);
-    }
-
-    const legVector = vectorSub(q, base);
-    const e = 2 * layout.hornLength * legVector[2];
-    const f = 2 * layout.hornLength * (Math.cos(beta) * legVector[0] + Math.sin(beta) * legVector[1]);
-    const g = legVector[0] * legVector[0]
-      + legVector[1] * legVector[1]
-      + legVector[2] * legVector[2]
-      - (layout.rodLength * layout.rodLength - layout.hornLength * layout.hornLength);
-
-    const denom = Math.sqrt(e * e + f * f);
-    if (!Number.isFinite(denom) || denom < EPS) {
-      violations.push({ type: 'degenerateFourBar', leg: i, value: denom });
-      reachable = false;
+    const solved = solveServoAngle(base, q, layout.hornLength, layout.rodLength, beta);
+    if (solved.violation) {
+      violations.push({ ...solved.violation, leg: i });
+      structurallyReachable = false;
       break;
     }
-
-    const ratio = g / denom;
-    if (!Number.isFinite(ratio) || Math.abs(ratio) > 1 + 1e-6) {
-      violations.push({ type: 'invalidGeometry', leg: i, value: ratio });
-      reachable = false;
-      break;
-    }
-
-    const clampedRatio = clamp(ratio, -1, 1);
-    const alpha = Math.asin(clampedRatio) - Math.atan2(f, e);
+    const alpha = solved.alpha;
     servoAngles.push(alpha);
-
     if (alpha < servoRangeRad[0] - 1e-6 || alpha > servoRangeRad[1] + 1e-6) {
       violations.push({ type: 'servoLimit', leg: i, value: alpha });
-      reachable = false;
+      structurallyReachable = false;
       break;
     }
 
@@ -115,43 +81,46 @@ export function evaluatePose(layout, pose, options = {}) {
     const rodVector = vectorSub(q, hornTip);
     const rodLength = vectorMagnitude(rodVector);
     rodLengths.push(rodLength);
-
     if (Math.abs(rodLength - layout.rodLength) > rodLengthTolerance) {
       violations.push({ type: 'rodLength', leg: i, value: rodLength, target: layout.rodLength });
-      reachable = false;
+      structurallyReachable = false;
       break;
     }
 
-    let servoAxis = vectorNormalize(vectorSub(hornTip, base));
-    if (servoAxis[0] === 0 && servoAxis[1] === 0 && servoAxis[2] === 0) {
-      servoAxis = [0, 0, 1];
+    const lowerMount = mounting.lower[i]?.direction;
+    const upperMount = mounting.upper[i]?.direction;
+    if (!lowerMount || !upperMount) {
+      violations.push({ type: 'mountingUnavailable', leg: i, joint: !lowerMount ? 'lower' : 'upper' });
+      structurallyReachable = false;
+      break;
     }
     const rodDirection = vectorNormalize(rodVector);
-    const jointAngle = Math.acos(clamp(vectorDot(servoAxis, rodDirection), -1, 1));
-    ballJointAngles.push(jointAngle);
-
-    if (jointAngle > ballJointLimitRad + 1e-6) {
-      violations.push({ type: 'ballJoint', leg: i, value: jointAngle, limit: ballJointLimitRad });
-      if (!ballJointClamp) {
-        reachable = false;
-        break;
+    const lowerWorld = hornLocalToWorld(beta, alpha, lowerMount);
+    const upperWorld = rotateVector(rotationMatrix, upperMount);
+    const lowerAngle = Math.acos(clamp(vectorDot(lowerWorld, rodDirection), -1, 1));
+    const upperAngle = Math.acos(clamp(-vectorDot(upperWorld, rodDirection), -1, 1));
+    jointAngles.lower.push(lowerAngle);
+    jointAngles.upper.push(upperAngle);
+    ballJointAngles.push(Math.max(lowerAngle, upperAngle));
+    for (const [joint, angle] of [['lower', lowerAngle], ['upper', upperAngle]]) {
+      if (angle > jointLimits[joint] + 1e-6) {
+        violations.push({ type: 'ballJoint', leg: i, joint, value: angle, limit: jointLimits[joint] });
       }
     }
 
-    const legDirection = vectorNormalize(legVector);
+    const legDirection = vectorNormalize(vectorSub(q, base));
     legDirections.push(legDirection);
-    const moment = vectorCross(q, legDirection);
-    jacobianRows.push([...legDirection, ...moment]);
-
+    jacobianRows.push([...legDirection, ...vectorCross(q, legDirection)]);
     if (recordLegData) {
       hornTips.push(hornTip);
       rodVectors.push(rodVector);
     }
   }
 
+  const jointViolation = violations.some(v => v.type === 'ballJoint');
   return {
-    reachable: reachable && violations.length === 0,
-    relaxedReachable: reachable,
+    reachable: structurallyReachable && violations.length === 0,
+    relaxedReachable: structurallyReachable && (!jointViolation || ballJointClamp),
     violations,
     servoAngles,
     rodLengths,
@@ -163,5 +132,8 @@ export function evaluatePose(layout, pose, options = {}) {
     translation: translated,
     rotationMatrix,
     ballJointAngles,
+    jointAngles,
+    jointLimits,
+    mounting,
   };
 }

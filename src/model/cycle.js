@@ -1,4 +1,5 @@
 import { evaluatePose } from './pose.js';
+import { resolveMounting } from './mounting.js';
 import { vectorNormalize, vectorCross, vectorDot, vectorScale, rotateVector } from '../math.js';
 
 // Partial-pivot elimination; a singular equilibrium is not a zero-demand design.
@@ -25,7 +26,8 @@ function solve(matrix, rhs) {
 
 export function evaluateCyclePose(layout, pose, velocity, acceleration, mass, options = {}) {
   const result = evaluatePose(layout, pose, { ...options, ballJointClamp: false, recordLegData: true });
-  if (!result.reachable) return { valid: false, reason: 'Cycle pose violates a modeled mechanical constraint.' };
+  if (!result.reachable) return { valid: false, reason: 'Cycle pose violates a modeled mechanical constraint.',
+    violations: result.violations };
   const directions = result.rodVectors.map(vectorNormalize);
   // Each column is a rod's unit force and its moment about the moving origin (meters).
   const columns = directions.map((direction, i) => {
@@ -49,13 +51,16 @@ export function evaluateCyclePose(layout, pose, velocity, acceleration, mass, op
   return { valid: true, torque, speed, rodForces, requiredForce, equilibrium };
 }
 
-export function computeCycleDemand(layout, { mass = 0, stroke = 0, frequency = 0, axis = 'z', ballJointLimitDeg = 52, signal } = {}) {
+export function computeCycleDemand(layout, { mass = 0, stroke = 0, frequency = 0, axis = 'z',
+  ballJointLimitDeg = 52, lowerBallJointLimitDeg = ballJointLimitDeg,
+  upperBallJointLimitDeg = ballJointLimitDeg, mounting, signal } = {}) {
   const axisIndex = ['x', 'y', 'z'].indexOf(axis);
   if (axisIndex < 0) throw new RangeError('Unsupported cycle axis.');
   const amplitude = stroke / 2000;
   const omega = 2 * Math.PI * frequency;
   const samples = frequency > 0 && stroke > 0 ? 64 : 1;
   const torque = new Array(6).fill(0), speed = new Array(6).fill(0);
+  const effectiveMounting = mounting ?? resolveMounting(layout).mounting;
   for (let i = 0; i < samples; i++) {
     signal?.throwIfAborted();
     const phase = 2 * Math.PI * i / samples;
@@ -66,8 +71,12 @@ export function computeCycleDemand(layout, { mass = 0, stroke = 0, frequency = 0
       velocity[axisIndex] = omega * amplitude * Math.cos(phase);
       acceleration[axisIndex] = -omega * omega * displacement;
     }
-    const result = evaluateCyclePose(layout, pose, velocity, acceleration, mass, { ballJointLimitDeg });
-    if (!result.valid) return { valid: false, axis, samples, failedSample: i, reason: result.reason, torqueNm: null, speedRadPerSec: null };
+    const result = evaluateCyclePose(layout, pose, velocity, acceleration, mass, {
+      ballJointLimitDeg, lowerBallJointLimitDeg, upperBallJointLimitDeg, mounting: effectiveMounting,
+    });
+    if (!result.valid) return { valid: false, axis, samples, failedSample: i,
+      failedPose: pose, reason: result.reason, violations: result.violations ?? [],
+      torqueNm: null, speedRadPerSec: null };
     for (let leg = 0; leg < 6; leg++) {
       torque[leg] = Math.max(torque[leg], result.torque[leg]);
       speed[leg] = Math.max(speed[leg], result.speed[leg]);

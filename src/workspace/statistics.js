@@ -22,6 +22,9 @@ export function createWorkspaceStatistics({ totalPoses, sampleLimit = 200, viola
   const ballJointSamples = runningMean();
   const servoRanges = Array.from({ length: 6 }, () => ({ min: Infinity, max: -Infinity }));
   const ballJointMax = new Array(6).fill(0);
+  const lowerJointMax = new Array(6).fill(0);
+  const upperJointMax = new Array(6).fill(0);
+  const jointViolationCounts = { lower: 0, upper: 0 };
 
   const recordSample = (collection, limit, seenCount, sample) => {
     if (limit <= 0) return;
@@ -46,6 +49,15 @@ export function createWorkspaceStatistics({ totalPoses, sampleLimit = 200, viola
 
   function add(pose, result) {
     const hasViolations = Array.isArray(result.violations) && result.violations.length > 0;
+
+    if (Array.isArray(result.ballJointAngles) && result.ballJointAngles.length) {
+      ballJointSamples.add(Math.max(...result.ballJointAngles));
+      for (let leg = 0; leg < result.ballJointAngles.length; leg++) {
+        ballJointMax[leg] = Math.max(ballJointMax[leg], result.ballJointAngles[leg]);
+        lowerJointMax[leg] = Math.max(lowerJointMax[leg], result.jointAngles?.lower[leg] ?? 0);
+        upperJointMax[leg] = Math.max(upperJointMax[leg], result.jointAngles?.upper[leg] ?? 0);
+      }
+    }
 
     if (result.relaxedReachable) relaxedReachableCount += 1;
     if (result.reachable) {
@@ -83,16 +95,6 @@ export function createWorkspaceStatistics({ totalPoses, sampleLimit = 200, viola
         }
       }
 
-      if (Array.isArray(result.ballJointAngles)) {
-        const maxAngle = Math.max(...result.ballJointAngles.map((value) => (Number.isFinite(value) ? value : 0)), 0);
-        ballJointSamples.add(maxAngle);
-        for (let iLeg = 0; iLeg < Math.min(6, result.ballJointAngles.length); iLeg++) {
-          const angle = result.ballJointAngles[iLeg];
-          if (Number.isFinite(angle) && angle > ballJointMax[iLeg]) {
-            ballJointMax[iLeg] = angle;
-          }
-        }
-      }
     } else {
       unreachableCount += 1;
       unreachableSeen += 1;
@@ -110,6 +112,9 @@ export function createWorkspaceStatistics({ totalPoses, sampleLimit = 200, viola
       );
       for (const violation of result.violations) {
         violationCounts[violation.type] = (violationCounts[violation.type] || 0) + 1;
+        if (violation.type === 'ballJoint' && violation.joint in jointViolationCounts) {
+          jointViolationCounts[violation.joint]++;
+        }
       }
     }
   }
@@ -136,8 +141,11 @@ export function createWorkspaceStatistics({ totalPoses, sampleLimit = 200, viola
       servoUsageAvg,
       servoUsagePeak,
       ballJointMax,
+      lowerJointMax,
+      upperJointMax,
       ballJointOverallMax: Math.max(0, ...ballJointMax),
       ballJointAverage: ballJointSamples.value(),
+      jointViolationCounts,
       violationCounts,
       violationRate,
     };
