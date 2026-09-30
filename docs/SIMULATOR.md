@@ -145,19 +145,33 @@ renderer) concatenates the output of an ordered list of builders,
 where `solved` is the accepted assessment or `null`, so builders only draw data
 the evaluator already produced. The list order is the draw order: `base`
 (base polygon, servo direction stubs and base markers), `platform` (platform
-polygon), `legs` (horns, rods and their markers), `platformAxes`, `worldAxes`
-and `trace`. Markers and traces keep their own controls.
+polygon), `legs` (horns, rods and their markers), `servoArcs`, `platformAxes`,
+`worldAxes` and `trace`. Markers and traces keep their own controls.
 
 A builder with an `overlay` key is drawn only when that key is on in
 `state.overlays`. `OVERLAY_DEFAULTS` lists every toggleable overlay and its
-default; today these are **Platform axes** (`platformAxes`) and **World axes**
-(`worldAxes`), both on, so the default scene is unchanged from the
-single-function renderer (a frozen fixture in `tests/fixtures/scene-geometry.json`
-checks this). The Simulate tab shows one checkbox per overlay in the
+default; today these are **Servo arcs** (`servoArcs`), **Platform axes**
+(`platformAxes`) and **World axes** (`worldAxes`), all on. With only the two
+axis overlays on, the scene matches the original single-function renderer line
+for line (a frozen fixture in `tests/fixtures/scene-geometry.json` checks this). The Simulate tab shows one checkbox per overlay in the
 **Overlays** group, with the id `simOverlay` plus the capitalised name (for
 example `simOverlayWorldAxes`). A new overlay adds one builder, one default,
 one checkbox and a paragraph here; new overlays default off unless their
 issue says otherwise.
+
+**Servo arcs** (on by default) draw each servo's allowed travel as an arc of
+horn-length radius about its base anchor, from the effective minimum to the
+effective maximum servo angle (the simulator's `servoRangeRad` option, else the
+layout's range, else ±90°, as `effectiveServoRange` in `src/model/pose.js`
+resolves it for the evaluator). The arc uses the evaluator's horn frame, so its
+ends are exactly the horn tips at the two stops. Short ticks mark both stops and
+a marker crosses the arc at the accepted horn angle; with no accepted pose the
+marker is omitted. The arc and its ticks are grey, the marker is horn orange,
+and all three turn yellow when the accepted angle is within
+`NEAR_LIMIT_MARGIN_RAD` (5°) of a stop, or red when the requested pose fails
+that servo's range (`servoLimit`). Other failures leave the arc colours alone;
+the leg itself is still coloured as described under Live diagnostics. The margin
+constant lives in `src/simulator/scene.js` for all limit overlays.
 
 ## Live diagnostics
 

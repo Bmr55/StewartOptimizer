@@ -8,6 +8,7 @@ import { resolveMounting } from '../../src/model/mounting.js';
 import { createGeometryEditor } from '../../src/simulator/geometry-editor.js';
 import { DEFAULT_BALL_JOINT_LIMIT_DEG } from '../../src/contracts.js';
 import { NUMERICAL_RECIPROCAL_CUTOFF } from '../../src/model/conditioning.js';
+import { OVERLAY_DEFAULTS } from '../../src/simulator/scene.js';
 
 const source = { ...asymmetricJointFixture(), id: 19, topology: 'free', topologyParameters: {} };
 // Evaluated candidates carry their resolved mounting, as evaluateLayout leaves it.
@@ -263,19 +264,21 @@ test('overlay toggles round-trip through the optimizer reference, simulator JSON
   await element('runOptimization').handlers.click();
   const controller = element.app.simulatorController;
   const toggle = (ui, id, checked) => { ui(id).checked = checked; ui(id).handlers.change({ target: ui(id) }); };
-  assert.equal(element('simOverlayWorldAxes').checked, true);
-  assert.equal(element('simOverlayPlatformAxes').checked, true);
+  for (const id of ['simOverlayServoArcs', 'simOverlayPlatformAxes', 'simOverlayWorldAxes']) assert.equal(element(id).checked, true, id);
+  const saved = { ...OVERLAY_DEFAULTS, servoArcs: false, worldAxes: false };
+  toggle(element, 'simOverlayServoArcs', false);
   toggle(element, 'simOverlayWorldAxes', false);
   element('simUseReference').handlers.click();
-  assert.deepEqual(JSON.parse(element('referenceLayoutInput').value).simulator.overlays,
-    { platformAxes: true, worldAxes: false });
+  assert.deepEqual(JSON.parse(element('referenceLayoutInput').value).simulator.overlays, saved);
   element('simDownload').handlers.click();
   assert.equal(downloads.at(-1).name, 'stewart_simulator.json');
-  assert.deepEqual(JSON.parse(downloads.at(-1).data).simulator.overlays, { platformAxes: true, worldAxes: false });
+  assert.deepEqual(JSON.parse(downloads.at(-1).data).simulator.overlays, saved);
+  toggle(element, 'simOverlayServoArcs', true);
   toggle(element, 'simOverlayWorldAxes', true);
   toggle(element, 'simOverlayPlatformAxes', false);
   element('simLoadReference').handlers.click();
-  assert.deepEqual(controller.getState().overlays, { platformAxes: true, worldAxes: false });
+  assert.deepEqual(controller.getState().overlays, saved);
+  assert.equal(element('simOverlayServoArcs').checked, false);
   assert.equal(element('simOverlayWorldAxes').checked, false);
   assert.equal(element('simOverlayPlatformAxes').checked, true);
   // A file saved before overlays existed keeps the current toggles.
@@ -284,7 +287,7 @@ test('overlay toggles round-trip through the optimizer reference, simulator JSON
   toggle(element, 'simOverlayPlatformAxes', false);
   element('referenceLayoutInput').value = JSON.stringify(legacy);
   element('simLoadReference').handlers.click();
-  assert.deepEqual(controller.getState().overlays, { platformAxes: false, worldAxes: false });
+  assert.deepEqual(controller.getState().overlays, { ...saved, platformAxes: false });
 
   const storage = new Map();
   const window = { localStorage: { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value),
@@ -295,7 +298,7 @@ test('overlay toggles round-trip through the optimizer reference, simulator JSON
   restored('saveLocalWorkspace').handlers.click();
   toggle(restored, 'simOverlayPlatformAxes', true);
   restored('restoreLocalWorkspace').handlers.click();
-  assert.deepEqual(restored.app.simulatorController.getState().overlays, { platformAxes: false, worldAxes: true });
+  assert.deepEqual(restored.app.simulatorController.getState().overlays, { ...OVERLAY_DEFAULTS, platformAxes: false });
   assert.equal(restored('simOverlayPlatformAxes').checked, false);
   assert.equal(restored('simOverlayWorldAxes').checked, true);
 });

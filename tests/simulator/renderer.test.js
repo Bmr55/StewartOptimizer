@@ -4,7 +4,9 @@ import fs from 'node:fs';
 import { asymmetricJointFixture } from '../fixtures/layout.js';
 import { createSimulatorController } from '../../src/simulator/controller.js';
 import { buildSceneGeometry, createWebGLRenderer, projectPoint } from '../../src/simulator/renderer.js';
-import { OVERLAY_DEFAULTS, OVERLAY_NAMES, SCENE_BUILDERS } from '../../src/simulator/scene.js';
+import { NEAR_LIMIT_MARGIN_RAD, OVERLAY_DEFAULTS, OVERLAY_NAMES, SCENE_BUILDERS, SCENE_COLORS } from '../../src/simulator/scene.js';
+import { computeHornTip } from '../../src/model/kinematics.js';
+import { effectiveServoRange } from '../../src/model/pose.js';
 
 test('scene uses solved asymmetric anchor, horn, rod and platform frames', () => {
   const controller = createSimulatorController();
@@ -24,7 +26,8 @@ test('scene uses solved asymmetric anchor, horn, rod and platform frames', () =>
   const rejected = controller.loadLayout(asymmetricJointFixture(),
     { options: { ballJointLimitDeg: 180, conditionLimit: 1 } });
   assert.equal(rejected.accepted, null);
-  assert.equal(buildSceneGeometry(rejected).lines.length, 15); // Base, servo directions, world axes.
+  // Base, servo directions and world axes; servo arcs have no accepted angle to mark.
+  assert.equal(buildSceneGeometry({ ...rejected, overlays: { ...rejected.overlays, servoArcs: false } }).lines.length, 15);
 });
 
 test('unavailable WebGL2 leaves renderer inactive with actionable error', () => {
@@ -103,8 +106,11 @@ test('a lost context cancels the default, stops drawing, and restore rebuilds th
 });
 
 // Scene states whose output was frozen from the single-function scene before it
-// was split into builders (tests/fixtures/scene-geometry.json). The default
-// toggles must keep drawing the same lines and points in the same order.
+// was split into builders (tests/fixtures/scene-geometry.json). With only the
+// overlays that scene drew switched on, the builders must keep drawing the same
+// lines and points in the same order; overlays added later are switched off.
+const FROZEN_OVERLAYS = { platformAxes: true, worldAxes: true };
+const onlyFrozenOverlays = () => Object.fromEntries(OVERLAY_NAMES.map(name => [name, FROZEN_OVERLAYS[name] ?? false]));
 function frozenSceneStates() {
   const controller = createSimulatorController();
   controller.loadLayout(asymmetricJointFixture(), { options: { ballJointLimitDeg: 180 } });
@@ -121,15 +127,16 @@ function frozenSceneStates() {
 const frozenScene = JSON.parse(fs.readFileSync(new URL('../fixtures/scene-geometry.json', import.meta.url), 'utf8'));
 const plain = value => JSON.parse(JSON.stringify(value));
 
-test('default overlay builders reproduce the frozen single-function scene exactly', () => {
+test('overlay builders reproduce the frozen single-function scene exactly', () => {
   const states = frozenSceneStates();
   assert.equal(states.legFailure.rejected, true);
   assert.deepEqual(states.accepted.overlays, OVERLAY_DEFAULTS);
   for (const [name, state] of Object.entries(states)) {
-    assert.deepEqual(plain(buildSceneGeometry(state)), frozenScene[name], name);
+    assert.deepEqual(plain(buildSceneGeometry({ ...state, overlays: onlyFrozenOverlays() })), frozenScene[name], name);
     // A state without an overlay map (older callers) draws the defaults.
     const { overlays, ...withoutOverlays } = state;
-    assert.deepEqual(plain(buildSceneGeometry(withoutOverlays)), frozenScene[name], `${name} without overlays`);
+    assert.deepEqual(plain(buildSceneGeometry(withoutOverlays)),
+      plain(buildSceneGeometry({ ...state, overlays: OVERLAY_DEFAULTS })), `${name} without overlays`);
   }
 });
 
@@ -139,21 +146,22 @@ test('each overlay toggle removes only its own builder output', () => {
   const parts = Object.fromEntries(SCENE_BUILDERS.map(builder =>
     [builder.name, builder.build(accepted, accepted.layout, accepted.acceptedAssessment)]));
   assert.deepEqual(SCENE_BUILDERS.map(builder => builder.name),
-    ['base', 'platform', 'legs', 'platformAxes', 'worldAxes', 'trace']);
+    ['base', 'platform', 'legs', 'servoArcs', 'platformAxes', 'worldAxes', 'trace']);
   assert.deepEqual(SCENE_BUILDERS.filter(builder => builder.overlay).map(builder => builder.overlay), OVERLAY_NAMES);
   assert.equal(parts.platformAxes.lines.length, 3);
   assert.equal(parts.worldAxes.lines.length, 3);
   assert.equal(parts.trace.lines.length, accepted.trace.length - 1);
   for (const name of OVERLAY_NAMES) {
+    assert.ok(parts[name].lines.length > 0, name);
     const scene = buildSceneGeometry({ ...accepted, overlays: { ...accepted.overlays, [name]: false } });
     const removed = new Set(parts[name].lines.map(line => JSON.stringify(line)));
     const expected = full.lines.filter(line => !removed.has(JSON.stringify(line)));
-    assert.equal(scene.lines.length, full.lines.length - 3, name);
+    assert.equal(scene.lines.length, full.lines.length - parts[name].lines.length, name);
     assert.deepEqual(plain(scene.lines), plain(expected), name);
     assert.deepEqual(plain(scene.points), plain(full.points), name);
   }
-  const bare = buildSceneGeometry({ ...accepted, overlays: { platformAxes: false, worldAxes: false } });
-  assert.equal(bare.lines.length, full.lines.length - 6);
+  const bare = buildSceneGeometry({ ...accepted, overlays: Object.fromEntries(OVERLAY_NAMES.map(name => [name, false])) });
+  assert.equal(bare.lines.length, full.lines.length - OVERLAY_NAMES.reduce((sum, name) => sum + parts[name].lines.length, 0));
   // Unknown names in a hand-built state are ignored rather than drawn.
   assert.deepEqual(plain(buildSceneGeometry({ ...accepted, overlays: { ...accepted.overlays, ghost: true } })), plain(full));
 });
@@ -166,4 +174,66 @@ test('a custom builder list is drawn in order and overlay-gated', () => {
   assert.equal(buildSceneGeometry(accepted, builders).points.length, 3);
   assert.equal(buildSceneGeometry({ ...accepted, overlays: { worldAxes: false } }, builders).points.length, 1);
   assert.deepEqual(buildSceneGeometry({ ...accepted, layout: null }, builders), { lines: [], points: [] });
+});
+
+test('servo arcs span the effective servo range in the evaluator horn plane and mark the accepted angle', () => {
+  const { accepted } = frozenSceneStates();
+  const { layout, acceptedAssessment: solved } = accepted;
+  const arcs = SCENE_BUILDERS.find(builder => builder.name === 'servoArcs');
+  const perLeg = 24 + 2 + 1; // Arc segments, two stop ticks, current-angle marker.
+  const close = (actual, expected, label) => actual.forEach((value, i) =>
+    assert.ok(Math.abs(value - expected[i]) < 1e-9, `${label}: ${actual} vs ${expected}`));
+  for (const options of [{}, { servoRangeRad: [-0.4, 0.9] }]) {
+    const state = { ...accepted, options: { ...accepted.options, ...options } };
+    const [min, max] = effectiveServoRange(layout, state.options);
+    const { lines } = arcs.build(state, layout, solved);
+    assert.equal(lines.length, 6 * perLeg);
+    for (let leg = 0; leg < 6; leg++) {
+      const own = lines.slice(leg * perLeg, (leg + 1) * perLeg);
+      const tip = alpha => computeHornTip(layout.baseAnchors[leg], layout.hornLength, layout.betaAngles[leg], alpha);
+      close(own[0].from, tip(min), `leg ${leg + 1} min`);
+      close(own[23].to, tip(max), `leg ${leg + 1} max`);
+      for (let i = 1; i < 24; i++) assert.deepEqual(own[i].from, own[i - 1].to, 'the arc is continuous');
+      // Every arc point is one horn length from the anchor.
+      for (const line of own.slice(0, 24)) {
+        assert.ok(Math.abs(Math.hypot(...line.to.map((v, k) => v - layout.baseAnchors[leg][k])) - layout.hornLength) < 1e-9);
+      }
+      // The marker crosses the arc exactly at the evaluator's horn tip.
+      const marker = own[26];
+      const crossing = marker.from.map((v, k) => v + (marker.to[k] - v) * (0.2 / 0.45));
+      close(crossing, solved.hornTips[leg], `leg ${leg + 1} marker`);
+    }
+  }
+  assert.equal(arcs.build({ ...accepted }, layout, null).lines.length, 6 * (perLeg - 1), 'no accepted angle, no marker');
+});
+
+test('servo arcs are neutral, tinted near a stop and failure-coloured on a requested servo violation', () => {
+  const { accepted } = frozenSceneStates();
+  const { layout, acceptedAssessment: solved } = accepted;
+  const arcs = SCENE_BUILDERS.find(builder => builder.name === 'servoArcs');
+  const legColors = state => {
+    const { lines } = arcs.build(state, layout, solved);
+    return [0, 1, 2, 3, 4, 5].map(leg => lines.slice(leg * 27, leg * 27 + 26).map(line => line.color));
+  };
+  const angles = solved.servoAngles;
+  const [min, max] = effectiveServoRange(layout, accepted.options);
+  assert.ok(angles.every(angle => Math.min(angle - min, max - angle) > NEAR_LIMIT_MARGIN_RAD), 'fixture starts clear of the stops');
+  assert.ok(legColors(accepted).flat().every(color => color === SCENE_COLORS.limitRange));
+  assert.equal(arcs.build(accepted, layout, solved).lines[26].color, SCENE_COLORS.horn);
+  // Put the lowest leg 3° above its stop; the next lowest is then 5.5° clear.
+  const lowest = angles.indexOf(Math.min(...angles));
+  const near = { ...accepted, options: { ...accepted.options,
+    servoRangeRad: [angles[lowest] - NEAR_LIMIT_MARGIN_RAD * 0.6, Math.max(...angles) + 1] } };
+  legColors(near).forEach((colors, leg) => {
+    const expected = leg === lowest ? SCENE_COLORS.nearLimit : SCENE_COLORS.limitRange;
+    assert.ok(colors.every(color => color === expected), `leg ${leg + 1}`);
+  });
+  assert.equal(arcs.build(near, layout, solved).lines[lowest * 27 + 26].color, SCENE_COLORS.nearLimit);
+  const failing = { ...accepted, assessment: { ...accepted.assessment, violations: [{ type: 'servoLimit', leg: 2, value: 2 }] } };
+  legColors(failing).forEach((colors, leg) =>
+    assert.ok(colors.every(color => color === (leg === 2 ? SCENE_COLORS.failure : SCENE_COLORS.limitRange)), `leg ${leg + 1}`));
+  // A non-servo failure on the same leg leaves its arc neutral.
+  const otherFailure = { ...accepted, assessment: { ...accepted.assessment, violations: [{ type: 'ballJoint', leg: 2 }] } };
+  assert.ok(legColors(otherFailure).flat().every(color => color === SCENE_COLORS.limitRange));
+  assert.equal(NEAR_LIMIT_MARGIN_RAD, 5 * Math.PI / 180);
 });

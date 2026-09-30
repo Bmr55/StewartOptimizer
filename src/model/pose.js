@@ -54,6 +54,13 @@ function mountingDirections(value) {
   return value;
 }
 
+// The servo bounds a pose is checked against: an explicit option wins, then the
+// layout's own range, then ±90°. Overlays use this so they match the evaluator.
+export function effectiveServoRange(layout, options = {}) {
+  return options.servoRangeRad !== undefined ? options.servoRangeRad
+    : layout.servoRangeRad || [-Math.PI / 2, Math.PI / 2];
+}
+
 export function evaluatePose(layout, pose = {}, options = {}) {
   ensureLayout(layout);
   if (!options || typeof options !== 'object' || Array.isArray(options)) throw new TypeError('Pose options must be an object.');
@@ -62,7 +69,6 @@ export function evaluatePose(layout, pose = {}, options = {}) {
     lowerBallJointLimitDeg = ballJointLimitDeg,
     upperBallJointLimitDeg = ballJointLimitDeg,
     ballJointClamp = false,
-    servoRangeRad = layout.servoRangeRad || [-Math.PI / 2, Math.PI / 2],
     rodLengthTolerance = 0.5,
     recordLegData = false,
     conditionLimit = null,
@@ -72,6 +78,7 @@ export function evaluatePose(layout, pose = {}, options = {}) {
     throw new RangeError('rodLengthTolerance must be a finite nonnegative length in mm.');
   }
   limitDeg(ballJointLimitDeg, 'ballJointLimitDeg');
+  const servoRangeRad = effectiveServoRange(layout, options);
   servoBounds(servoRangeRad);
   const mounting = mountingDirections(options.mounting) ?? resolveMounting(layout).mounting;
   const jointLimits = {

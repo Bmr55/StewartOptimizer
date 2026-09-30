@@ -51,11 +51,14 @@ try {
       input.dispatchEvent(new Event('change'));
       return count();
     };
-    const both = toggle('simOverlayWorldAxes', true);
+    const all = toggle('simOverlayWorldAxes', true);
+    const withoutArcs = toggle('simOverlayServoArcs', false);
     const withoutAxes = toggle('simOverlayWorldAxes', false);
-    return { both, withoutAxes, withoutEither: toggle('simOverlayPlatformAxes', false), restored: toggle('simOverlayPlatformAxes', true) };
+    return { all, withoutArcs, withoutAxes, withoutEither: toggle('simOverlayPlatformAxes', false),
+      restored: toggle('simOverlayPlatformAxes', true) };
   });
-  assert.ok(overlayPixels.both > overlayPixels.withoutAxes, `world axes toggle drew nothing: ${JSON.stringify(overlayPixels)}`);
+  assert.ok(overlayPixels.all > overlayPixels.withoutArcs, `servo arcs toggle drew nothing: ${JSON.stringify(overlayPixels)}`);
+  assert.ok(overlayPixels.withoutArcs > overlayPixels.withoutAxes, `world axes toggle drew nothing: ${JSON.stringify(overlayPixels)}`);
   assert.ok(overlayPixels.withoutAxes > overlayPixels.withoutEither, `platform axes toggle drew nothing: ${JSON.stringify(overlayPixels)}`);
   assert.equal(overlayPixels.restored, overlayPixels.withoutAxes);
 
@@ -67,12 +70,13 @@ try {
   assert.equal(exported.simulator.options.rodLengthTolerance, 0.01);
   assert.equal(exported.simulator.requested.z, 100);
   assert.equal(exported.simulator.accepted.z, 0);
-  assert.deepEqual(exported.simulator.overlays, { platformAxes: true, worldAxes: false });
+  assert.deepEqual(exported.simulator.overlays, { servoArcs: false, platformAxes: true, worldAxes: false });
   await page.locator('#optimizeTab').click();
   await page.locator('#referenceLayoutInput').fill(JSON.stringify(exported));
   await page.locator('#simulateTab').click();
   await page.locator('#simLoadReference').click();
   assert.equal(await page.locator('#simRodTolerance').inputValue(), '0.01');
+  assert.equal(await page.locator('#simOverlayServoArcs').isChecked(), false);
   assert.equal(await page.locator('#simOverlayWorldAxes').isChecked(), false);
   assert.equal(await page.locator('#simOverlayPlatformAxes').isChecked(), true);
   assert.match(await page.locator('#simRequestedDiagnostic').textContent(), /rejected/);
