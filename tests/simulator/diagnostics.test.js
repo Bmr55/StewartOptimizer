@@ -143,3 +143,18 @@ test('focused limit fields keep their text across animation frames and are resto
   controller.tick(0.016);
   assert.equal(lower.value, '3');
 });
+
+test('a committed limit written with different formatting still follows a candidate load', () => {
+  const document = createFakeDocument();
+  const controller = createSimulatorController();
+  const options = { ballJointLimitDeg: 180, lowerBallJointLimitDeg: 120, upperBallJointLimitDeg: 130, rodLengthTolerance: 0.5 };
+  controller.loadLayout(asymmetricJointFixture(), { options });
+  mountSimulatorDiagnostics({ document, controller, host: document.createElement('section') });
+  const lower = document.getElementById('simLowerJointLimit');
+  document.activeElement = lower;
+  lower.value = '45.0';
+  lower.dispatch('change');
+  assert.equal(controller.getState().options.lowerBallJointLimitDeg, 45);
+  controller.loadLayout(asymmetricJointFixture(), { source: { kind: 'candidate', candidateId: 2 }, options });
+  assert.equal(lower.value, '120', 'focused committed field kept the previous limit after a load');
+});

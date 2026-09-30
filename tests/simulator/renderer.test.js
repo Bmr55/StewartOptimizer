@@ -48,3 +48,54 @@ test('projected depth keeps near/far ordering for a zoomed-out camera', () => {
   const home = projectPoint(target, { target, yaw, pitch, distance: 600 }, 800, 500)[2];
   assert.ok(Math.abs(home - (599 / 2000 * 2 - 1)) < 1e-12);
 });
+
+function fakeGL() {
+  const calls = { createProgram: 0, drawArrays: 0, deleteProgram: 0 };
+  let lost = false;
+  const noop = () => {};
+  return {
+    calls, setLost(value) { lost = value; },
+    VERTEX_SHADER: 1, FRAGMENT_SHADER: 2, COMPILE_STATUS: 3, LINK_STATUS: 4, DEPTH_TEST: 5,
+    ARRAY_BUFFER: 6, DYNAMIC_DRAW: 7, FLOAT: 8, LINES: 9, POINTS: 10, COLOR_BUFFER_BIT: 16, DEPTH_BUFFER_BIT: 32,
+    createShader: () => ({}), shaderSource: noop, compileShader: noop, getShaderParameter: () => true,
+    createProgram() { calls.createProgram++; return {}; }, attachShader: noop, linkProgram: noop,
+    getProgramParameter: () => true, createBuffer: () => ({}), getAttribLocation: () => 0,
+    getUniformLocation: () => ({}), enable: noop, clearColor: noop, viewport: noop, clear: noop,
+    useProgram: noop, bindBuffer: noop, bufferData: noop, vertexAttribPointer: noop,
+    enableVertexAttribArray: noop, uniform1f: noop, drawArrays() { calls.drawArrays++; },
+    deleteBuffer: noop, deleteProgram() { calls.deleteProgram++; }, isContextLost: () => lost,
+  };
+}
+
+test('a lost context cancels the default, stops drawing, and restore rebuilds the program and redraws', () => {
+  const gl = fakeGL();
+  const handlers = {};
+  const canvas = { width: 300, height: 200, getContext: () => gl,
+    addEventListener(type, handler) { handlers[type] = handler; },
+    removeEventListener(type) { delete handlers[type]; } };
+  const changes = [];
+  const renderer = createWebGLRenderer(canvas, { onContextChange: () => changes.push(renderer.contextLost) });
+  const controller = createSimulatorController();
+  const state = controller.loadLayout(asymmetricJointFixture(), { options: { ballJointLimitDeg: 180 } });
+  renderer.render(state, {});
+  assert.equal(gl.calls.createProgram, 1);
+  assert.ok(gl.calls.drawArrays > 0);
+  const drawn = gl.calls.drawArrays;
+  const event = { defaultPrevented: false, preventDefault() { this.defaultPrevented = true; } };
+  handlers.webglcontextlost(event);
+  assert.equal(event.defaultPrevented, true, 'the browser is only allowed to restore a cancelled lost event');
+  assert.equal(renderer.contextLost, true);
+  gl.setLost(true);
+  renderer.render(state, {});
+  assert.equal(gl.calls.drawArrays, drawn, 'drew while the context was lost');
+  gl.setLost(false);
+  handlers.webglcontextrestored();
+  assert.equal(renderer.contextLost, false);
+  assert.equal(gl.calls.createProgram, 2, 'program was not rebuilt after restore');
+  renderer.render(state, {});
+  assert.ok(gl.calls.drawArrays > drawn);
+  assert.deepEqual(changes, [true, false]);
+  renderer.dispose();
+  assert.deepEqual(Object.keys(handlers), []);
+  assert.equal(gl.calls.deleteProgram, 1);
+});

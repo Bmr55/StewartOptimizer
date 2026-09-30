@@ -94,3 +94,50 @@ test('a focused geometry field keeps its text across animation frames and is res
   controller.tick(0.016);
   assert.equal(horn.value, String(controller.getState().layout.hornLength));
 });
+
+test('a committed angle or differently formatted entry still counts as untouched and follows a reset', () => {
+  const parametric = mount(new Optimizer({}, { topology: 'c3_paired', seed: 37 }).createRandomLayout());
+  const turn = parametric.input('sim-base-orientation-number');
+  const original = turn.value;
+  parametric.document.activeElement = turn;
+  // 30 degrees stored in radians does not print back as "30" without formatting.
+  turn.value = '30';
+  turn.dispatch('change');
+  assert.ok(Math.abs(parametric.controller.getState().layout.topologyParameters.base_orientation - Math.PI / 6) < 1e-12);
+  assert.equal(turn.value, '30', 'the committed angle was rewritten with a long decimal');
+  parametric.input('sim-reset-geometry').dispatch('click');
+  assert.equal(turn.value, original, 'focused committed angle field kept the pre-reset value');
+
+  const explicit = mount(asymmetricJointFixture());
+  const beta = explicit.input('sim-beta-1-number');
+  const horn = explicit.input('sim-hornLength-number');
+  const hornRange = explicit.input('sim-hornLength-range');
+  const betaBefore = beta.value;
+  explicit.document.activeElement = beta;
+  beta.value = '60';
+  beta.dispatch('change');
+  assert.equal(beta.value, '60');
+  explicit.input('sim-reset-geometry').dispatch('click');
+  assert.equal(beta.value, betaBefore);
+  explicit.document.activeElement = horn;
+  horn.value = '77.0';
+  horn.dispatch('change');
+  assert.equal(explicit.controller.getState().layout.hornLength, 77);
+  explicit.input('sim-reset-geometry').dispatch('click');
+  assert.equal(horn.value, '50', 'a numerically equal but textually different entry stayed touched');
+  // A dragged range is committed as well.
+  explicit.document.activeElement = hornRange;
+  hornRange.value = '66';
+  hornRange.dispatch('input');
+  assert.equal(explicit.controller.getState().layout.hornLength, 66);
+  explicit.input('sim-reset-geometry').dispatch('click');
+  assert.equal(hornRange.value, '50');
+  assert.equal(horn.value, '50');
+  // Uncommitted typing that happens to equal the stored value is not a problem
+  // either way; an emptied field is never treated as untouched.
+  explicit.document.activeElement = horn;
+  horn.value = '';
+  explicit.controller.setAnimation('wobble', true);
+  explicit.controller.tick(0.016);
+  assert.equal(horn.value, '', 'a cleared field was rewritten mid-edit');
+});

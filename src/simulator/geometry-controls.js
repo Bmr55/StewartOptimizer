@@ -51,8 +51,28 @@ export function suggestedParameters(layout, topology) {
 // input is focused and its text has moved away from the value last written to
 // it. A focused but untouched field still follows a load or reset, which
 // matters in browsers where clicking a button does not move focus.
+// A committed entry records the typed text as the baseline, so a stored value
+// that prints differently from what was typed (77.0 for 77) still counts as
+// untouched and follows the next reset, load or settings change.
+export function markCommitted(input, synced) {
+  synced.set(input, input.value);
+}
+
+// Values print with at most 12 significant digits, so a degree that round-trips
+// through radians shows 30 rather than 29.999999999999996.
+export function displayText(value) {
+  return Number.isFinite(value) ? String(Number(value.toPrecision(12))) : String(value);
+}
+
+function sameNumber(a, b) {
+  const parse = text => text.trim() === '' ? NaN : Number(text);
+  const x = parse(a), y = parse(b);
+  return Number.isFinite(x) && Number.isFinite(y)
+    && Math.abs(x - y) <= 1e-9 * Math.max(1, Math.abs(x), Math.abs(y));
+}
+
 export function syncInput(document, input, shown, synced, force = false) {
-  const untouched = input.value === synced.get(input) || input.value === shown;
+  const untouched = input.value === synced.get(input) || input.value === shown || sameNumber(input.value, shown);
   if (!force && input === document.activeElement && !untouched) return false;
   input.value = shown;
   synced.set(input, shown);
@@ -114,6 +134,7 @@ export function createGeometryControls({ document, container, controller }) {
     range.step = String(step);
     number.step = String(step);
     const change = event => {
+      markCommitted(event.target, synced);
       const value = numeric(event.target.value, label);
       if (value !== null) edit(value);
     };
@@ -131,6 +152,7 @@ export function createGeometryControls({ document, container, controller }) {
     const number = element(document, 'input', { id: `sim-${key}-number`, type: 'number' });
     number.step = String(step);
     number.addEventListener('change', event => {
+      markCommitted(event.target, synced);
       const value = numeric(event.target.value, label);
       if (value !== null) edit(value);
     });
@@ -274,11 +296,11 @@ export function createGeometryControls({ document, container, controller }) {
     for (const [key, control] of controls) {
       const value = values[key];
       if (value == null) continue;
-      syncInput(document, control.number, String(value), synced, force);
+      syncInput(document, control.number, displayText(value), synced, force);
       if (control.range) {
         control.range.min = String(Math.min(Number(control.range.min), value));
         control.range.max = String(Math.max(Number(control.range.max), value));
-        syncInput(document, control.range, String(value), synced, force);
+        syncInput(document, control.range, displayText(value), synced, force);
       }
     }
     report(state.source?.kind === 'editable'

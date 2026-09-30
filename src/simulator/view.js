@@ -1,6 +1,7 @@
 import { clamp, degToRad, radToDeg } from '../math.js';
 import { HOME_POSE, POSE_AXES } from './controller.js';
 import { createWebGLRenderer } from './renderer.js';
+import { markCommitted, syncInput } from './geometry-controls.js';
 
 const RADIAN_AXES = new Set(['rx', 'ry', 'rz']);
 const axisInput = (document, axis) => document.getElementById(`sim${axis.toUpperCase()}Input`);
@@ -20,7 +21,8 @@ export function createSimulatorView({ document, window, controller, isActive = (
   const pointerMode = document.getElementById('simPointerMode');
   const markers = document.getElementById('simMarkers');
   const traces = document.getElementById('simTraces');
-  const renderer = createRenderer(canvas, { window });
+  const renderer = createRenderer(canvas, { window, onContextChange: () => show(controller.getState()) });
+  const synced = new WeakMap();
   let camera = { yaw: 0.7, pitch: 0.38, distance: 600, target: [0, 0, 100] };
   let drag = null;
   let previousFrame = null;
@@ -35,7 +37,10 @@ export function createSimulatorView({ document, window, controller, isActive = (
     summary.textContent = state.layout
       ? `${state.source?.kind === 'candidate' ? `Candidate ${state.source.candidateId}` : state.source?.kind || 'Layout'} · ${state.layout.topology || 'free'} · home ${fmt(state.layout.homeHeight)} mm`
       : 'Select an optimizer candidate or import a layout to simulate.';
-    if (state.assessment) {
+    if (renderer.contextLost) {
+      status.textContent = 'WebGL2 context lost. The scene redraws when the browser restores it; pose requests are still evaluated.';
+      status.classList.toggle('error', true);
+    } else if (state.assessment) {
       const reason = state.assessment.violations.map(v => `${v.type}${v.leg === undefined ? '' : ` (leg ${v.leg + 1})`}`).join(', ');
       status.textContent = state.rejected
         ? `Rejected request: ${describePose(state.requested)}. ${reason || 'Pose failed the active evaluator.'} Accepted pose held.`
@@ -46,18 +51,24 @@ export function createSimulatorView({ document, window, controller, isActive = (
       status.classList.toggle('error', !renderer.available);
     }
     acceptedText.textContent = `Rendered pose: ${describePose(state.accepted)}`;
-    for (const axis of POSE_AXES) {
-      const value = displayValue(axis, state.requested[axis]);
-      axisInput(document, axis).value = String(fmt(value));
-      axisSlider(document, axis).value = String(clamp(value,
-        Number(axisSlider(document, axis).min), Number(axisSlider(document, axis).max)));
-    }
+    syncPoseFields(state);
     play.textContent = state.animation.playing ? 'Pause' : 'Play';
     play.setAttribute('aria-pressed', String(state.animation.playing));
     // Snapshot loads and browser-save restores set these on the controller directly.
     markers.checked = state.markers;
     traces.checked = state.tracesEnabled;
     if (renderer.available) renderer.render(state, camera);
+  }
+
+  // Animation ticks notify every frame; a pose field the user is typing into
+  // keeps its text unless an invalid entry forces the requested value back.
+  function syncPoseFields(state, force = false) {
+    for (const axis of POSE_AXES) {
+      const value = displayValue(axis, state.requested[axis]);
+      const slider = axisSlider(document, axis);
+      syncInput(document, axisInput(document, axis), String(fmt(value)), synced, force);
+      syncInput(document, slider, String(clamp(value, Number(slider.min), Number(slider.max))), synced, force);
+    }
   }
 
   const unsubscribe = controller.subscribe(show);
@@ -71,12 +82,17 @@ export function createSimulatorView({ document, window, controller, isActive = (
   function guarded(action) {
     return (...args) => {
       try { action(...args); }
-      catch (error) { status.textContent = error.message; status.classList.add('error'); }
+      catch (error) {
+        status.textContent = error.message;
+        status.classList.add('error');
+        syncPoseFields(controller.getState(), true);
+      }
     };
   }
   const requestFields = guarded(() => {
     const pose = Object.fromEntries(POSE_AXES.map(axis => [axis,
       modelValue(axis, Number(axisInput(document, axis).value))]));
+    for (const axis of POSE_AXES) markCommitted(axisInput(document, axis), synced);
     controller.requestPose(pose);
   });
   for (const axis of POSE_AXES) {

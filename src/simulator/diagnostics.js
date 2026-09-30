@@ -1,7 +1,7 @@
 import { radToDeg } from '../math.js';
 import { DEFAULT_BALL_JOINT_LIMIT_DEG } from '../contracts.js';
 import { NUMERICAL_RECIPROCAL_CUTOFF } from '../model/conditioning.js';
-import { syncInput } from './geometry-controls.js';
+import { markCommitted, syncInput } from './geometry-controls.js';
 
 const numeric = value => Number.isFinite(value) ? value : null;
 const rounded = (value, digits = 3) => value == null ? '—' : Number(value.toFixed(digits)).toString();
@@ -120,6 +120,7 @@ export function mountSimulatorDiagnostics({ document, controller, host = documen
     ['simRodTolerance', 'rodLengthTolerance', Infinity],
   ]) {
     field(id).addEventListener('change', () => {
+      markCommitted(field(id), synced);
       try {
         const input = field(id).value.trim();
         const value = input ? Number(input) : NaN;

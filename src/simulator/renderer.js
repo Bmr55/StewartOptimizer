@@ -105,22 +105,44 @@ function shader(gl, type, source) {
   return result;
 }
 
-export function createWebGLRenderer(canvas, { window } = {}) {
+export function createWebGLRenderer(canvas, { window, onContextChange } = {}) {
   const gl = canvas.getContext?.('webgl2', { antialias: true, alpha: false });
-  if (!gl) return { available: false,
+  if (!gl) return { available: false, contextLost: false,
     error: 'WebGL2 is unavailable. Enable hardware acceleration or use a modern desktop browser; optimization remains available.',
     render() {}, dispose() {} };
-  const program = gl.createProgram();
-  gl.attachShader(program, shader(gl, gl.VERTEX_SHADER, VERTEX_SOURCE));
-  gl.attachShader(program, shader(gl, gl.FRAGMENT_SHADER, FRAGMENT_SOURCE));
-  gl.linkProgram(program);
-  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program) || 'WebGL2 program failed to link.');
-  const buffer = gl.createBuffer();
-  const position = gl.getAttribLocation(program, 'aPosition');
-  const color = gl.getAttribLocation(program, 'aColor');
-  const pointSize = gl.getUniformLocation(program, 'uPointSize');
-  gl.enable(gl.DEPTH_TEST);
-  gl.clearColor(0.055, 0.075, 0.11, 1);
+  let program, buffer, position, color, pointSize;
+  let lost = false;
+
+  function setup() {
+    program = gl.createProgram();
+    gl.attachShader(program, shader(gl, gl.VERTEX_SHADER, VERTEX_SOURCE));
+    gl.attachShader(program, shader(gl, gl.FRAGMENT_SHADER, FRAGMENT_SOURCE));
+    gl.linkProgram(program);
+    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program) || 'WebGL2 program failed to link.');
+    buffer = gl.createBuffer();
+    position = gl.getAttribLocation(program, 'aPosition');
+    color = gl.getAttribLocation(program, 'aColor');
+    pointSize = gl.getUniformLocation(program, 'uPointSize');
+    gl.enable(gl.DEPTH_TEST);
+    gl.clearColor(0.055, 0.075, 0.11, 1);
+  }
+  setup();
+
+  // The browser restores a lost context (GPU reset, driver crash, backgrounded
+  // tab, too many contexts) only when the lost event is cancelled. GPU objects
+  // do not survive, so the program, buffer and locations are rebuilt on restore.
+  const contextLost = event => {
+    event?.preventDefault?.();
+    lost = true;
+    onContextChange?.();
+  };
+  const contextRestored = () => {
+    try { setup(); lost = false; }
+    catch { return; } // Stay lost; the status keeps reporting it.
+    onContextChange?.();
+  };
+  canvas.addEventListener?.('webglcontextlost', contextLost);
+  canvas.addEventListener?.('webglcontextrestored', contextRestored);
 
   function draw(vertices, primitive, size) {
     if (!vertices.length) return;
@@ -134,6 +156,7 @@ export function createWebGLRenderer(canvas, { window } = {}) {
   }
 
   function render(state, camera = {}) {
+    if (lost || gl.isContextLost?.()) return;
     const pixelRatio = Math.min(2, window?.devicePixelRatio || 1);
     const width = Math.max(1, Math.floor((canvas.clientWidth || canvas.width) * pixelRatio));
     const height = Math.max(1, Math.floor((canvas.clientHeight || canvas.height) * pixelRatio));
@@ -161,5 +184,11 @@ export function createWebGLRenderer(canvas, { window } = {}) {
     draw(pointData, gl.POINTS, 7);
   }
 
-  return { available: true, render, dispose() { gl.deleteBuffer(buffer); gl.deleteProgram(program); } };
+  return { available: true, get contextLost() { return lost; }, render,
+    dispose() {
+      canvas.removeEventListener?.('webglcontextlost', contextLost);
+      canvas.removeEventListener?.('webglcontextrestored', contextRestored);
+      gl.deleteBuffer(buffer);
+      gl.deleteProgram(program);
+    } };
 }
