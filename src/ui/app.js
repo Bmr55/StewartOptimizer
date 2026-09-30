@@ -7,6 +7,7 @@ import { createControls } from './controls.js';
 import { installTooltips } from './tooltips.js';
 import { createResultsView } from './results-view.js';
 import { buildConstructionSkeleton, canExportCad, skeletonToCSV, skeletonToFusionScript } from '../io/cad.js';
+import { createServoRatingControls } from './servo-ratings-controls.js';
 
 export function createApp({ document, window, Optimizer = DefaultOptimizer, loadDefaultRequirements = loadSample, downloadFile = download }) {
     const requirementsInput = document.getElementById('requirementsInput');
@@ -20,6 +21,11 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, load
     let runSerial = 0;
     const { populateRequirementsDefaults, readWorkspaceRanges, readHomeHeightBounds,
         readSamplingSettings, randomizeSeed } = createControls(document);
+    const ratingControls = createServoRatingControls(document);
+    function populate(parsed, preserveEdits = false) {
+        populateRequirementsDefaults(parsed, preserveEdits);
+        ratingControls.populate(parsed.normalized, preserveEdits);
+    }
     installTooltips(document, window);
     const resultsView = createResultsView(document, (candidate) => {
         if (!currentOptimizer || currentOptimizer.running) return;
@@ -38,7 +44,7 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, load
         try {
             const json = await loadDefaultRequirements();
             requirementsInput.value = json;
-            populateRequirementsDefaults(parseRequirements(json));
+            populate(parseRequirements(json));
             showStatus('Sample requirements loaded.');
         } catch (error) {
             console.error(error);
@@ -80,6 +86,7 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, load
     });
 
     function setRunning(running) {
+        ratingControls.setDisabled(running);
         for (const id of ['runOptimization', 'loadSampleRequirements', 'clearRequirements',
             'optSampling', 'optSeed', 'randomizeSeed', 'clearReferenceLayout', 'referenceLayoutFile']) {
             document.getElementById(id).disabled = running;
@@ -106,12 +113,13 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, load
                 throw new Error('Provide requirements JSON before running the optimizer.');
             }
             const { normalized, workspace } = parseRequirements(text);
-            populateRequirementsDefaults({ normalized, workspace }, true);
+            populate({ normalized, workspace }, true);
 
             const generations = Number(document.getElementById('optGenerations').value);
             const populationSize = Number(document.getElementById('optPopulation').value);
             const ranges = readWorkspaceRanges();
             const { seed, sampling } = readSamplingSettings();
+            const servoRatings = ratingControls.read();
 
             currentOptimizer = new Optimizer(normalized, {
                 generations,
@@ -122,6 +130,7 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, load
                 homeHeightBounds: readHomeHeightBounds(),
                 sampling,
                 seed,
+                servoRatings,
                 ballJointLimitDeg: Number(ballJointLimitInput.value),
                 ballJointClamp: ballJointClampCheckbox.checked,
                 onProgress: ({ completed, total, generation }) => showStatus(
@@ -202,7 +211,7 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, load
     const ready = loadDefaultRequirements()
         .then((json) => {
             requirementsInput.value = json;
-            populateRequirementsDefaults(parseRequirements(json));
+            populate(parseRequirements(json));
             showStatus('Sample requirements loaded. Adjust parameters and run the optimizer.');
         })
         .catch((error) => {

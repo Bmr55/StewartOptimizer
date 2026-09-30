@@ -78,3 +78,34 @@ test('UI passes sampling presets, grid, seed reuse, and Randomize to core', asyn
   await element('runOptimization').handlers.click();
   assert.equal(captured.at(-1).seed, 71);
 });
+
+test('rating controls refresh JSON defaults, retain edits, and reject invalid overrides', async () => {
+  const captured = [];
+  class StubOptimizer {
+    constructor(requirements, options) { captured.push({ requirements, options }); this.pareto = []; this.fitness = []; }
+    estimateWork() { return { totalPoses: 8 }; }
+    start() { return Promise.resolve({ status: 'completed' }); }
+  }
+  const element = await loadUI(StubOptimizer);
+  const input = JSON.parse(sampleText);
+  input.constraints.servo_torque_rating_nm = 8;
+  input.constraints.servo_speed_rating_deg_s = 180;
+  element('requirementsInput').value = JSON.stringify(input);
+  await element('runOptimization').handlers.click();
+  assert.equal(captured.at(-1).options.servoRatings.servo_torque_rating_nm, 8);
+  assert.equal(captured.at(-1).options.servoRatings.servo_speed_rating_deg_s, 180);
+  element('servoTorqueRating').value = '6';
+  element('servoTorque1').value = '4';
+  element('servoRatingPolicy').value = 'advisory';
+  input.constraints.servo_torque_rating_nm = 10;
+  element('requirementsInput').value = JSON.stringify(input);
+  await element('runOptimization').handlers.click();
+  assert.equal(captured.at(-1).requirements.servo_torque_rating_nm, 10);
+  assert.equal(captured.at(-1).options.servoRatings.servo_torque_rating_nm, 6);
+  assert.equal(captured.at(-1).options.servoRatings.per_servo_ratings[0].torque_nm, 4);
+  assert.equal(captured.at(-1).options.servoRatings.servo_rating_policy, 'advisory');
+  element('servoSpeed2').value = '0';
+  await element('runOptimization').handlers.click();
+  assert.match(element('optStatus').textContent, /Servo 2 speed rating/);
+  assert.equal(captured.length, 2);
+});

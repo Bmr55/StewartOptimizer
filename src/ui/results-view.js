@@ -69,7 +69,11 @@ export function createResultsView(document, onSelect) {
     const details = reference
       ? ` Exact reference. Bounds conflicts: ${reference.boundsConflicts.map(item => item.field).join(', ') || 'none'}. Home violations: ${reference.homePoseViolations.map(item => `${item.type} leg ${item.leg + 1}`).join(', ') || 'none'}.`
       : '';
-    summary.textContent = `Candidate ${selectedId}: ${isPassing(selected) ? 'passing' : `diagnostic (${failures.join(', ') || 'requirements failed'})`}. Feasible sampled coverage ${printable(selected.coverage)}%. Home ${flags.homePoseSatisfied ? 'pass' : 'fail'}; workspace ${flags.sampledWorkspaceSatisfied ? 'pass' : 'fail'}; cycle ${flags.cycleSatisfied ? 'pass' : 'fail'}. Torque ${printable(selected.torque)} N m; speed ${printable(selected.speedDemand)} rad/s.${details}`;
+    const capacity = selected.servoCapacity;
+    const capacityText = capacity?.hasRatings
+      ? ` Servo capacity ${capacity.status} (${capacity.policy}${capacity.policy === 'advisory' && ['above', 'unavailable'].includes(capacity.status) ? ' warning' : ''}); worst headroom ${printable(capacity.worstHeadroomFraction)} of rating.`
+      : '';
+    summary.textContent = `Candidate ${selectedId}: ${isPassing(selected) ? 'passing' : `diagnostic (${failures.join(', ') || 'requirements failed'})`}. Feasible sampled coverage ${printable(selected.coverage)}%. Home ${flags.homePoseSatisfied ? 'pass' : 'fail'}; workspace ${flags.sampledWorkspaceSatisfied ? 'pass' : 'fail'}; cycle ${flags.cycleSatisfied ? 'pass' : 'fail'}. Torque ${printable(selected.torque)} N m; speed ${printable(selected.speedDemand)} rad/s.${capacityText}${details}`;
   }
 
   function choose(id) {

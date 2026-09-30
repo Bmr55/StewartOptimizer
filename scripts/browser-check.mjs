@@ -14,6 +14,10 @@ try {
   await page.waitForFunction(() => document.querySelector('#requirementsInput').value.includes('mass_kg'));
   await page.locator('#optPopulation').fill('4');
   await page.locator('#optGenerations').fill('1');
+  await page.locator('#servoTorqueRating').fill('0.000001');
+  await page.locator('#servoSpeedRating').fill('180');
+  await page.locator('#servoTorque1').fill('2');
+  await page.locator('#servoRatingPolicy').selectOption('advisory');
   await page.locator('#runOptimization').click();
   await page.waitForFunction(() => document.querySelector('#optStatus').textContent.includes('Optimization complete'), null, { timeout: 30000 });
 
@@ -34,6 +38,11 @@ try {
   assert.equal(downloaded.id, Number(selected));
   assert.equal(downloaded.schema_version, 2);
   assert.equal(downloaded.feasibility.passing, !downloaded.diagnostic);
+  assert.equal(downloaded.run.effective_settings.servoRatingPolicy, 'advisory');
+  assert.equal(downloaded.run.effective_settings.effectiveServoRatings.perServo[0].torqueNm, 2);
+  assert.equal(downloaded.run.effective_settings.effectiveServoRatings.perServo[1].torqueNm, 0.000001);
+  assert.equal(downloaded.servo_capacity.policy, 'advisory');
+  assert.match(await page.locator('#candidateSummary').textContent(), /Servo capacity .+ \(advisory(?: warning)?\)/);
   await page.locator('#referenceLayoutInput').fill(JSON.stringify(downloaded));
   await page.locator('#runOptimization').click();
   await page.waitForFunction(() => document.querySelector('#optStatus').textContent.includes('Optimization complete'), null, { timeout: 30000 });
@@ -42,7 +51,7 @@ try {
   const imported = JSON.parse(await page.locator('#resultOutput').inputValue()).result.layout;
   for (const field of ['base_anchors', 'platform_anchors', 'beta_angles', 'horn_length',
     'rod_length', 'servo_range', 'home_height']) assert.deepEqual(imported[field], downloaded[field]);
-  console.log('Browser result selection, chart axes, selected JSON export, and reference import passed.');
+  console.log('Browser result selection, chart axes, servo ratings, selected JSON export, and reference import passed.');
 } finally {
   await browser?.close();
   await new Promise(resolve => server.close(resolve));

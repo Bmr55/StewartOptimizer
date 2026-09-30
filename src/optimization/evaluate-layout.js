@@ -2,6 +2,7 @@ import { computeCycleDemand } from '../model/cycle.js';
 import { evaluatePose } from '../model/pose.js';
 import { resolveMounting } from '../model/mounting.js';
 import { validateConditionLimit, NUMERICAL_RECIPROCAL_CUTOFF } from '../model/conditioning.js';
+import { evaluateServoCapacity } from '../model/servo-ratings.js';
 import { computeWorkspace } from '../workspace/sweep.js';
 import { failureCategories } from '../io/results.js';
 import { MODEL_VERSION } from '../contracts.js';
@@ -46,6 +47,7 @@ export async function evaluateLayout(layout, options) {
   const availableQuality = Number.isFinite(conditioningQuality) ? conditioningQuality : null;
 
   const cycle = evaluateCycle(layout, { ...options, mounting, onPose: onPoseWork });
+  const servoCapacity = evaluateServoCapacity(cycle, options.servoRatings);
   const torque = cycle.torqueNm;
   const speedDemand = cycle.speedRadPerSec;
   const loadBalance = stats.loadBalanceScore ?? 0;
@@ -84,6 +86,8 @@ export async function evaluateLayout(layout, options) {
       && !(stats.conditioningCounts?.numericalSingularity || stats.conditioningCounts?.engineeringLimit
         || stats.conditioningCounts?.unavailable)
       && !cycle.violations?.some(v => ['numericalSingularity', 'conditionLimit'].includes(v.type)),
+    servoCapacitySatisfied: !servoCapacity.hasRatings || servoCapacity.compliant === true,
+    servoCapacityEnforced: servoCapacity.hasRatings && servoCapacity.policy === 'enforced',
     scope: 'Sampled poses under the modeled geometry, servo, rod, ball-joint and conditioning constraints',
   };
   feasibility.failedCategories = failureCategories({ feasibility, cycle });
@@ -110,6 +114,7 @@ export async function evaluateLayout(layout, options) {
     },
     torque,
     speedDemand,
+    servoCapacity,
     loadBalance,
     isotropy,
     limitMargin,
