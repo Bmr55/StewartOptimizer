@@ -12,6 +12,7 @@ export const OBJECTIVE_SETS = Object.freeze({
 const LEGACY_KEYS = ['coverage', 'relaxedCoverage', 'dexterity', 'stiffness',
   'loadBalance', 'isotropy', 'limitMargin', 'torque', 'speedDemand', 'fatigue'];
 const APPROXIMATION = Object.freeze({ stiffness: 'geometric proxy',
+  physicalStiffness: 'unloaded small-deflection stiffness at home; minimum eigenvalue with rotations scaled by the characteristic length',
   loadBalance: 'legacy directional proxy', loadSharing: 'solved rod-force balance over the cycle',
   limitMargin: 'sampled proxy', fatigue: 'heuristic' });
 
@@ -22,15 +23,18 @@ export function normalizeObjectiveSet(input = 'compact') {
   throw new RangeError('objectiveSet must be compact, full or full-v1.');
 }
 
-export function objectiveDefinitions(input = 'compact') {
+// `stiffnessMetric: 'physicalStiffness'` substitutes the physical stiffness for the proxy.
+export function objectiveDefinitions(input = 'compact', { stiffnessMetric = 'stiffness' } = {}) {
   const name = normalizeObjectiveSet(input);
-  const keys = name === 'legacy-v2' ? LEGACY_KEYS : OBJECTIVE_SETS[name];
+  if (!['stiffness', 'physicalStiffness'].includes(stiffnessMetric)) throw new RangeError('stiffnessMetric must be stiffness or physicalStiffness.');
+  const keys = (name === 'legacy-v2' ? LEGACY_KEYS : OBJECTIVE_SETS[name])
+    .map(key => key === 'stiffness' ? stiffnessMetric : key);
   return keys.map(key => ({ key, direction: METRICS[key].direction,
     unit: METRICS[key].unit, approximation: APPROXIMATION[key] ?? null }));
 }
 
-export function objectiveValues(evaluation, input = 'compact') {
-  return objectiveDefinitions(input).map(({ key, direction }) => {
+export function objectiveValues(evaluation, input = 'compact', variant = {}) {
+  return objectiveDefinitions(input, variant).map(({ key, direction }) => {
     const value = evaluation[key];
     return Number.isFinite(value) ? direction === 'min' ? -value : value : -Infinity;
   });

@@ -4,6 +4,7 @@ import { resolveMounting } from '../model/mounting.js';
 import { validateConditionLimit, NUMERICAL_RECIPROCAL_CUTOFF } from '../model/conditioning.js';
 import { evaluateServoCapacity } from '../model/servo-ratings.js';
 import { actuatorUtilization } from '../model/load-sharing.js';
+import { evaluateCompliance } from '../model/compliance.js';
 import { computeWorkspace } from '../workspace/sweep.js';
 import { failureCategories } from '../io/results.js';
 import { MODEL_VERSION } from '../contracts.js';
@@ -54,6 +55,8 @@ export async function evaluateLayout(layout, options) {
   const speedDemand = cycle.speedRadPerSec;
   const loadBalance = stats.loadBalanceScore ?? 0;
   const loadSharing = cycle.loadSharing?.balanceScore ?? null;
+  const compliance = evaluateCompliance(layout, homeResult, options.stiffnessModel ?? null);
+  const physicalStiffness = compliance.minScaledStiffnessNPerM;
   const utilization = actuatorUtilization(cycle, options.servoRatings);
   const isotropy = stats.averageIsotropy ?? 0;
   const stiffnessScore = stats.averageStiffness > 0 ? stats.averageStiffness : stiffness;
@@ -71,7 +74,8 @@ export async function evaluateLayout(layout, options) {
   const fatigue = computeFatigue(stats, options);
   const objectives = objectiveValues({ coverage, relaxedCoverage,
     conditioningQuality: availableQuality, dexterity, stiffness: stiffnessScore,
-    loadBalance, loadSharing, isotropy, limitMargin, torque, speedDemand, fatigue }, options.objectiveSet);
+    physicalStiffness, loadBalance, loadSharing, isotropy, limitMargin, torque, speedDemand, fatigue },
+  options.objectiveSet, options.objectiveVariant);
 
   const feasibility = {
     cycleSatisfied: cycle.valid,
@@ -101,6 +105,8 @@ export async function evaluateLayout(layout, options) {
     feasibility,
     dexterity,
     stiffness: stiffnessScore,
+    physicalStiffness,
+    compliance,
     conditioningQuality: availableQuality,
     conditioning: {
       modelVersion: MODEL_VERSION,

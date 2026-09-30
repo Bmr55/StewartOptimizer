@@ -16,6 +16,7 @@ import { normalizeServoRatings, SERVO_RATING_KEYS } from '../model/servo-ratings
 import { normalizeObjectiveSet, objectiveDefinitions } from './objectives.js';
 import { trajectoryFromRequirements, trajectoryIdentity, trajectorySummary } from '../model/trajectory.js';
 import { normalizeMassProperties, RIGID_BODY_FIELDS } from '../model/mass-properties.js';
+import { normalizeStiffnessModel } from '../model/compliance.js';
 import { CYCLE_MODEL_VERSION } from '../contracts.js';
 import { DEFAULT_CYCLE_SAMPLING, LEGACY_CYCLE_SAMPLING, normalizeCycleSampling } from '../model/cycle-sampling.js';
 
@@ -144,6 +145,8 @@ export class Optimizer {
     }
 
     this.massProperties = normalizeMassProperties({ ...cycleInput, mass_kg: this.payload });
+    this.stiffnessModel = normalizeStiffnessModel(requirements.stiffness_model);
+    this.objectiveVariant = { stiffnessMetric: this.stiffnessModel?.useAsObjective ? 'physicalStiffness' : 'stiffness' };
     this.servoRangeRad = this.servoRangeDeg.map((deg) => degToRad(deg));
     this.referenceDiagnostics = null;
     if (this.referenceLayout) {
@@ -196,7 +199,8 @@ export class Optimizer {
       conditionLimit: this.conditionLimit,
       ballJointClamp: this.ballJointClamp,
       servoRangeRad: this.servoRangeRad, sampling: this.sampling,
-      servoRatings: this.servoRatings, objectiveSet: this.objectiveSet };
+      servoRatings: this.servoRatings, objectiveSet: this.objectiveSet,
+      stiffnessModel: this.stiffnessModel, objectiveVariant: this.objectiveVariant };
   }
 
   evaluateLayout(layout) {
@@ -339,7 +343,8 @@ export class Optimizer {
         trajectoryId: trajectoryIdentity(this.trajectory), trajectorySource: this.trajectorySource,
         massProperties: this.massProperties },
       objectiveSet: this.objectiveSet,
-      objectiveDefinitions: objectiveDefinitions(this.objectiveSet),
+      objectiveDefinitions: objectiveDefinitions(this.objectiveSet, this.objectiveVariant),
+      stiffnessModel: this.stiffnessModel,
       reference_layout: this.referenceLayout ? layoutToJSON(this.referenceLayout) : null,
       seed_composition: this.referenceLayout ? seedComposition(this.populationSize) : null,
     }));
