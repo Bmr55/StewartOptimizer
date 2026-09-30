@@ -16,7 +16,7 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, load
     let currentOptimizer = null;
     let lastOutcome = null;
     let runSerial = 0;
-    const { populateRequirementsDefaults, readWorkspaceRanges } = createControls(document);
+    const { populateRequirementsDefaults, readWorkspaceRanges, readHomeHeightBounds } = createControls(document);
     installTooltips(document, window);
     const resultsView = createResultsView(document, (candidate) => {
         if (!currentOptimizer || currentOptimizer.running) return;
@@ -85,6 +85,8 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, load
                 generations,
                 populationSize,
                 ranges,
+                topology: document.getElementById('optTopology').value || 'c3_paired',
+                homeHeightBounds: readHomeHeightBounds(),
                 ballJointLimitDeg: Number(ballJointLimitInput.value),
                 ballJointClamp: ballJointClampCheckbox.checked,
                 onProgress: ({ completed, total, generation }) => showStatus(

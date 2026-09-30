@@ -3,6 +3,7 @@ const DEFAULTS = {
   servo_travel_bounds_deg: [-120, 120],
   rod_length_bounds_mm: [160, 420],
   horn_length_bounds_mm: [30, 110],
+  home_height_bounds_mm: [50, 450],
 };
 const PAYLOAD = ['mass_kg', 'cycle_mm', 'frequency_hz', 'cycle_axis'];
 const TRANSLATIONS = ['x_range_mm', 'y_range_mm', 'z_range_mm'];
@@ -40,7 +41,7 @@ export function validatePhysicalRequirements(data) {
   if (!['x', 'y', 'z'].includes(data.cycle_axis)) throw new Error('cycle_axis must be x, y or z.');
   nonnegative(data.ball_joint_max_deg, 'ball_joint_max_deg');
   if (data.ball_joint_max_deg > 180) throw new Error('ball_joint_max_deg must be between 0 and 180.');
-  for (const key of ['rod_length_bounds_mm', 'horn_length_bounds_mm']) {
+  for (const key of ['rod_length_bounds_mm', 'horn_length_bounds_mm', 'home_height_bounds_mm']) {
     const bounds = range(data[key], key);
     if (bounds[0] <= 0) throw new Error(`${key} must contain positive lengths.`);
   }
@@ -75,7 +76,8 @@ export function parseRequirements(text) {
   for (const [key, value] of Object.entries(DEFAULTS)) {
     if (!(key in normalized)) normalized[key] = Array.isArray(value) ? value.slice() : value;
   }
-  for (const key of [...TRANSLATIONS, ...ROTATIONS, 'rod_length_bounds_mm', 'horn_length_bounds_mm', 'servo_travel_bounds_deg']) {
+  for (const key of [...TRANSLATIONS, ...ROTATIONS, 'rod_length_bounds_mm', 'horn_length_bounds_mm',
+    'home_height_bounds_mm', 'servo_travel_bounds_deg']) {
     normalized[key] = range(normalized[key], key);
   }
   validatePhysicalRequirements(normalized);

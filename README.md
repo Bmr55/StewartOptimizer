@@ -13,7 +13,7 @@ npm run dev
 Open the printed local URL. If port 8000 is occupied, use `npm run dev -- --port 8001`; port 0 selects a free port. The server binds only to 127.0.0.1. Any static HTTP server also works, including `python -m http.server 8000 --bind 127.0.0.1`. Opening index.html as a local file is not supported because modules and sample JSON use browser loading rules.
 
 1. The supplied [sample requirements](./examples/sample-requirements.json) load automatically.
-2. Edit the JSON and/or controls. Explicit control overrides win; untouched controls follow edited JSON defaults. Load Sample Requirements resets the controls.
+2. Edit the JSON and/or controls. Choose a [layout topology](./docs/TOPOLOGIES.md) and home-height bounds. Explicit control overrides win; untouched controls follow edited JSON defaults. Load Sample Requirements resets the controls.
 3. Start with population **12**, generations **5**, and the automatically populated 3-point ranges. The sample performs 72 candidate evaluations: 52,488 workspace poses and at most 4,680 home/cycle poses, for a total budget of **57,168**.
 4. Run Optimization. Progress updates during evaluation. Cancel stops an active sweep and retains only the last completed population, explicitly labelled partial.
 5. Inspect feasible coverage, cycle validity and constraint violations. Download Layout JSON saves the highest-feasible-coverage candidate in the retained Pareto front. A downloaded candidate may satisfy only part of the requested workspace or fail the cycle; check its feasibility fields.
@@ -23,7 +23,7 @@ The grid is deliberately coarse. A 100% sampled coverage result does not establi
 ## Implemented scope
 
 - Nested and flat requirements JSON with shared validation.
-- Random candidate generation, crossover, mutation, non-dominated sorting, crowding distance and tournament selection.
+- Circular, C3 paired, rectangular paired, and Free candidate generation with invariant-preserving crossover and mutation, independently bounded home height, non-dominated sorting, crowding distance and tournament selection.
 - Six-dimensional workspace sweeps and inverse kinematics with geometry, servo, rod-length and modeled ball-joint checks.
 - Separate strict feasible coverage and optional soft ball-joint exploration; soft exploration never changes physical geometry or feasible coverage.
 - Axis-specific sampled cycle force-balance/servo-speed estimates, plus geometric stiffness/dexterity/load-balance/fatigue proxies.
@@ -34,6 +34,7 @@ The root app has no layout importer, integrated 3D viewer, workspace/Pareto plot
 ## Reference
 
 - [Requirements, defaults, units and validation](./docs/REQUIREMENTS.md)
+- [Layout topologies, parameters and bounds](./docs/TOPOLOGIES.md)
 - [Cycle demand model and assumptions](./docs/CYCLE_MODEL.md)
 - [Metrics and exported fields](./docs/RESULTS.md)
 - [Current architecture and reproduction guide](./docs/architecture.md)

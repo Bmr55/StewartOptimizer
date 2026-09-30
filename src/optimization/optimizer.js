@@ -1,10 +1,11 @@
 import { validatePhysicalRequirements } from '../model/requirements.js';
 import { clamp, degToRad } from '../math.js';
-import { DEFAULT_DESIGN_SPACE, cloneLayout, createRandomLayout, finalizeLayout, mutateLayout, crossoverLayouts } from './layout-operators.js';
+import { DEFAULT_DESIGN_SPACE, cloneLayout, createRandomLayout, finalizeLayout, mutateLayout, crossoverLayouts, validateDesignSpace } from './layout-operators.js';
 import { dominates, fastNonDominatedSort, assignCrowdingDistance, tournamentSelect, selectFromFronts } from './nsga2.js';
 import { evaluateLayout, evaluateCycle, computeFatigue } from './evaluate-layout.js';
 import { estimateWork } from './budget.js';
 import { selectBest, exportResult } from '../io/results.js';
+import { DEFAULT_TOPOLOGY, TOPOLOGIES } from '../contracts.js';
 
 // Owns run state and population lifecycle. Numerical work and browser I/O live elsewhere.
 export class Optimizer {
@@ -14,6 +15,8 @@ export class Optimizer {
     ranges = {},
     mutationRate = 0.35,
     designSpace = {},
+    topology = DEFAULT_TOPOLOGY,
+    homeHeightBounds,
     ballJointLimitDeg,
     lowerBallJointLimitDeg,
     upperBallJointLimitDeg,
@@ -30,6 +33,8 @@ export class Optimizer {
     this.generations = Math.max(1, generations);
     this.ranges = ranges;
     this.mutationRate = clamp(mutationRate, 0, 1);
+    if (!TOPOLOGIES.includes(topology)) throw new Error(`topology must be one of ${TOPOLOGIES.join(', ')}.`);
+    this.topology = topology;
     this.ballJointLimitDeg = ballJointLimitDeg ?? requirements.ball_joint_max_deg ?? 52;
     this.lowerBallJointLimitDeg = lowerBallJointLimitDeg ?? this.ballJointLimitDeg;
     this.upperBallJointLimitDeg = upperBallJointLimitDeg ?? this.ballJointLimitDeg;
@@ -48,12 +53,16 @@ export class Optimizer {
       ...designSpace,
       hornLengthBounds: hornBounds,
       rodLengthBounds: rodBounds,
+      homeHeightBounds: homeHeightBounds ?? requirements.home_height_bounds_mm
+        ?? designSpace.homeHeightBounds ?? DEFAULT_DESIGN_SPACE.homeHeightBounds,
     };
+    validateDesignSpace(this.designSpace);
 
     validatePhysicalRequirements({ mass_kg: this.payload, cycle_mm: this.stroke,
       frequency_hz: this.frequency, cycle_axis: this.cycleAxis,
       ball_joint_max_deg: this.ballJointLimitDeg, servo_travel_bounds_deg: this.servoRangeDeg,
-      horn_length_bounds_mm: hornBounds, rod_length_bounds_mm: rodBounds });
+      horn_length_bounds_mm: hornBounds, rod_length_bounds_mm: rodBounds,
+      home_height_bounds_mm: this.designSpace.homeHeightBounds });
     for (const value of [this.lowerBallJointLimitDeg, this.upperBallJointLimitDeg]) {
       if (!Number.isFinite(value) || value < 0 || value > 180) {
         throw new RangeError('Ball-joint limits must be finite angles from 0 to 180 degrees.');
@@ -76,7 +85,8 @@ export class Optimizer {
     return createRandomLayout({ ...this.layoutOptions(), id: this.nextLayoutId++ });
   }
 
-  layoutOptions() { return { designSpace: this.designSpace, servoRangeRad: this.servoRangeRad }; }
+  layoutOptions() { return { designSpace: this.designSpace, servoRangeRad: this.servoRangeRad,
+    topology: this.topology }; }
   finalizeLayout(layout) { return finalizeLayout(layout, this.layoutOptions()); }
   mutateLayout(layout) { return mutateLayout(layout, this.layoutOptions()); }
   crossoverLayouts(a, b) { return crossoverLayouts(a, b, this.layoutOptions()); }
@@ -119,6 +129,7 @@ export class Optimizer {
       if (Math.random() < this.mutationRate) {
         child = this.mutateLayout(child);
       }
+      child.id = this.nextLayoutId++;
       offspring.push(child);
     }
     return offspring;

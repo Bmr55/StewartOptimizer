@@ -33,6 +33,23 @@
             </div>
             <div class="grid">
                 <label class="field">
+                    <div class="field-header"><span>Layout Topology</span></div>
+                    <select id="optTopology" aria-label="Layout topology">
+                        <option value="c3_paired" selected>C3 paired</option>
+                        <option value="circular">Circular</option>
+                        <option value="rectangular_paired">Rectangular paired</option>
+                        <option value="free">Free</option>
+                    </select>
+                </label>
+                <label class="field">
+                    <div class="field-header"><span>Home Height Min (mm)</span></div>
+                    <input type="number" id="homeHeightMin" value="50" min="1" step="any">
+                </label>
+                <label class="field">
+                    <div class="field-header"><span>Home Height Max (mm)</span></div>
+                    <input type="number" id="homeHeightMax" value="450" min="1" step="any">
+                </label>
+                <label class="field">
                     <div class="field-header">
                         <span>Generations</span>
                         <button type="button" class="info-button" data-info="Number of evolutionary iterations used to refine the population of layouts.">ⓘ</button>
