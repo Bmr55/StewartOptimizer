@@ -79,8 +79,11 @@ test('dashboard publishes at most 10 Hz and rejects stale snapshots through all 
   assert.equal(view.value('runEta'), 'Unavailable (timing data)');
   dashboard.cancelRequested(10);
   assert.equal(view.value('runPhase'), 'Cancelling');
-  dashboard.finish(10, { status: 'cancelled', partialResults: true, snapshot: summary() });
+  dashboard.finish(10, { status: 'cancelled', partialResults: true,
+    snapshot: summary({ completedCandidates: 4, actualCompletedPoseWork: 21 }) });
   assert.equal(view.value('runPhase'), 'cancelled · partial results');
+  assert.equal(view.value('runCandidates'), '4 / 8');
+  assert.equal(view.value('runPoseWork'), '21 actual / 100 budgeted');
   assert.equal(view.value('runEta'), 'Unavailable');
   assert.equal(dashboard.publish(10, summary({ completedCandidates: 999 })), false);
   dashboard.start(11, { candidates: 8, generations: 1, poseWork: 100 });
