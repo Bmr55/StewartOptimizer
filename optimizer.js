@@ -1,3 +1,4 @@
+import { validatePhysicalRequirements } from './requirements.js';
 import { computeCycleDemand } from './cycle.js';
 import { computeWorkspace, evaluatePose, estimateWorkspaceSize } from './workspace.js';
 import {
@@ -112,6 +113,11 @@ export class Optimizer {
       hornLengthBounds: hornBounds,
       rodLengthBounds: rodBounds,
     };
+
+    validatePhysicalRequirements({ mass_kg: this.payload, cycle_mm: this.stroke,
+      frequency_hz: this.frequency, cycle_axis: this.cycleAxis,
+      ball_joint_max_deg: this.ballJointLimitDeg, servo_travel_bounds_deg: this.servoRangeDeg,
+      horn_length_bounds_mm: hornBounds, rod_length_bounds_mm: rodBounds });
 
     this.servoRangeRad = this.servoRangeDeg.map((deg) => degToRad(deg));
 
