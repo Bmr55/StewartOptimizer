@@ -16,8 +16,13 @@ The p5/quaternion/Stewart scripts belong only to the [archived simulator](../arc
 | `src/ui/worker-optimizer.js` | Browser adapter retaining selection/export and completed checkpoints |
 | `src/ui/optimizer-worker.js`, `worker-runtime.js`, `worker-protocol.js` | Module worker entry, run lifecycle and serializable message shapes |
 | `src/ui/run-dashboard.js` | Live bounded metrics, 10 Hz UI cap and run-state transitions |
+| `src/ui/results-view.js` | Shared retained-candidate chart and selection |
 | `src/ui/controls.js` | Workspace inputs and preservation of explicit overrides |
 | `src/ui/tooltips.js`, `download.js` | Browser-only interactions |
+| `src/simulator/controller.js` | Copied active layout, requested/accepted poses, animation and trace state |
+| `src/simulator/renderer.js`, `view.js` | Native WebGL2 scene and camera/input handling |
+| `src/simulator/geometry-editor.js`, `geometry-controls.js` | Explicit or parametric editable layout copies |
+| `src/simulator/diagnostics.js` | Evaluator-driven per-leg joint/rod diagnostics and effective limits |
 | `src/model/requirements.js` | Parsing, normalization and physical input validation |
 | `src/model/pose.js` | Single-pose inverse kinematics and constraints |
 | `src/model/cycle.js` | Trajectory sampling and actual-rod force balance |
@@ -35,7 +40,7 @@ The p5/quaternion/Stewart scripts belong only to the [archived simulator](../arc
 | `src/io/layout-import.js` | Reference-layout parsing, field validation and mounting migration |
 | `src/math.js` | Shared numerical primitives |
 
-The UI depends on the optimizer; the optimizer composes search and evaluation functions. Both cycle and workspace evaluation depend on the pose evaluator. Numerical modules never import the UI or manipulate the DOM. Abort signals and progress callbacks cross these boundaries explicitly. NSGA-II intentionally updates evaluation rank/crowding fields; layout mutation and crossover clone their inputs.
+The UI depends on the optimizer; the optimizer composes search and evaluation functions. The simulator controller, cycle and workspace evaluation all depend on the same pose evaluator. The renderer reads accepted pose geometry and never solves constraints. Numerical modules never import the UI or manipulate the DOM. Abort signals and progress callbacks cross these boundaries explicitly. NSGA-II intentionally updates evaluation rank/crowding fields; layout mutation and crossover clone their inputs. See the [active simulator guide](./SIMULATOR.md).
 
 ## API compatibility
 
@@ -57,11 +62,11 @@ These paths are relative to a caller at the repository root. The core keeps `sta
 
 ## Data flow and geometry
 
-1. `parseRequirements(text)` normalizes flat/nested input, validates it, and returns `{ normalized, workspace }`. Every nonzero axis initially gets min/midpoint/max samples. Bounds are inclusive when a step lands on the maximum; arbitrary steps do not force an extra endpoint.
+1. `parseRequirements(text)` normalizes flat/nested input, validates it, and returns `{ normalized, workspace }`. The default sweep uses 1,024 six-dimensional Halton samples; optional Cartesian grid uses the configured axis steps and includes a maximum only when a step lands there.
 2. The UI fills defaults, retaining explicit overrides at Run. An explicit optimizer joint-limit option wins over normalized requirements. Loading the sample resets the controls.
 3. `Optimizer` defaults to the C3 paired topology. Circular, C3 paired, and rectangular paired layouts are regenerated from symmetry-preserving parameters during mutation and crossover; Free layouts evolve individual anchors. See [layout topologies](./TOPOLOGIES.md) for exact invariants, parameter names, and bounds.
 4. `finalizeLayout` clamps shared lengths and the independently chosen home height to effective bounds. It preserves the topology's geometry; it never derives a replacement height from rods and horns.
-5. `evaluateLayout` sweeps workspace poses, evaluates home geometry, evaluates the required cycle, and assembles objectives. None of these loops are stubs.
+5. `evaluateLayout` sweeps workspace poses, evaluates home geometry, evaluates the required cycle, and assembles objectives. None of these loops are stubs. Retained candidate selection is shared by the Optimize and Simulate tabs; geometry editing makes an independent simulator copy.
 
 Direct `new Optimizer()` defaults are population 12, generations 5, mutation rate 0.35, joint limit 52 degrees, horn bounds [30,120] mm and rod bounds [160,420] mm. The UI passes parser-normalized requirements: omitted JSON limits instead use 45 degrees, [30,110] mm and [160,420] mm. The bundled sample explicitly specifies 52 degrees, [40,110] mm and [180,380] mm. Both entry paths use [-120,120] degrees servo travel unless overridden. Prefer parsing requirements rather than constructing incomplete data by hand.
 
@@ -76,13 +81,13 @@ g = dot(l,l) - (d*d - h*h)
 alpha = asin(g / sqrt(e*e + f*f)) - atan2(f,e)
 ```
 
-Reject degenerate/invalid geometry or a servo angle outside its range. Reconstruct the horn tip, check rod length within 0.5 mm, and check the modeled horn-to-rod ball angle. Only one inverse-kinematics branch is evaluated. `reachable` always excludes joint violations; optional soft exploration can mark an otherwise valid pose `relaxedReachable`. No geometry is clamped.
+Reject degenerate/invalid geometry or a servo angle outside its range. Reconstruct the horn tip, check rod length within the effective tolerance (0.5 mm by default), both mounting-frame socket angles and mandatory actuator-conditioning threshold. An optional engineering condition limit can further reject poses. Only one inverse-kinematics branch is evaluated. `reachable` always excludes joint and conditioning violations; optional soft exploration can mark an otherwise valid joint-limited pose `relaxedReachable`. No geometry is clamped. The simulator calls this same evaluator for every requested pose and keeps the last valid accepted pose when a request fails.
 
 [Results documentation](./RESULTS.md) describes the geometric Jacobian proxies and their limitations. [Cycle documentation](./CYCLE_MODEL.md) describes the separate actual-rod equilibrium, gravity direction and torque/speed formulas. The old equal-load harmonic torque approximation is no longer used.
 
 ## Evolution and execution
 
-The initial population and each generation's offspring are evaluated. Non-dominated sorting, crowding distance, tournament selection, crossover and probabilistic mutation form an NSGA-II search. Ten objective slots maximize feasible coverage, search coverage (relaxed only in soft mode), dexterity, stiffness proxy, load-balance proxy, isotropy and limit margin, while minimizing cycle torque, cycle speed and fatigue proxy. Invalid cycle demand receives the worst demand objective. No random seed is exposed.
+The initial population and each generation's offspring are evaluated. Non-dominated sorting, crowding distance, tournament selection, crossover and probabilistic mutation form an NSGA-II search. Compact (default) uses coverage, conditioning quality, cycle torque and speed demand; Full adds dexterity, stiffness proxy, load-balance proxy, limit margin and fatigue proxy. All diagnostic metrics remain available in either set. Invalid cycle demand receives the worst demand objective. The UI exposes a recorded seed and mutation rate for replay.
 
 Preflight counts samples arithmetically before allocating range arrays. It rejects more than 100,000 workspace poses per layout or 1,000,000 total budgeted pose evaluations per run. Total work is:
 
@@ -90,7 +95,7 @@ Preflight counts samples arithmetically before allocating range arrays. It rejec
 population * (generations + 1) * (workspace poses + cycle phases + 1 home pose)
 ```
 
-Cycle phases are 64 for moving cycles and 1 for stationary cycles. The default sample budgets 72 * (729 + 64 + 1) = 57,168 checks; early cycle failure can perform fewer actual checks. Progress accounts for the candidate budget, not wall-clock time.
+Cycle phases are 64 for moving cycles and 1 for stationary cycles. The default sample budgets 72 * (1,024 + 64 + 1) = 78,408 checks; early cycle failure can perform fewer actual checks. Progress distinguishes actual completed work from the budget and includes approximate elapsed/remaining time.
 
 Workspace sweeps yield to the event loop before starting and every 256 poses. Statistics use running means; reservoir samples cap retained example poses at 200/class. A run's AbortController is checked during evaluation and after each yield. Cycle checks are bounded and observe the same signal. The browser creates one module worker per run; the headless API still runs directly. See [worker protocol](./WORKER_PROTOCOL.md).
 
@@ -100,6 +105,6 @@ Workspace sweeps yield to the event loop before starting and every 256 poses. St
 
 Run `npm test` for the checked-in regression suite, organized under `tests/model`, `workspace`, `optimization`, `ui`, `io`, `tooling` and `archive`. It covers normalization, controls, feasible/relaxed accounting, export, work limits, real event-loop yielding, cancellation, selection, cycle force balance and finite-difference speeds, and the archived bundle's custom-layout API. The workspace reference fixture was captured before the refactor at commit `97b7360`; it includes strict/soft/reachable results and capped samples. During the optimizer extraction, six seeded old/new runs across x/y/z cycles in strict/soft modes matched populations, scores, fronts, progress and JSON results exactly.
 
-Run `npm run smoke` for the complete default sample and export checks. Browser smoke checks are manual: complete the sample, observe progress, cancel a longer run, inspect/download the result, and verify the archived canvas/animation separately. The local development server has HTTP checks for entry points, content types and path restrictions.
+Run `npm run smoke` for the complete default sample and export checks. After `npm ci`, `npm run test:browser`, `npm run test:browser:geometry`, and `npm run test:browser:diagnostics` exercise worker behavior and active simulator transfers/controls in a real browser. Manual desktop checks include camera orbit, explicit platform drag, animations and WebGL2 rendering. The local development server has HTTP checks for entry points, content types and path restrictions.
 
 The search is a heuristic. The UI exposes a seed, and exports include effective settings for replay. Exported geometry and metrics are a starting point for independent engineering analysis, not a manufacturing specification.
