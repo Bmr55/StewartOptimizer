@@ -27,8 +27,36 @@ export function ensureLayout(layout) {
   return layout;
 }
 
+// Options arrive from requirements, the optimizer and hand-edited simulator
+// JSON alike, so a wrong type is rejected by name rather than coerced (null
+// would become a 0 degree limit, a string bound would disable the servo check).
+function limitDeg(value, field) {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 180) {
+    throw new RangeError(`${field} must be a finite angle from 0 to 180 degrees.`);
+  }
+  return value;
+}
+
+function servoBounds(value) {
+  if (!Array.isArray(value) || value.length !== 2
+    || !value.every(bound => typeof bound === 'number' && Number.isFinite(bound)) || value[1] < value[0]) {
+    throw new RangeError('servoRangeRad must contain two finite bounds in radians with max >= min.');
+  }
+  return value;
+}
+
+function mountingDirections(value) {
+  if (value == null) return null;
+  if (typeof value !== 'object' || !Array.isArray(value.lower) || value.lower.length !== 6
+    || !Array.isArray(value.upper) || value.upper.length !== 6) {
+    throw new RangeError('mounting must provide six lower and six upper socket directions.');
+  }
+  return value;
+}
+
 export function evaluatePose(layout, pose = {}, options = {}) {
   ensureLayout(layout);
+  if (!options || typeof options !== 'object' || Array.isArray(options)) throw new TypeError('Pose options must be an object.');
   const {
     ballJointLimitDeg = DEFAULT_BALL_JOINT_LIMIT_DEG,
     lowerBallJointLimitDeg = ballJointLimitDeg,
@@ -40,17 +68,16 @@ export function evaluatePose(layout, pose = {}, options = {}) {
     conditionLimit = null,
   } = options;
   validateConditionLimit(conditionLimit);
-  if (!Number.isFinite(rodLengthTolerance) || rodLengthTolerance < 0) {
+  if (typeof rodLengthTolerance !== 'number' || !Number.isFinite(rodLengthTolerance) || rodLengthTolerance < 0) {
     throw new RangeError('rodLengthTolerance must be a finite nonnegative length in mm.');
   }
-  const mounting = options.mounting ?? resolveMounting(layout).mounting;
+  limitDeg(ballJointLimitDeg, 'ballJointLimitDeg');
+  servoBounds(servoRangeRad);
+  const mounting = mountingDirections(options.mounting) ?? resolveMounting(layout).mounting;
   const jointLimits = {
-    lower: degToRad(lowerBallJointLimitDeg),
-    upper: degToRad(upperBallJointLimitDeg),
+    lower: degToRad(limitDeg(lowerBallJointLimitDeg, 'lowerBallJointLimitDeg')),
+    upper: degToRad(limitDeg(upperBallJointLimitDeg, 'upperBallJointLimitDeg')),
   };
-  if (!Object.values(jointLimits).every(v => Number.isFinite(v) && v >= 0 && v <= Math.PI)) {
-    throw new RangeError('Ball-joint limits must be finite angles from 0 to 180 degrees.');
-  }
   const translation = [pose.x || 0, pose.y || 0, pose.z || 0];
   const rotation = [pose.rx || 0, pose.ry || 0, pose.rz || 0];
   const translated = [translation[0], translation[1], translation[2] + (layout.homeHeight || 0)];

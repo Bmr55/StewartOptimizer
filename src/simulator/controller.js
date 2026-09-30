@@ -6,7 +6,17 @@ export const ANIMATION_PATTERNS = Object.freeze(['none', 'wobble', 'pingpong', '
 
 const copy = value => value == null ? value : structuredClone(value);
 
+// Options come from the UI, saved JSON and headless callers; a string or array
+// would otherwise be spread into the option map character by character.
+function plainOptions(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new TypeError('Simulator options must be an object.');
+  return value;
+}
+
 export function normalizePose(pose = {}) {
+  if (!pose || typeof pose !== 'object' || Array.isArray(pose)) {
+    throw new TypeError('A requested pose must be an object with six finite coordinates.');
+  }
   const result = Object.fromEntries(POSE_AXES.map(axis => [axis, pose[axis] ?? 0]));
   if (!Object.values(result).every(Number.isFinite)) {
     throw new RangeError('A requested pose must have six finite coordinates.');
@@ -86,7 +96,7 @@ export function createSimulatorController({ onChange } = {}) {
     options: nextOptions = {} } = {}) {
     ensureLayout(nextLayout);
     const nextLayoutCopy = copy(nextLayout);
-    const nextOptionsCopy = copy(nextOptions);
+    const nextOptionsCopy = copy(plainOptions(nextOptions));
     // Validate the options against the home pose before touching any state, as
     // setOptions does, so an invalid load leaves the previous layout intact.
     evaluatePose(nextLayoutCopy, HOME_POSE, { ...nextOptionsCopy, recordLegData: true });
@@ -116,7 +126,7 @@ export function createSimulatorController({ onChange } = {}) {
   }
 
   function setOptions(patch) {
-    const nextOptions = { ...options, ...copy(patch) };
+    const nextOptions = { ...options, ...copy(plainOptions(patch)) };
     if (layout) evaluatePose(layout, requested, { ...nextOptions, recordLegData: true });
     options = nextOptions;
     if (!layout) return notify();

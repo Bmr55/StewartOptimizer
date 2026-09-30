@@ -59,21 +59,22 @@ function unwrap(input) {
 
 // Discard all imported metrics. Geometry is copied exactly; the current model
 // must evaluate it before any score or feasibility flag is trusted.
+export function parseLayoutJSON(text) {
+  try { return JSON.parse(text); }
+  catch { throw new SyntaxError('Layout JSON is invalid.'); }
+}
+
 export function importLayout(input) {
-  let parsed = input;
-  if (typeof input === 'string') {
-    try { parsed = JSON.parse(input); }
-    catch { throw new SyntaxError('Layout JSON is invalid.'); }
-  }
+  const parsed = typeof input === 'string' ? parseLayoutJSON(input) : input;
   const { source, run } = unwrap(parsed);
   const snake = 'base_anchors' in source || 'platform_anchors' in source;
   const schemaVersion = source.schema_version ?? source.schemaVersion ?? 1;
   const modelVersion = source.model_version ?? source.modelVersion ?? 1;
   if (!Number.isSafeInteger(schemaVersion) || schemaVersion < 1 || schemaVersion > SCHEMA_VERSION) {
-    throw new RangeError(`schema_version ${schemaVersion} is unsupported.`);
+    throw new RangeError(`schema_version ${JSON.stringify(schemaVersion)} is unsupported.`);
   }
   if (!Number.isSafeInteger(modelVersion) || modelVersion < 1 || modelVersion > MODEL_VERSION) {
-    throw new RangeError(`model_version ${modelVersion} is unsupported.`);
+    throw new RangeError(`model_version ${JSON.stringify(modelVersion)} is unsupported.`);
   }
   const field = (snakeName, camelName) => snake ? snakeName : camelName;
   const baseField = field('base_anchors', 'baseAnchors');
@@ -86,6 +87,10 @@ export function importLayout(input) {
   const servo = servoBounds(source[servoField], servoField);
   const topology = source.topology ?? 'free';
   if (!TOPOLOGIES.includes(topology)) throw new RangeError(`topology must be one of ${TOPOLOGIES.join(', ')}.`);
+  // Free layouts carry parameters unchecked by validateTopology; they must still
+  // be an object and are copied so later input mutation cannot reach the layout.
+  const parameters = source.topology_parameters ?? source.topologyParameters ?? null;
+  if (parameters !== null) object(parameters, 'topology_parameters');
   const layout = {
     baseAnchors: anchors(source[baseField], baseField),
     platformAnchors: anchors(source[platformField], platformField),
@@ -95,7 +100,7 @@ export function importLayout(input) {
     homeHeight: positive(source[heightField], heightField),
     servoRangeRad: snake ? servo.map(degToRad) : servo,
     topology,
-    topologyParameters: source.topology_parameters ?? source.topologyParameters ?? (topology === 'free' ? {} : null),
+    topologyParameters: parameters === null ? (topology === 'free' ? {} : null) : structuredClone(parameters),
     modelVersion,
     schemaVersion,
     mounting: source.mounting ?? null,

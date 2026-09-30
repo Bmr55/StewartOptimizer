@@ -79,3 +79,17 @@ test('loadLayout with invalid options throws before touching state and fires no 
   assert.throws(() => empty.loadLayout(next, { options: { ...settings, rodLengthTolerance: -1 } }), RangeError);
   assert.equal(empty.getState().layout, null);
 });
+
+test('non-object poses and option patches are rejected by name instead of throwing raw TypeErrors', () => {
+  const controller = createSimulatorController();
+  controller.loadLayout(asymmetricJointFixture(), { options: { ballJointLimitDeg: 180 } });
+  const before = controller.getState();
+  for (const pose of [null, 'home', 42, [0, 0, 0]]) {
+    assert.throws(() => controller.requestPose(pose), /A requested pose must be an object with six finite coordinates/);
+  }
+  for (const patch of [null, 'abc', 7, ['x']]) {
+    assert.throws(() => controller.setOptions(patch), /Simulator options must be an object/);
+  }
+  assert.deepEqual(controller.getState(), before);
+  assert.throws(() => controller.loadLayout(asymmetricJointFixture(), { options: 'abc' }), /Simulator options must be an object/);
+});

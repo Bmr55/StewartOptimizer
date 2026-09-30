@@ -226,3 +226,33 @@ test('reset, play, and speed controls surface controller errors instead of throw
   element('simPlay').handlers.click();
   assert.equal(element('simPlay').textContent, 'Pause');
 });
+
+test('Load optimizer reference reports the importer message for bad JSON and typed simulator fields, keeping the candidate', async () => {
+  const element = await loadUI(FixtureOptimizer);
+  await element('runOptimization').handlers.click();
+  element('simUseReference').handlers.click();
+  const saved = JSON.parse(element('referenceLayoutInput').value);
+  const cases = [
+    ['{', /Layout JSON is invalid\./],
+    [JSON.stringify({ ...saved, simulator: { ...saved.simulator, options: { ...saved.simulator.options, ballJointLimitDeg: null } } }),
+      /simulator.options: ballJointLimitDeg must be a finite angle/],
+    [JSON.stringify({ ...saved, simulator: { ...saved.simulator, options: { ...saved.simulator.options, servoRangeRad: 'abc' } } }),
+      /servoRangeRad must contain two finite bounds/],
+    [JSON.stringify({ ...saved, simulator: { ...saved.simulator, camera: 'abc' } }), /simulator.camera must be an object/],
+    [JSON.stringify({ ...saved, simulator: { ...saved.simulator, animation: { pattern: 'wobble', speed: -1 } } }),
+      /simulator.animation.speed must be a positive finite number/],
+    [JSON.stringify({ ...saved, topology: 'free', topology_parameters: 'garbage' }), /topology_parameters must be an object/],
+    [JSON.stringify({ ...saved, schema_version: '2' }), /schema_version "2" is unsupported/],
+  ];
+  for (const [text, expected] of cases) {
+    element('referenceLayoutInput').value = text;
+    element('simLoadReference').handlers.click();
+    assert.match(element('optStatus').textContent, expected);
+    assert.match(element('simCandidateSummary').textContent, /Candidate 19/, `candidate lost after ${expected}`);
+    assert.match(element('simPoseStatus').textContent, /Accepted request/);
+  }
+  // A valid file with a null joint limit removed still loads and keeps 45 degree limits.
+  element('referenceLayoutInput').value = JSON.stringify(saved);
+  element('simLoadReference').handlers.click();
+  assert.match(element('simCandidateSummary').textContent, /import/);
+});

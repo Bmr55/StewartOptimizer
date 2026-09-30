@@ -106,3 +106,13 @@ test('effective settings replay UI rating overrides with the same sources and po
   assert.deepEqual(replay.servoRatings, optimizer.servoRatings);
   assert.equal(replay.servoRatings.policy, 'advisory');
 });
+
+test('a very long torque-speed curve normalizes without overflowing the call stack', () => {
+  const length = 200000;
+  const curve = { speed_deg_s: Array.from({ length }, (_, i) => i), torque_nm: Array.from({ length }, (_, i) => 1 + i % 3) };
+  const ratings = normalizeServoRatings({ servo_torque_speed_curve: curve });
+  assert.equal(ratings.shared.curve.speedRadPerSec.length, length);
+  assert.equal(ratings.shared.curve.peakTorqueNm, 3);
+  assert.throws(() => normalizeServoRatings({ servo_torque_speed_curve: { ...curve, torque_nm: curve.torque_nm.map(() => 0) } }),
+    /servo_torque_speed_curve.torque_nm must include a positive capacity/);
+});

@@ -113,7 +113,15 @@ can restore that layout and saved requested/accepted poses. **Download simulator
 JSON** saves the same geometry plus run settings, simulator options, pose,
 camera, animation, markers, traces and input mode. The shared importer validates
 the layout and ignores old scores; every pose is checked again by the current
-evaluator. If WebGL2 is unavailable, the simulator names the missing capability
+evaluator. The `simulator` block is validated as a whole before anything is
+applied: `options` (only the known keys are kept; limits, servo bounds,
+tolerance, condition limit and the clamp flag must have the right type),
+`requested` and `accepted` poses, `camera` (finite yaw, pitch within ±1.4,
+distance 80 to 2,500, three-coordinate target), `animation.speed` (positive),
+`markers`, `tracesEnabled` and `pointerMode` (`orbit` or `platform`). A rejected
+file or browser save reports the offending `simulator.` field and leaves the
+current layout, pose, camera, animation and, for a browser save, the optimizer
+inputs untouched. If WebGL2 is unavailable, the simulator names the missing capability
 and suggests enabling hardware acceleration or a modern desktop browser;
 optimization remains usable. If the browser loses the WebGL2 context (GPU reset,
 driver crash, backgrounded mobile tab, too many contexts on one page), the pose

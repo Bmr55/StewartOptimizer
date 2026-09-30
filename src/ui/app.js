@@ -1,5 +1,6 @@
 import { selectBest, displayResult, layoutToJSON } from '../io/results.js';
-import { importLayout } from '../io/layout-import.js';
+import { importLayout, parseLayoutJSON } from '../io/layout-import.js';
+import { parseSimulatorSnapshot } from '../simulator/snapshot.js';
 import { download } from './download.js';
 import { parseRequirements } from '../model/requirements.js';
 import { loadDefaultRequirements as loadSample } from '../io/sample-requirements.js';
@@ -12,7 +13,7 @@ import { installTooltips } from './tooltips.js';
 import { createResultsView } from './results-view.js';
 import { buildConstructionSkeleton, canExportCad, skeletonToCSV, skeletonToFusionScript } from '../io/cad.js';
 import { createServoRatingControls } from './servo-ratings-controls.js';
-import { createSimulatorController, ANIMATION_PATTERNS } from '../simulator/controller.js';
+import { createSimulatorController } from '../simulator/controller.js';
 import { createSimulatorView } from '../simulator/view.js';
 import { createGeometryControls } from '../simulator/geometry-controls.js';
 import { mountSimulatorDiagnostics } from '../simulator/diagnostics.js';
@@ -429,12 +430,16 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
         try { downloadFile(simulatorJSON(), 'stewart_simulator.json', 'application/json', document); }
         catch (error) { showStatus(error.message, true); }
     });
-    function loadSimulatorLayout(parsed, activate = true) {
+    // Everything that can reject a file happens here, before any state changes.
+    function prepareSimulatorLoad(parsed) {
         const { layout, sourceRun } = importLayout(parsed);
         layout.id = parsed.id ?? parsed.layout?.id ?? parsed.result?.layout?.id ?? null;
-        const saved = parsed.simulator;
+        const saved = parseSimulatorSnapshot(parsed.simulator, layout, simulatorOptions(sourceRun?.effective_settings, layout));
+        return { parsed, layout, sourceRun, saved };
+    }
+    function applySimulatorLoad({ parsed, layout, sourceRun, saved }, activate = true) {
         simulatorController.loadLayout(layout, { source: { kind: 'import', candidateId: layout.id ?? null },
-            options: saved?.options ?? simulatorOptions(sourceRun?.effective_settings, layout) });
+            options: saved.options });
         // Only after the validating load, so a rejected file never pairs its run
         // metadata with the candidate that stays loaded.
         simulatorRun = sourceRun;
@@ -443,34 +448,37 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
         simCandidateSelect.value = '';
         // The select holds at least the imported entry, even without a run.
         simCandidateSelect.disabled = false;
-        if (saved?.accepted) simulatorController.requestPose(saved.accepted, { source: 'replay' });
-        if (saved?.requested) simulatorController.requestPose(saved.requested, { source: 'replay' });
-        if (saved?.camera) simulatorView.setCamera(saved.camera);
-        if (saved?.animation) {
-            const pattern = saved.animation.pattern !== 'none' && ANIMATION_PATTERNS.includes(saved.animation.pattern)
-                ? saved.animation.pattern : 'wobble';
-            const speed = saved.animation.speed || 1;
+        if (saved.accepted) simulatorController.requestPose(saved.accepted, { source: 'replay' });
+        if (saved.requested) simulatorController.requestPose(saved.requested, { source: 'replay' });
+        if (saved.camera) simulatorView.setCamera(saved.camera);
+        if (saved.animation) {
+            const { pattern, speed } = saved.animation;
             document.getElementById('simPattern').value = pattern;
             document.getElementById('simSpeed').value = String(speed);
             simulatorController.setAnimation(pattern, false, { speed });
         }
-        if (saved?.pointerMode) document.getElementById('simPointerMode').value = saved.pointerMode;
-        if (saved?.markers !== undefined) simulatorController.setMarkers(saved.markers);
-        if (saved?.tracesEnabled !== undefined) simulatorController.setTraces(saved.tracesEnabled);
+        if (saved.pointerMode) document.getElementById('simPointerMode').value = saved.pointerMode;
+        if (saved.markers !== null) simulatorController.setMarkers(saved.markers);
+        if (saved.tracesEnabled !== null) simulatorController.setTraces(saved.tracesEnabled);
         document.getElementById('simDownload').disabled = false;
         if (activate) setTab('simulate');
+    }
+    function loadSimulatorLayout(parsed, activate = true) {
+        applySimulatorLoad(prepareSimulatorLoad(parsed), activate);
     }
     document.getElementById('simLoadReference').addEventListener('click', () => {
         try {
             const raw = referenceLayoutInput.value.trim();
             if (!raw) throw new Error('Provide reference layout JSON in Optimize first.');
-            loadSimulatorLayout(JSON.parse(raw));
+            loadSimulatorLayout(parseLayoutJSON(raw));
         } catch (error) { showStatus(error.message, true); setTab('optimize'); }
     });
 
     function restoreLocalWorkspace(raw) {
         const saved = parseLocalWorkspace(raw);
-        if (saved.simulator) importLayout(saved.simulator);
+        // Validate the saved simulator document before any input or layout changes,
+        // so a rejected save leaves the seed, layout and candidate select as they were.
+        const prepared = saved.simulator ? prepareSimulatorLoad(saved.simulator) : null;
         currentOptimizer = null;
         lastOutcome = null;
         simulatorRun = null;
@@ -486,7 +494,7 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
             catch { /* Preserve unfinished requirements text and saved control values. */ }
         }
         applyLocalWorkspace(document, saved);
-        if (saved.simulator) loadSimulatorLayout(saved.simulator, false);
+        if (prepared) applySimulatorLoad(prepared, false);
         setRunning(false);
         showStatus(saved.simulator
             ? 'Local workspace restored. The saved layout is ready in Simulate; rerun optimization for candidate results.'
