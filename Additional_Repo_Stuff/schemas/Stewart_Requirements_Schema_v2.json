@@ -35,14 +35,13 @@
   },
   "constraints": {
     "ball_joint_max_deg": 45,
-    "servo_max_deg": 90,
     "rod_length_bounds_mm": [
-      100,
-      400
+      160,
+      420
     ],
     "horn_length_bounds_mm": [
-      20,
-      120
+      30,
+      110
     ],
     "servo_travel_bounds_deg": [
       -120,

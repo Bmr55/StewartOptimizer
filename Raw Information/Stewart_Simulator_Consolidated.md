@@ -1,3 +1,5 @@
+> Historical simulator requirements. This is not a description of the current root optimizer. See the [current README](../README.md) and [archived simulator instructions](Stuff%20from%20Old%20Project/README.md).
+
 # Stewart Platform Simulator — Consolidated Specification for CODEX
 
 ## 1. Goal

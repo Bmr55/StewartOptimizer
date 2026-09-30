@@ -1,3 +1,5 @@
+> Historical design proposal, not current implementation documentation. Some formulas, defaults, dependencies and claimed features below are obsolete or unimplemented. See the [current README](../../README.md), [architecture](../../OPTIMIZER_REPRODUCTION.md), and [results/model limitations](../../docs/RESULTS.md) for supported behavior. Preserve this document as research/roadmap context only.
+
 # Stewart Platform Optimizer — Comprehensive Architecture, Math, and Reproduction Guide
 
 ## 1. Purpose and Scope
