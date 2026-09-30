@@ -138,7 +138,7 @@ Total candidate evaluations per run are `populationSize × (generations + 1)`; t
 | `full-v1` | replay-only; `full` with the legacy `loadBalance` proxy in place of `loadSharing` |
 | `legacy-v2` | replay-only ten-slot set from older exports |
 
-With `stiffness_model.use_as_objective: true`, the physical `physicalStiffness` metric replaces the `stiffness` proxy in the Full set. Every metric is still computed and exported regardless of the selected set.
+When a `stiffness_model` is supplied, the physical `physicalStiffness` metric replaces the scale-free `stiffness` proxy in the Full set unless `use_as_objective` is `false` (the proxy cannot tell a 2× larger mechanism with the same servos is 4× softer). Every metric is still computed and exported regardless of the selected set.
 
 ### Layout representation
 
@@ -260,8 +260,8 @@ With `stiffness_model`, the home-pose Cartesian stiffness matrix `K = Aᵀ diag(
 | loadSharing | load_sharing | max | ratio | Mean equal-share ratio of solved rod forces (ideal same-sense peak / actual peak) |
 | loadBalance | load_balance | max | proxy | Legacy directional leg-share proxy |
 | isotropy | isotropy | max | ratio | Mean reciprocal condition over feasible poses |
-| limitMargin | limit_margin | max | ratio | Worst socket headroom × violation-free fraction, clipped to [0, 1] |
-| fatigue | fatigue | min | proxy | (mean joint utilization + mean servo-span utilization) × frequency × stroke in metres |
+| limitMargin | limit_margin | max | ratio | 1 − worst reachable socket deflection / limit, clipped to [0, 1] |
+| fatigue | fatigue | min | rad/s | Cycle frequency × mean RMS servo excursion over the cycle (servo motion rate) |
 
 Unavailable or nonfinite values export as `null`, never zero.
 

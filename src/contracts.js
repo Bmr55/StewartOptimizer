@@ -25,7 +25,7 @@ export const METRICS = Object.freeze({
   loadSharing: { json: 'load_sharing', direction: 'max', unit: 'ratio' },
   isotropy: { json: 'isotropy', direction: 'max', unit: 'ratio' },
   limitMargin: { json: 'limit_margin', direction: 'max', unit: 'ratio' },
-  fatigue: { json: 'fatigue', direction: 'min', unit: 'proxy' },
+  fatigue: { json: 'fatigue', direction: 'min', unit: 'rad/s' },
 });
 
 export const FAILURE_CATEGORIES = Object.freeze([

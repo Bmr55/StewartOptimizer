@@ -10,6 +10,8 @@ All internal lengths are millimeters and angles are radians. For leg `i`, servo-
 - Y = `(-sin(beta), cos(beta), 0)`
 - Z = `(-sin(alpha) cos(beta), -sin(alpha) sin(beta), cos(alpha))`
 
+The positive servo rotation axis is **minus** the horn-frame Y axis: `dX/dalpha = Z` and `X × Z = −Y`, so increasing `alpha` rotates the horn about `−Y` (equivalently, a right-handed rotation about `+Y` lowers the horn). Keep this in mind when checking servo torque signs by hand; the code is consistent with it.
+
 The upper socket direction is stored in the platform's local frame. Platform Euler orientation uses `Rz(rz) Ry(ry) Rx(rx)`, as in `rotationMatrixFromEuler`. At a pose, lower local direction is transformed by the horn frame and upper local direction by the platform rotation. Deflection is the angle between each transformed socket direction and its oriented rod direction. For the upper socket, the oriented rod is reversed.
 
 ## Directions, limits, and diagnostics

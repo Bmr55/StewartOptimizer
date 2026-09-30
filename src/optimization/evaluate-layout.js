@@ -11,7 +11,7 @@ import { computeWorkspace } from '../workspace/sweep.js';
 import { failureCategories } from '../io/results.js';
 import { DEFAULT_BALL_JOINT_LIMIT_DEG, MODEL_VERSION } from '../contracts.js';
 import { normalizeTrajectory, trajectorySummary } from '../model/trajectory.js';
-import { clamp, degToRad } from '../math.js';
+import { average, clamp, degToRad } from '../math.js';
 import { objectiveValues } from './objectives.js';
 
 // Direct callers may omit the limits and the cycle identity that the Optimizer
@@ -102,13 +102,14 @@ export async function evaluateLayout(layout, rawOptions) {
     if (!Number.isFinite(maxAngle)) return 0;
     return limit > 0 ? 1 - maxAngle / limit : (maxAngle <= 1e-6 ? 1 : 0);
   };
-  const ballMarginRaw = Math.min(
-    marginFor(Math.max(0, ...(stats.lowerJointMax ?? [])), lowerBallJointLimitDeg),
-    marginFor(Math.max(0, ...(stats.upperJointMax ?? [])), upperBallJointLimitDeg),
-  );
-  const violationMargin = 1 - (stats.violationRate ?? 0);
-  const limitMargin = clamp(Math.max(ballMarginRaw, 0) * Math.max(violationMargin, 0), 0, 1);
-  const fatigue = computeFatigue(stats, options);
+  // Headroom of the worst reachable socket deflection against its limit. Only
+  // reachable poses count: a violating pose already lowers coverage, and
+  // including it collapsed the margin to 0 whenever any sampled pose failed.
+  const limitMargin = !(stats.reachableCount > 0) ? 0 : clamp(Math.min(
+    marginFor(Math.max(0, ...(stats.reachableLowerJointMax ?? [])), lowerBallJointLimitDeg),
+    marginFor(Math.max(0, ...(stats.reachableUpperJointMax ?? [])), upperBallJointLimitDeg),
+  ), 0, 1);
+  const fatigue = computeFatigue(cycle);
   const objectives = objectiveValues({ coverage, relaxedCoverage,
     conditioningQuality: availableQuality, dexterity, stiffness: stiffnessScore,
     physicalStiffness, loadBalance, loadSharing, isotropy, limitMargin, torque, speedDemand, fatigue },
@@ -188,15 +189,13 @@ export function evaluateCycle(layout, rawOptions) {
     upperBallJointLimitDeg, conditionLimit, mounting, signal, onPose });
 }
 
-export function computeFatigue(stats, rawOptions) {
-  if (!stats) return 0;
-  const { lowerBallJointLimitDeg, upperBallJointLimitDeg, servoRangeRad, stroke, frequency } = resolveEvaluationOptions(rawOptions);
-  const ballJointAvg = Number.isFinite(stats.ballJointAverage) ? stats.ballJointAverage : 0;
-  const servoAvg = Number.isFinite(stats.servoUsageAvg) ? stats.servoUsageAvg : 0;
-  const ballLimit = degToRad(Math.min(lowerBallJointLimitDeg, upperBallJointLimitDeg));
-  const ballRatio = ballLimit > 0 ? ballJointAvg / ballLimit : 0;
-  const servoSpan = Math.abs(servoRangeRad[1] - servoRangeRad[0]) || Math.PI;
-  const servoDuty = servoSpan > 0 ? servoAvg / servoSpan : 0;
-  const strokeMeters = stroke / 1000;
-  return (Math.max(ballRatio, 0) + Math.max(servoDuty, 0)) * frequency * strokeMeters;
+// Servo motion rate (rad/s): cycle frequency times the mean over the six servos
+// of the RMS servo excursion about its cycle mean. It comes from the cycle
+// alone, so it is unchanged by the servo travel bounds or the ball-joint limit
+// and is nonzero for rotation-only trajectories. A relative heuristic, not
+// service life; null for an invalid cycle.
+export function computeFatigue(cycle) {
+  if (!cycle?.valid || !Array.isArray(cycle.servoExcursionRmsRad)) return null;
+  if (!(cycle.periodS > 0)) return 0;
+  return average(cycle.servoExcursionRmsRad) / cycle.periodS;
 }

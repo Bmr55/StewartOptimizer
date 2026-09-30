@@ -14,7 +14,7 @@ Model identity: `cartesian-compliance-v1`. The existing `stiffness` metric is un
 | `rods` | `"rigid"` for the servo-compliance-only limit |
 | `characteristic_length_mm` | Length that scales rotations for the scalar score; defaults to the platform RMS anchor radius (recorded) |
 | `test_wrenches` | `[{ name, force_n: [x, y, z], moment_nm: [x, y, z] }]` applied to the platform at the moving origin, base-frame components |
-| `use_as_objective` | `true` replaces the proxy with `physicalStiffness` in the Full objective set |
+| `use_as_objective` | Defaults to `true` when a stiffness model is supplied: `physicalStiffness` replaces the scale-free proxy in the Full objective set. `false` keeps the proxy. The resolved value is recorded in the normalized requirements so exports replay with the same objective |
 
 Exactly one rod description is required, and `rod_material` needs exactly one of `area_mm2` or `diameter_mm`; only omission selects the other, so an explicit `null` is rejected like every other stiffness-model sub-field. Without `stiffness_model`, physical stiffness is `unavailable` (null metric), never a default value.
 

@@ -146,8 +146,8 @@ test('missing parameters stay unavailable in ranking and export; validation is e
   assert.throws(() => parseRequirements(JSON.stringify(data)), /exactly one/);
 });
 
-test('the proxy remains the default objective; physical stiffness is opt-in and replayable', async () => {
-  assert.equal(objectiveDefinitions('full')[5].key, 'stiffness');
+test('a supplied stiffness model makes physical stiffness the Full objective, and it replays', async () => {
+  assert.equal(objectiveDefinitions('full')[5].key, 'stiffness', 'without a stiffness model the proxy is the objective');
   assert.equal(objectiveDefinitions('full', { stiffnessMetric: 'physicalStiffness' })[5].key, 'physicalStiffness');
   const requirements = { mass_kg: 1, cycle_mm: 0, frequency_hz: 0, cycle_axis: 'z',
     stiffness_model: { servo_torsional_stiffness_nm_per_rad: 40, rods: 'rigid', use_as_objective: true,

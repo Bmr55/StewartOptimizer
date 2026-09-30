@@ -140,7 +140,9 @@ export function parseRequirements(text) {
   }
   validatePhysicalRequirements(normalized);
   normalizeServoRatings(normalized);
-  normalizeStiffnessModel(normalized.stiffness_model);
+  const stiffnessModel = normalizeStiffnessModel(normalized.stiffness_model);
+  // Record the resolved objective choice so an export replays with the same one.
+  if (stiffnessModel) normalized.stiffness_model = { ...normalized.stiffness_model, use_as_objective: stiffnessModel.useAsObjective };
   normalizePayloadSupport(normalized.workspace_payload_support);
   normalized.servo_rating_policy ??= 'enforced';
   const workspace = {};

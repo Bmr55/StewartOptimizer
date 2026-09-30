@@ -29,7 +29,7 @@ Requirements may be flat or grouped into `payload`, `workspace`, `rotations`, an
 | servo_actuator | Optional reduced actuator model: `output_inertia_kg_m2`, `viscous_nm_s_per_rad`, `coulomb_nm`, each finite >= 0, referred to the output shaft | Unmodeled |
 | servo_rating_policy | `enforced` or `advisory`; supplied ratings constrain feasibility by default | `enforced` |
 | workspace_payload_support | Optional static holding check at every strictly feasible workspace pose: `{ rating: "continuous" (default) or "peak", policy: "enforced" (default) or "advisory" }` | Omitted (no check) |
-| stiffness_model | Optional physical compliance inputs: servo torsional stiffness, one rod description, characteristic length, test wrenches, objective opt-in; see [COMPLIANCE_MODEL.md](./COMPLIANCE_MODEL.md) | Omitted (physical stiffness unavailable) |
+| stiffness_model | Optional physical compliance inputs: servo torsional stiffness, one rod description, characteristic length, test wrenches, objective choice (physical stiffness replaces the proxy in the Full set unless `use_as_objective` is false); see [COMPLIANCE_MODEL.md](./COMPLIANCE_MODEL.md) | Omitted (physical stiffness unavailable) |
 
 Trajectory, mass-property and external-wrench conventions are defined in [CYCLE_MODEL.md](./CYCLE_MODEL.md). Supplying `trajectory` together with any legacy cycle field is rejected rather than silently choosing one.
 
