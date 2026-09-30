@@ -92,7 +92,7 @@ test('setCamera takes only known finite fields and rejects anything else by name
   const { view } = mount();
   const before = view.getCamera();
   for (const [camera, expected] of [['abc', /camera must be an object/], [{ yaw: 'abc' }, /camera.yaw must be a finite number/],
-    [{ distance: -1 }, /camera.distance must be a finite number from 80 to 2500/], [{ target: 'x' }, /camera.target must contain three/]]) {
+    [{ distance: -1 }, /camera.distance must be a finite number from 10 to 2500/], [{ target: 'x' }, /camera.target must contain three/]]) {
     assert.throws(() => view.setCamera(camera), expected);
   }
   assert.deepEqual(view.getCamera(), before);

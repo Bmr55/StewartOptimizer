@@ -55,7 +55,7 @@ test('every simulator field is type-checked and the error names the field', () =
     [{ accepted: [1, 2, 3] }, /simulator.accepted must be an object/],
     [{ camera: 'abc' }, /simulator.camera must be an object/],
     [{ camera: { yaw: 'abc' } }, /simulator.camera.yaw must be a finite number/],
-    [{ camera: { distance: -1 } }, /simulator.camera.distance must be a finite number from 80 to 2500/],
+    [{ camera: { distance: -1 } }, /simulator.camera.distance must be a finite number from 10 to 2500/],
     [{ camera: { pitch: 2 } }, /simulator.camera.pitch must be a finite number from -1.4 to 1.4/],
     [{ camera: { target: [0, 0] } }, /simulator.camera.target must contain three finite coordinates/],
     [{ animation: 'wobble' }, /simulator.animation must be an object/],

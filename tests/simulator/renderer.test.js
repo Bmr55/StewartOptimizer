@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { asymmetricJointFixture } from '../fixtures/layout.js';
 import { createSimulatorController } from '../../src/simulator/controller.js';
-import { buildSceneGeometry, createWebGLRenderer, projectPoint } from '../../src/simulator/renderer.js';
+import { buildSceneGeometry, cameraFrame, createWebGLRenderer, NEAR_PLANE_MM, projectPoint,
+  projectSegment } from '../../src/simulator/renderer.js';
 import { GHOST_DEPTH_BIAS_MM, NEAR_LIMIT_MARGIN_RAD, OVERLAY_DEFAULTS, OVERLAY_NAMES, SCENE_BACKGROUND, SCENE_BUILDERS,
   SCENE_COLORS } from '../../src/simulator/scene.js';
 import { computeHornTip, hornLocalToWorld } from '../../src/model/kinematics.js';
@@ -482,4 +483,39 @@ test('ghost failure lines win depth ties with the held pose and dimmed ghost lin
     assert.deepEqual(biased.slice(0, 2), plainPoint.slice(0, 2));
     assert.ok(Math.abs((plainPoint[2] - biased[2]) - bias * 2 / 2000) < 1e-12);
   }
+});
+
+test('lines crossing the near plane are clipped there instead of dropped', () => {
+  const camera = { target: [0, 0, 100], yaw: 0.7, pitch: 0.4, distance: 50 };
+  const frame = cameraFrame(camera);
+  const along = (depth, side) => frame.eye.map((value, k) => value + frame.forward[k] * depth + frame.right[k] * side);
+  // Both ends in front: identical to projecting each end.
+  const front = [along(20, -5), along(80, 5)];
+  assert.deepEqual(projectSegment(...front, camera, 800, 500),
+    [projectPoint(front[0], camera, 800, 500), projectPoint(front[1], camera, 800, 500)]);
+  // One end behind the eye: the visible part is kept, ending at the near plane.
+  const behind = along(-30, -5), ahead = along(30, 5);
+  assert.equal(projectPoint(behind, camera, 800, 500), null);
+  const [start, end] = projectSegment(behind, ahead, camera, 800, 500);
+  assert.deepEqual(end, projectPoint(ahead, camera, 800, 500));
+  assert.ok(start[2] < -0.99, `the clipped end sits at the near plane: ${start[2]}`);
+  const t = (30 - NEAR_PLANE_MM) / 60; // Fraction of the way from ahead toward behind at the near plane.
+  const onLine = ahead.map((value, k) => value + (behind[k] - value) * t);
+  const expected = projectPoint(onLine.map((value, k) => value + frame.forward[k] * 1e-3), camera, 800, 500);
+  assert.ok(Math.abs(start[0] - expected[0]) < 1e-3 && Math.abs(start[1] - expected[1]) < 1e-3, `${start} vs ${expected}`);
+  assert.deepEqual(projectSegment(ahead, behind, camera, 800, 500), [end, start], 'order is kept');
+  assert.equal(projectSegment(behind, along(-5, 3), camera, 800, 500), null, 'wholly behind');
+  // The draw path uses the clipping: a close-up keeps lines that pass beside the eye.
+  const gl = fakeGL();
+  let lineVertices = 0;
+  gl.bufferData = (_target, data) => { lineVertices = lineVertices || data.length / 6; };
+  const canvas = { width: 800, height: 500, clientWidth: 800, clientHeight: 500, getContext: () => gl, addEventListener() {}, removeEventListener() {} };
+  const state = createSimulatorController().loadLayout(asymmetricJointFixture(), { options: { ballJointLimitDeg: 180 } });
+  const closeUp = { target: [0, 0, state.layout.homeHeight / 2], yaw: 0.7, pitch: 0.4, distance: 10 };
+  createWebGLRenderer(canvas).render(state, closeUp);
+  const lines = buildSceneGeometry(state).lines;
+  const bothEnds = lines.filter(line => projectPoint(line.from, closeUp, 800, 500) && projectPoint(line.to, closeUp, 800, 500)).length;
+  const clipped = lines.filter(line => projectSegment(line.from, line.to, closeUp, 800, 500)).length;
+  assert.ok(clipped > bothEnds, `the close-up should have lines with one end behind the eye: ${clipped} vs ${bothEnds}`);
+  assert.equal(lineVertices, 2 * clipped);
 });

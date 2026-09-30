@@ -1,8 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createSimulatorController } from '../../src/simulator/controller.js';
-import { CAMERA_DISTANCE_RANGE, CAMERA_PITCH_LIMIT, createSimulatorView, overlayInputId } from '../../src/simulator/view.js';
+import { CAMERA_DISTANCE_RANGE, CAMERA_PITCH_LIMIT, createSimulatorView, overlayInputId,
+  ZOOM_PICK_RADIUS_PX } from '../../src/simulator/view.js';
 import { OVERLAY_DEFAULTS, OVERLAY_NAMES } from '../../src/simulator/scene.js';
+import { cameraFrame, projectPoint, projectSegment } from '../../src/simulator/renderer.js';
+import { buildSceneGeometry } from '../../src/simulator/scene.js';
 import { asymmetricJointFixture } from '../fixtures/layout.js';
 import { createFakeDocument } from './helpers.js';
 
@@ -88,11 +91,102 @@ test('pointer drags orbit the camera or move the platform, the wheel zooms withi
   assert.equal(view.getCamera().distance, CAMERA_DISTANCE_RANGE[1]);
   canvas.dispatch('wheel', { deltaY: -1e7 });
   assert.equal(view.getCamera().distance, CAMERA_DISTANCE_RANGE[0]);
-  assert.deepEqual(CAMERA_DISTANCE_RANGE, [80, 2500], 'documented zoom range');
+  assert.deepEqual(CAMERA_DISTANCE_RANGE, [10, 2500], 'documented zoom range');
   view.setCamera({ target: [5, 6, 7] });
   input('simResetCamera').dispatch('click');
-  assert.deepEqual(view.getCamera(), { yaw: 0.7, pitch: 0.38, distance: 600, target: [5, 6, 7] },
-    'Reset camera restores the default orientation and distance but keeps the target');
+  assert.deepEqual(view.getCamera(), { yaw: 0.7, pitch: 0.38, distance: 600, target: [0, 0, 100] },
+    'Reset camera restores the default orientation and distance and recentres on the layout');
+});
+
+// A canvas laid out at 800 × 500 CSS pixels, 100 px from the page corner.
+function mountWithBox() {
+  const mounted = mount();
+  const canvas = mounted.input('simCanvas');
+  canvas.getBoundingClientRect = () => ({ left: 100, top: 100, width: 800, height: 500 });
+  return { ...mounted, canvas };
+}
+// Page coordinates of a world point for the current camera.
+const onScreen = (view, point) => {
+  const [x, y] = projectPoint(point, view.getCamera(), 800, 500);
+  return [100 + (x + 1) / 2 * 800, 100 + (1 - y) / 2 * 500];
+};
+const closeTo = (actual, expected, tolerance, label) => actual.forEach((value, k) =>
+  assert.ok(Math.abs(value - expected[k]) < tolerance, `${label}: ${actual} vs ${expected}`));
+
+test('the wheel zooms toward the drawn geometry under the cursor, down to 10 mm', () => {
+  const { view, canvas, controller } = mountWithBox();
+  const start = view.getCamera();
+  // A horn tip lies well in front of the plane through the target; it stays under the cursor.
+  const tip = controller.getState().acceptedAssessment.hornTips[0];
+  const frame = cameraFrame(start);
+  const tipDepth = tip.map((value, k) => value - frame.eye[k]).reduce((sum, value, k) => sum + value * frame.forward[k], 0);
+  assert.ok(Math.abs(tipDepth - start.distance) > 20, 'the tip should be off the target plane');
+  const [clientX, clientY] = onScreen(view, tip);
+  for (const deltaY of [-500, -500, -1000, 300]) {
+    canvas.dispatch('wheel', { deltaY, clientX, clientY });
+    closeTo(onScreen(view, tip), [clientX, clientY], 1e-6, `after deltaY ${deltaY}`);
+  }
+  assert.ok(view.getCamera().distance < start.distance / 4);
+  canvas.dispatch('wheel', { deltaY: -1e7, clientX, clientY });
+  assert.equal(view.getCamera().distance, CAMERA_DISTANCE_RANGE[0]);
+  closeTo(onScreen(view, tip), [clientX, clientY], 1e-6, 'at the 10 mm limit');
+});
+
+test('over empty space the wheel keeps the point on the target plane under the cursor', () => {
+  const { view, canvas, controller } = mountWithBox();
+  const start = view.getCamera();
+  const frame = cameraFrame(start);
+  const point = start.target.map((value, k) => value + frame.right[k] * 380 + frame.up[k] * 250);
+  const [clientX, clientY] = onScreen(view, point);
+  // Nothing is drawn within the pick radius of that spot.
+  const toPage = ([x, y]) => [100 + (x + 1) / 2 * 800, 100 + (1 - y) / 2 * 500];
+  for (const line of buildSceneGeometry(controller.getState()).lines) {
+    const segment = projectSegment(line.from, line.to, start, 800, 500);
+    if (!segment) continue;
+    const [a, b] = segment.map(toPage);
+    for (let s = 0; s <= 1; s += 0.01) {
+      const gap = Math.hypot(a[0] + (b[0] - a[0]) * s - clientX, a[1] + (b[1] - a[1]) * s - clientY);
+      assert.ok(gap > ZOOM_PICK_RADIUS_PX, 'the chosen spot is not empty');
+    }
+  }
+  canvas.dispatch('wheel', { deltaY: -400, clientX, clientY });
+  closeTo(onScreen(view, point), [clientX, clientY], 1e-6, 'empty-space zoom');
+  // Without a laid-out canvas the wheel zooms about the target.
+  const bare = mount();
+  bare.input('simCanvas').dispatch('wheel', { deltaY: -800, clientX: 30, clientY: 40 });
+  assert.deepEqual(bare.view.getCamera().target, [0, 0, 100]);
+});
+
+test('Shift+drag pans in either mouse mode and the target survives pose updates until a new layout', () => {
+  const { view, canvas, controller, input } = mountWithBox();
+  for (const mode of ['orbit', 'platform']) {
+    input('simPointerMode').value = mode;
+    const before = view.getCamera();
+    const anchor = before.target.slice();
+    const [x, y] = onScreen(view, anchor);
+    canvas.dispatch('pointerdown', { button: 0, clientX: x, clientY: y, pointerId: 1, shiftKey: true });
+    canvas.dispatch('pointermove', { clientX: x + 40, clientY: y - 15 });
+    canvas.dispatch('pointerup', {});
+    closeTo(onScreen(view, anchor), [x + 40, y - 15], 1e-6, `${mode}: the grabbed point follows the cursor`);
+    const after = view.getCamera();
+    assert.deepEqual([after.yaw, after.pitch, after.distance], [before.yaw, before.pitch, before.distance], `${mode}: pan only`);
+    assert.deepEqual(controller.getState().requested, { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 }, `${mode}: pan moved the platform`);
+  }
+  const panned = view.getCamera().target;
+  assert.notDeepEqual(panned, [0, 0, 100]);
+  controller.requestPose({ x: 4, rz: 0.05 });
+  controller.setMarkers(false);
+  assert.deepEqual(view.getCamera().target, panned, 'a pose or display change recentred the view');
+  // A saved camera target is kept through later updates too.
+  view.setCamera({ target: [7, 8, 9] });
+  controller.requestPose({});
+  assert.deepEqual(view.getCamera().target, [7, 8, 9]);
+  // Reloading the same layout keeps the view; a new home height recentres it.
+  controller.loadLayout(asymmetricJointFixture(), { options: { ballJointLimitDeg: 180 } });
+  assert.deepEqual(view.getCamera().target, [7, 8, 9]);
+  const taller = { ...asymmetricJointFixture(), homeHeight: 240 };
+  controller.loadLayout(taller, { options: { ballJointLimitDeg: 180 } });
+  assert.deepEqual(view.getCamera().target, [0, 0, 120]);
 });
 
 test('a gamepad moves the platform each frame with the documented dead zone, only while enabled', () => {

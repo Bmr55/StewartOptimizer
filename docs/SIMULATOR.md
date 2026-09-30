@@ -98,9 +98,18 @@ as described under Live diagnostics. When the latest request was rejected, the
 request (see Scene builders and overlays). The ghost is the only geometry drawn
 from a pose the evaluator did not accept. Orbit camera is the initial mouse mode: dragging with the primary button or
 first touch changes yaw and pitch (a right click or second finger does not
-reset the drag), the
-wheel zooms between 80 and 2,500 units, and **Reset camera** restores the
-default view. The projected depth range follows the camera distance so a
+reset the drag). The wheel zooms toward the point under the cursor, keeping
+that point (taken on the plane through the camera target that faces the
+camera) under the cursor, with the camera distance between 10 and 2,500 mm, so
+a close-up can separate lines a few millimetres apart. Shift+drag pans in
+either mouse mode: the point under the cursor follows it. The camera target is
+centred on the layout (half the home height above the origin) when a layout
+loads and again whenever a newly loaded layout has a different home height;
+pose requests, animation and display changes leave a zoomed or panned view
+alone. **Reset camera** restores the default orientation and distance and
+recentres the target on the layout. Lines that cross the renderer's 1 mm near
+plane are clipped there, so a close-up keeps the visible part of a line passing
+beside the camera instead of dropping it. The projected depth range follows the camera distance so a
 zoomed-out view keeps near/far line ordering instead of saturating the depth
 buffer. Moving the platform by pointer requires selecting **Move
 platform**, which converts drag distance to X/Y requests. Numeric controls and
@@ -125,7 +134,7 @@ evaluator. The `simulator` block is validated as a whole before anything is
 applied: `options` (only the known keys are kept; limits, servo bounds,
 tolerance, condition limit and the clamp flag must have the right type),
 `requested` and `accepted` poses, `camera` (finite yaw, pitch within ±1.4,
-distance 80 to 2,500, three-coordinate target), `animation.speed` (positive),
+distance 10 to 2,500, three-coordinate target), `animation.speed` (positive),
 `markers`, `tracesEnabled`, `overlays` (each known overlay name true or false;
 unknown names are dropped, and a file without the block keeps the current
 toggles) and `pointerMode` (`orbit` or `platform`). A rejected
