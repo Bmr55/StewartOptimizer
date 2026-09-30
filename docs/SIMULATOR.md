@@ -29,3 +29,30 @@ support wobble, ping-pong, rotation, tilt, and helical motion. An invalid
 animation frame pauses playback and leaves its request and failure visible.
 Markers and bounded accepted-position traces are controlled by `setMarkers`,
 `setTraces`, and `clearTrace`.
+
+## Mechanical geometry controls
+
+`createGeometryControls({ document, container, controller })` mounts the active
+geometry editor in `#simGeometryControls`. Its editor copies the controller's
+layout before every edit and reloads that copy through `loadLayout`, which
+reevaluates the home pose and publishes fresh diagnostics. A selected optimizer
+candidate becomes an `editable` simulator source carrying its `candidateId`;
+the retained optimizer candidate stays unchanged. Reset restores the geometry,
+source, and evaluator options last loaded from outside the editor.
+
+Circular, C3 paired, and rectangular paired layouts start in parametric mode.
+Radius, C3 anchor pair gap, rectangular aspect, base/platform turn, and horn
+direction offset use the shared `topologyGeometry` generator. Turn and horn
+direction controls display degrees but store radians. The generator keeps the
+selected topology's anchor and beta-angle invariants. Horn/rod length, home
+height, and servo range are separate scalar controls; the servo range displays
+degrees and stores radians.
+
+**Edit anchors explicitly** preserves the current anchors and beta angles
+exactly while switching topology metadata to `free`. Explicit mode offers each
+base/platform XYZ coordinate and each horn direction. **Generate selected
+topology** is the deliberate reverse mode switch: it replaces explicit anchors
+with coordinates from the chosen shared generator. Changing unrelated lengths,
+height, or servo bounds never regenerates explicit anchors. Sliders and numeric
+fields show the same current value; invalid edits leave the last valid layout
+in place and report a field-specific error.

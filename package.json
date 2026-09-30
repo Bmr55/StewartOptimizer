@@ -6,6 +6,7 @@
     "dev": "node scripts/serve.mjs",
     "test": "node --test",
     "test:browser": "node scripts/browser-check.mjs",
+    "test:browser:geometry": "node scripts/browser-geometry-check.mjs",
     "smoke": "node scripts/smoke.mjs",
     "legacy:build": "npm --prefix archive/simulator run build"
   },
