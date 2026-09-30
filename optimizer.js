@@ -1,6 +1,7 @@
 import { validatePhysicalRequirements } from './requirements.js';
-import { computeCycleDemand } from './cycle.js';
-import { computeWorkspace, evaluatePose, estimateWorkspaceSize } from './workspace.js';
+import { computeCycleDemand } from './src/model/cycle.js';
+import { computeWorkspace, estimateWorkspaceSize } from './src/workspace/sweep.js';
+import { evaluatePose } from './src/model/pose.js';
 import {
   clamp,
   singularValues,
