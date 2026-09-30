@@ -217,13 +217,18 @@
 
         <section>
             <h2>Execution</h2>
-            <div class="button-row">
+            <div class="button-row execution-actions">
                 <button class="primary" id="runOptimization">Run Optimization</button>
                 <button id="cancelOptimization" disabled>Cancel</button>
                 <button id="runMainThreadFallback" hidden disabled>Run on main thread</button>
-                <button id="exportBestLayout" disabled>Download Layout JSON</button>
-                <button id="exportFusionScript" disabled>Download Fusion Script</button>
-                <button id="exportCoordinateCsv" disabled>Download Coordinates CSV</button>
+                <label class="field execution-download-format">Format
+                    <select id="downloadFormat" aria-label="Download format" disabled>
+                        <option value="json">Layout JSON</option>
+                        <option value="fusion">Fusion Script</option>
+                        <option value="csv">Coordinates CSV</option>
+                    </select>
+                </label>
+                <button id="downloadSelected" disabled>Download</button>
             </div>
             <div id="optStatus" class="status">Idle</div>
             <div class="run-dashboard" id="runDashboard" aria-label="Live run metrics">

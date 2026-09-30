@@ -31,7 +31,7 @@ test('reference input stays separate from requirements and remains selectable fo
   const display = JSON.parse(element('resultOutput').value);
   assert.equal(display.result.layout.id, 1);
   assert.equal(display.result.layout.home_height, 600);
-  element('exportBestLayout').handlers.click();
+  element('downloadSelected').handlers.click();
   assert.deepEqual(exported.base_anchors, source.base_anchors);
   assert.deepEqual(exported.servo_range, source.servo_range);
   assert.equal(exported.home_height, 600);
