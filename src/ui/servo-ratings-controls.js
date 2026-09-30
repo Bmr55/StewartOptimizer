@@ -5,6 +5,7 @@ export function createServoRatingControls(document) {
     const values = [
       ['servoTorqueRating', normalized.servo_torque_rating_nm ?? ''],
       ['servoSpeedRating', normalized.servo_speed_rating_deg_s ?? ''],
+      ['servoContinuousTorqueRating', normalized.servo_continuous_torque_rating_nm ?? ''],
       ['servoRatingPolicy', normalized.servo_rating_policy ?? 'enforced'],
     ];
     for (let index = 0; index < 6; index++) {
@@ -39,6 +40,7 @@ export function createServoRatingControls(document) {
       return {
         servo_torque_rating_nm: readPositive('servoTorqueRating', 'Shared servo torque rating'),
         servo_speed_rating_deg_s: readPositive('servoSpeedRating', 'Shared servo speed rating'),
+        servo_continuous_torque_rating_nm: readPositive('servoContinuousTorqueRating', 'Shared continuous torque rating'),
         per_servo_ratings,
         servo_rating_policy: field('servoRatingPolicy').value,
       };

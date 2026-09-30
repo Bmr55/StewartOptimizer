@@ -12,7 +12,7 @@ import { validateConditionLimit } from '../model/conditioning.js';
 import { importLayout } from '../io/layout-import.js';
 import { evaluatePose } from '../model/pose.js';
 import { initialPopulation, referenceBoundsConflicts, seedComposition } from './reference-seeding.js';
-import { normalizeServoRatings } from '../model/servo-ratings.js';
+import { normalizeServoRatings, SERVO_RATING_KEYS } from '../model/servo-ratings.js';
 import { normalizeObjectiveSet, objectiveDefinitions } from './objectives.js';
 import { trajectoryFromRequirements, trajectoryIdentity, trajectorySummary } from '../model/trajectory.js';
 import { normalizeMassProperties, RIGID_BODY_FIELDS } from '../model/mass-properties.js';
@@ -93,11 +93,17 @@ export class Optimizer {
     this.upperBallJointLimitDeg = upperBallJointLimitDeg ?? this.ballJointLimitDeg;
     this.conditionLimit = validateConditionLimit(conditionLimit);
     this.ballJointClamp = ballJointClamp;
-    const ratingKeys = ['servo_torque_rating_nm', 'servo_speed_rating_deg_s',
-      'per_servo_ratings', 'servo_rating_policy'];
-    this.servoRatingsInput = Object.fromEntries(ratingKeys
+    this.servoRatingsInput = Object.fromEntries(SERVO_RATING_KEYS
       .filter(key => Object.hasOwn(servoRatings ?? {}, key) || Object.hasOwn(requirements, key))
       .map(key => [key, Object.hasOwn(servoRatings ?? {}, key) ? servoRatings[key] : requirements[key]]));
+    // UI overrides own the per-servo keys they supply; curves, continuous/duration
+    // ratings and actuator models present only in the requirements JSON are kept.
+    if (Array.isArray(servoRatings?.per_servo_ratings) && Array.isArray(requirements.per_servo_ratings)) {
+      this.servoRatingsInput.per_servo_ratings = servoRatings.per_servo_ratings.map((entry, index) => {
+        const json = requirements.per_servo_ratings[index];
+        return json == null ? entry : { ...json, ...entry };
+      });
+    }
     this.servoRatings = normalizeServoRatings(this.servoRatingsInput);
     this.payload = requirements.mass_kg ?? 0;
     const cycleInput = Object.fromEntries(['trajectory', ...RIGID_BODY_FIELDS]

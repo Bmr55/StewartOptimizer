@@ -124,12 +124,13 @@ export async function evaluateLayout(layout, options) {
 }
 
 export function evaluateCycle(layout, { payload, stroke, frequency, cycleAxis, trajectory, trajectorySource,
-  massProperties, cycleSampling, ballJointLimitDeg,
+  massProperties, cycleSampling, servoRatings, ballJointLimitDeg,
   lowerBallJointLimitDeg, upperBallJointLimitDeg, conditionLimit, mounting, signal, onPose }) {
   // A legacy-cycle trajectory keeps the single-axis identity in exported results.
   const supplied = trajectorySource === 'supplied' ? trajectory : undefined;
   return computeCycleDemand(layout, { mass: payload, stroke,
     frequency, axis: cycleAxis, trajectory: supplied, trajectorySource, massProperties, sampling: cycleSampling,
+    actuators: servoRatings?.perServo?.map(servo => servo.actuator) ?? null,
     ballJointLimitDeg, lowerBallJointLimitDeg,
     upperBallJointLimitDeg, conditionLimit, mounting, signal, onPose });
 }
