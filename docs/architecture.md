@@ -82,7 +82,7 @@ These paths are relative to a caller at the repository root. The core keeps `sta
 4. `finalizeLayout` clamps shared lengths and the independently chosen home height to effective bounds. It preserves the topology's geometry; it never derives a replacement height from rods and horns.
 5. `evaluateLayout` sweeps workspace poses, evaluates home geometry, evaluates the required cycle, and assembles objectives. None of these loops are stubs. Retained candidate selection is shared by the Optimize and Simulate tabs; geometry editing makes an independent simulator copy.
 
-Direct `new Optimizer()` defaults are population 12, generations 5, mutation rate 0.35, joint limit 52 degrees, horn bounds [30,120] mm and rod bounds [160,420] mm. The UI passes parser-normalized requirements: omitted JSON limits instead use 45 degrees, [30,110] mm and [160,420] mm. The bundled sample explicitly specifies 52 degrees, [40,110] mm and [180,380] mm. Both entry paths use [-120,120] degrees servo travel unless overridden. Prefer parsing requirements rather than constructing incomplete data by hand.
+Direct `new Optimizer()` defaults are population 12, generations 5, mutation rate 0.35, joint limit 45 degrees (the shared `DEFAULT_BALL_JOINT_LIMIT_DEG`, also used by `evaluatePose`, `computeCycleDemand` and the requirements parser), horn bounds [30,120] mm and rod bounds [160,420] mm. The UI passes parser-normalized requirements: omitted JSON limits use 45 degrees, [30,110] mm and [160,420] mm. The bundled sample explicitly specifies 52 degrees, [40,110] mm and [180,380] mm. Both entry paths use [-120,120] degrees servo travel unless overridden. Prefer parsing requirements rather than constructing incomplete data by hand.
 
 ## Pose evaluator
 

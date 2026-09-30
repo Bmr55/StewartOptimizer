@@ -8,6 +8,8 @@ export const CYCLE_MODEL_VERSION = 'cycle-newton-euler-v1';
 
 export const TOPOLOGIES = Object.freeze(['circular', 'c3_paired', 'rectangular_paired', 'free']);
 export const DEFAULT_TOPOLOGY = 'c3_paired';
+// Shared ball-joint limit used when neither an option nor the requirements supply one.
+export const DEFAULT_BALL_JOINT_LIMIT_DEG = 45;
 
 export const METRICS = Object.freeze({
   coverage: { json: 'coverage', direction: 'max', unit: 'percent' },

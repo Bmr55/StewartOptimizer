@@ -2,6 +2,7 @@ import { degToRad, rotationMatrixFromEuler, rotateVector, vectorAdd, vectorSub,
   vectorMagnitude, vectorNormalize, vectorDot, clamp } from '../math.js';
 import { computeHornTip, hornLocalToWorld, solveServoAngle } from './kinematics.js';
 import { resolveMounting } from './mounting.js';
+import { DEFAULT_BALL_JOINT_LIMIT_DEG } from '../contracts.js';
 import { assessPoseConditioning, validateConditionLimit,
   NUMERICAL_RECIPROCAL_CUTOFF } from './conditioning.js';
 
@@ -29,7 +30,7 @@ export function ensureLayout(layout) {
 export function evaluatePose(layout, pose = {}, options = {}) {
   ensureLayout(layout);
   const {
-    ballJointLimitDeg = 45,
+    ballJointLimitDeg = DEFAULT_BALL_JOINT_LIMIT_DEG,
     lowerBallJointLimitDeg = ballJointLimitDeg,
     upperBallJointLimitDeg = ballJointLimitDeg,
     ballJointClamp = false,

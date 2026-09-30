@@ -4,7 +4,7 @@ import { vectorNormalize, vectorCross, vectorDot, vectorScale, vectorAdd, vector
   rotateVector } from '../math.js';
 import { GRAVITY, massPropertiesDescription, normalizeMassProperties } from './mass-properties.js';
 import { isStationary, legacyTrajectory, trajectoryIdentity, trajectoryState } from './trajectory.js';
-import { CYCLE_MODEL_VERSION } from '../contracts.js';
+import { CYCLE_MODEL_VERSION, DEFAULT_BALL_JOINT_LIMIT_DEG } from '../contracts.js';
 import { LEGACY_CYCLE_SAMPLING, normalizeCycleSampling, periodicSampleWeights } from './cycle-sampling.js';
 import { actuatorTorque } from './servo-ratings.js';
 import { createLoadSharingAccumulator, unavailableLoadSharing } from './load-sharing.js';
@@ -41,6 +41,9 @@ const matMul = (a, b) => a.map(row => b[0].map((_, j) => row.reduce((sum, value,
 // A_i = [u_i^T, (r_i x u_i)^T], D_ii = u_i . h'_i, alphaDot = G V with G = D^-1 A and
 // V = [v; omega]. This is distinct from the dimensionless centroid conditioning Jacobian.
 export function physicalMotionJacobian(layout, poseResult) {
+  if (!Array.isArray(poseResult?.rodVectors) || !Array.isArray(poseResult?.servoAngles)) {
+    return { rows: null, reason: 'Pose leg data is unavailable; evaluate the pose with recordLegData: true.' };
+  }
   const h = layout.hornLength / 1000;
   const directions = poseResult.rodVectors.map(vectorNormalize);
   const arms = layout.platformAnchors.map(anchor =>
@@ -174,7 +177,7 @@ const normalizedEstimate = (estimate, scales) =>
 
 export function computeCycleDemand(layout, { mass = 0, stroke = 0, frequency = 0, axis = 'z',
   trajectory, massProperties, trajectorySource, sampling = LEGACY_CYCLE_SAMPLING, actuators = null,
-  ballJointLimitDeg = 52, lowerBallJointLimitDeg = ballJointLimitDeg,
+  ballJointLimitDeg = DEFAULT_BALL_JOINT_LIMIT_DEG, lowerBallJointLimitDeg = ballJointLimitDeg,
   upperBallJointLimitDeg = ballJointLimitDeg, conditionLimit = null,
   mounting, signal, onPose } = {}) {
   const effectiveTrajectory = trajectory ?? legacyTrajectory({ stroke, frequency, axis });

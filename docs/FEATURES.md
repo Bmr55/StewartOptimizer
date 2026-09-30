@@ -391,7 +391,7 @@ optimizer.selectCandidate(id);               // change the selection
 optimizer.stop();                            // request cancellation
 ```
 
-Constructor options: `populationSize` (12), `generations` (5), `ranges`, `sampling` (`{ strategy: 'halton' }`), `cycleSampling`, `seed` (1), `mutationRate` (0.35), `objectiveSet` (`compact`), `designSpace`, `topology` (`c3_paired`), `referenceLayout`, `homeHeightBounds`, `ballJointLimitDeg` (52 when neither the option nor the requirements supply it), `lowerBallJointLimitDeg`, `upperBallJointLimitDeg`, `conditionLimit` (null), `ballJointClamp` (false), `servoRatings`, `onProgress`, `onCheckpoint`.
+Constructor options: `populationSize` (12), `generations` (5), `ranges`, `sampling` (`{ strategy: 'halton' }`), `cycleSampling`, `seed` (1), `mutationRate` (0.35), `objectiveSet` (`compact`), `designSpace`, `topology` (`c3_paired`), `referenceLayout`, `homeHeightBounds`, `ballJointLimitDeg` (45 when neither the option nor the requirements supply it), `lowerBallJointLimitDeg`, `upperBallJointLimitDeg`, `conditionLimit` (null), `ballJointClamp` (false), `servoRatings`, `onProgress`, `onCheckpoint`.
 
 `Optimizer.fromReplay(downloadedJSON)` rebuilds an optimizer from `run.effective_settings`, restoring requirements, bounds, sampling, cycle sampling (fixed 64 for exports that predate adaptive sampling), seed, population, generations, mutation rate, design space, topology, limits, ratings, objective set (mapping older Full runs to `full-v1`) and the original reference. Exports without effective settings or with a different random algorithm are rejected.
 

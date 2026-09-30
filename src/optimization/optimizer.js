@@ -5,7 +5,7 @@ import { dominates, fastNonDominatedSort, assignCrowdingDistance, tournamentSele
 import { evaluateLayout, evaluateCycle, computeFatigue } from './evaluate-layout.js';
 import { estimateWork } from './budget.js';
 import { selectBest, exportResult, layoutToJSON } from '../io/results.js';
-import { DEFAULT_TOPOLOGY, TOPOLOGIES } from '../contracts.js';
+import { DEFAULT_TOPOLOGY, TOPOLOGIES, DEFAULT_BALL_JOINT_LIMIT_DEG } from '../contracts.js';
 import { normalizeSampling } from '../workspace/sampling.js';
 import { createRandom, normalizeSeed, RANDOM_ALGORITHM } from './random.js';
 import { validateConditionLimit } from '../model/conditioning.js';
@@ -93,7 +93,7 @@ export class Optimizer {
     if (this.referenceLayout) topology = this.referenceLayout.topology;
     if (!TOPOLOGIES.includes(topology)) throw new Error(`topology must be one of ${TOPOLOGIES.join(', ')}.`);
     this.topology = topology;
-    this.ballJointLimitDeg = ballJointLimitDeg ?? requirements.ball_joint_max_deg ?? 52;
+    this.ballJointLimitDeg = ballJointLimitDeg ?? requirements.ball_joint_max_deg ?? DEFAULT_BALL_JOINT_LIMIT_DEG;
     this.lowerBallJointLimitDeg = lowerBallJointLimitDeg ?? this.ballJointLimitDeg;
     this.upperBallJointLimitDeg = upperBallJointLimitDeg ?? this.ballJointLimitDeg;
     this.conditionLimit = validateConditionLimit(conditionLimit);
