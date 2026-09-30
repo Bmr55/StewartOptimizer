@@ -60,6 +60,10 @@ export function createSimulatorController({ onChange } = {}) {
 
   function requestPose(pose, { source: origin = 'manual' } = {}) {
     if (!layout) throw new Error('Load a layout before requesting a pose.');
+    if (animation.playing && origin !== 'animation') {
+      animation.playing = false;
+      animation.pauseReason = 'Manual pose request';
+    }
     requested = normalizePose(pose);
     requestSource = origin;
     assessment = evaluatePose(layout, requested, { ...options, recordLegData: true });
@@ -107,7 +111,9 @@ export function createSimulatorController({ onChange } = {}) {
   }
 
   function setOptions(patch) {
-    options = { ...options, ...copy(patch) };
+    const nextOptions = { ...options, ...copy(patch) };
+    if (layout) evaluatePose(layout, requested, { ...nextOptions, recordLegData: true });
+    options = nextOptions;
     if (!layout) return notify();
     // A settings change must recheck the accepted pose as well as the request.
     if (accepted) {

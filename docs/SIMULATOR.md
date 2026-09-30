@@ -57,3 +57,29 @@ with coordinates from the chosen shared generator. Changing unrelated lengths,
 height, or servo bounds never regenerates explicit anchors. Sliders and numeric
 fields show the same current value; invalid edits leave the last valid layout
 in place and report a field-specific error.
+## Browser workflow
+
+The Optimize and Simulate tabs share the retained candidate selection. The
+simulator loads the selected candidate automatically after a run and when the
+chart or either candidate list changes. Switching tabs leaves the current pose,
+camera, input mode and animation state in memory. A new run clears the previous
+candidate selection.
+
+The native WebGL2 renderer reads only the accepted evaluator geometry: base
+anchors, solved horn tips, actual rods, platform points, servo orientation
+angles and platform frame. Orbit camera is the initial mouse mode. Moving the
+platform by pointer requires selecting **Move platform**. Numeric controls and
+sliders request six-axis poses; keyboard arrows move X/Y, Page Up/Down moves Z,
+W/S and A/D tilt, and Q/E rotates about Z. An optional gamepad maps analog
+sticks to translation/tilt and shoulder/trigger buttons to Z/yaw. Pose requests
+do not change anchor coordinates.
+
+**Use geometry as optimizer reference** copies the active layout and a replay
+snapshot to the optimizer's reference JSON field. **Load optimizer reference**
+can restore that layout and saved requested/accepted poses. **Download simulator
+JSON** saves the same geometry plus run settings, simulator options, pose,
+camera, animation, markers, traces and input mode. The shared importer validates
+the layout and ignores old scores; every pose is checked again by the current
+evaluator. If WebGL2 is unavailable, the simulator names the missing capability
+and suggests enabling hardware acceleration or a modern desktop browser;
+optimization remains usable.

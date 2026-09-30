@@ -48,6 +48,7 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
     }
     offerFallback(false);
     let activeTab = 'optimize';
+    const simCandidateSelect = document.getElementById('simCandidateSelect');
     const simulatorController = createSimulatorController();
     const simulatorView = createSimulatorView({ document, window, controller: simulatorController,
         isActive: () => activeTab === 'simulate' });
@@ -73,8 +74,16 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
         ratingControls.populate(parsed.normalized, preserveEdits);
     }
     installTooltips(document, window);
+    simCandidateSelect.addEventListener('change', () => {
+        if (simCandidateSelect.value) resultsView.select(simCandidateSelect.value);
+    });
+    function clearSimulatorSelection() {
+        simCandidateSelect.innerHTML = '';
+        simCandidateSelect.disabled = true;
+    }
     function loadCandidate(candidate) {
         simulatorRun = lastOutcome;
+        simCandidateSelect.value = String(candidate.layout.id);
         simulatorController.loadLayout(candidate.layout, {
             source: { kind: 'candidate', candidateId: candidate.layout.id },
             options: simulatorOptions(lastOutcome?.effective_settings ?? currentOptimizer?.effectiveSettings?.(), candidate.layout),
@@ -89,6 +98,7 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
         setRunning(false);
     });
     resultsView.clear();
+    clearSimulatorSelection();
 
     function showStatus(message, isError = false) {
         statusEl.textContent = message;
@@ -115,6 +125,7 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
         offerFallback(false);
         simulatorRun = null;
         simulatorController.clear();
+        clearSimulatorSelection();
         document.getElementById('simDownload').disabled = true;
         resultsView.clear();
         dashboard.reset();
@@ -182,6 +193,9 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
             ?? selectBest(currentOptimizer.pareto, currentOptimizer.fitness);
         lastOutcome = { ...outcome, effective_settings: currentOptimizer.effectiveSettings?.() };
         resultsView.render(currentOptimizer.fitness, best?.layout.id);
+        simCandidateSelect.innerHTML = currentOptimizer.fitness.map(item =>
+            `<option value="${item.layout.id}">Candidate ${item.layout.id}</option>`).join('');
+        simCandidateSelect.disabled = !currentOptimizer.fitness.length;
         resultOutput.value = best ? JSON.stringify({ run: lastOutcome, result: displayResult(best) }, null, 2) : '';
         dashboard.finish(thisRun, { status: outcome.status, partialResults: outcome.partialResults,
             snapshot: finalSnapshot() });
@@ -276,6 +290,7 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
             lastOutcome = null;
             simulatorRun = null;
             simulatorController.clear();
+            clearSimulatorSelection();
             document.getElementById('simDownload').disabled = true;
             resultsView.clear();
             const work = currentOptimizer.estimateWork();
@@ -354,6 +369,8 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
             const saved = parsed.simulator;
             simulatorController.loadLayout(layout, { source: { kind: 'import', candidateId: layout.id ?? null },
                 options: saved?.options ?? simulatorOptions(sourceRun?.effective_settings, layout) });
+            simCandidateSelect.innerHTML = `<option value="">Imported reference</option>${simCandidateSelect.innerHTML}`;
+            simCandidateSelect.value = '';
             if (saved?.accepted) simulatorController.requestPose(saved.accepted, { source: 'replay' });
             if (saved?.requested) simulatorController.requestPose(saved.requested, { source: 'replay' });
             if (saved?.camera) simulatorView.setCamera(saved.camera);
