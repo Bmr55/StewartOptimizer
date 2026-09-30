@@ -18,6 +18,8 @@ export function createSimulatorView({ document, window, controller, isActive = (
   const pattern = document.getElementById('simPattern');
   const play = document.getElementById('simPlay');
   const pointerMode = document.getElementById('simPointerMode');
+  const markers = document.getElementById('simMarkers');
+  const traces = document.getElementById('simTraces');
   const renderer = createRenderer(canvas, { window });
   let camera = { yaw: 0.7, pitch: 0.38, distance: 600, target: [0, 0, 100] };
   let drag = null;
@@ -52,6 +54,9 @@ export function createSimulatorView({ document, window, controller, isActive = (
     }
     play.textContent = state.animation.playing ? 'Pause' : 'Play';
     play.setAttribute('aria-pressed', String(state.animation.playing));
+    // Snapshot loads and browser-save restores set these on the controller directly.
+    markers.checked = state.markers;
+    traces.checked = state.tracesEnabled;
     if (renderer.available) renderer.render(state, camera);
   }
 
@@ -86,8 +91,8 @@ export function createSimulatorView({ document, window, controller, isActive = (
     camera = { yaw: 0.7, pitch: 0.38, distance: 600, target: camera.target };
     if (renderer.available) renderer.render(controller.getState(), camera);
   });
-  document.getElementById('simMarkers').addEventListener('change', event => controller.setMarkers(event.target.checked));
-  document.getElementById('simTraces').addEventListener('change', event => controller.setTraces(event.target.checked));
+  markers.addEventListener('change', () => controller.setMarkers(markers.checked));
+  traces.addEventListener('change', () => controller.setTraces(traces.checked));
   document.getElementById('simClearTrace').addEventListener('click', () => controller.clearTrace());
   pattern.addEventListener('change', guarded(() => controller.setAnimation(pattern.value, false)));
   play.addEventListener('click', guarded(() => {

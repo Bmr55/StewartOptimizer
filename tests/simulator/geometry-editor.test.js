@@ -8,6 +8,7 @@ import { createGeometryEditor, editGeometry, geometryMode,
   PARAMETER_FIELDS } from '../../src/simulator/geometry-editor.js';
 import { suggestedParameters } from '../../src/simulator/geometry-controls.js';
 import { asymmetricJointFixture } from '../fixtures/layout.js';
+import { resolveMounting } from '../../src/model/mounting.js';
 
 const make = topology => new Optimizer({}, { topology, seed: 37 }).createRandomLayout();
 
@@ -64,6 +65,25 @@ test('length, height, servo bounds, and explicit anchors change only the request
   assert.throws(() => editGeometry(beta, { type: 'parameter', field: 'base_radius', value: 120 }), /parametric/);
   assert.throws(() => editGeometry(beta, { type: 'servoRange', degrees: [10, -10] }), /servoRange/);
   assert.deepEqual(original, source);
+});
+
+test('geometry edits rederive derived mounting directions and keep supplied ones', () => {
+  const original = make('c3_paired');
+  original.mounting = resolveMounting(original).mounting;
+  original.mounting.upper[1] = { source: 'supplied', direction: [0, 0, -1] };
+  const before = structuredClone(original.mounting);
+  const taller = editGeometry(original, { type: 'scalar', field: 'homeHeight', value: original.homeHeight + 40 });
+  const edited = editGeometry(taller, { type: 'parameter', field: 'platform_radius',
+    value: taller.topologyParameters.platform_radius * 0.8 });
+  assert.deepEqual(edited.mounting, resolveMounting(edited).mounting);
+  assert.notDeepEqual(edited.mounting.lower[0].direction, before.lower[0].direction);
+  assert.equal(edited.mounting.lower[0].source, 'derived');
+  assert.deepEqual(edited.mounting.upper[1], { source: 'supplied', direction: [0, 0, -1] });
+  assert.deepEqual(original.mounting, before);
+  // A layout without mounting data is left without it; the evaluator derives on demand.
+  const bare = asymmetricJointFixture();
+  delete bare.mounting;
+  assert.equal('mounting' in editGeometry(bare, { type: 'scalar', field: 'rodLength', value: bare.rodLength + 1 }), false);
 });
 
 test('mode switching is explicit and controller edits copy candidates, reset, and reevaluate', () => {
