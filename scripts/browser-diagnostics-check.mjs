@@ -144,6 +144,60 @@ try {
     assert.equal(contextLoss.restored.isLost, false, 'the browser was not allowed to restore the context');
     assert.match(contextLoss.restored.status, /Accepted request/);
   } else console.warn('WEBGL_lose_context is unavailable; the context-loss check was skipped.');
+  // A request just past a joint limit leaves its ghost almost on top of the held
+  // pose. The failing legs are red on the ghost instead of the held legs, and the
+  // ghost's depth bias must keep them visible there (not hidden by the held legs).
+  const nearMiss = await page.evaluate(() => {
+    const canvas = document.querySelector('#simCanvas');
+    const gl = canvas.getContext('webgl2');
+    const red = () => {
+      const pixels = new Uint8Array(canvas.width * canvas.height * 4);
+      gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+      let count = 0;
+      for (let i = 0; i < pixels.length; i += 4) if (pixels[i] > 200 && pixels[i + 1] < 90 && pixels[i + 2] < 110) count++;
+      return count;
+    };
+    const check = (id, checked) => {
+      const input = document.getElementById(id);
+      input.checked = checked;
+      input.dispatchEvent(new Event('change'));
+      return red();
+    };
+    const change = (id, value) => {
+      const input = document.getElementById(id);
+      input.value = value;
+      input.dispatchEvent(new Event('change'));
+    };
+    for (const id of ['simMarkers', 'simOverlayServoArcs', 'simOverlayJointCones']) check(id, false);
+    check('simOverlayRequestedGhost', true);
+    document.getElementById('simResetPose').click();
+    change('simUpperJointLimit', '10');
+    // Coarse steps find the limit, then 0.05° steps from the last accepted pose
+    // leave the ghost within 0.05° of the held pose.
+    const firstRejected = (from, step) => {
+      for (let rx = from; rx <= 30; rx = Math.round((rx + step) * 100) / 100) {
+        change('simRXInput', String(rx));
+        const status = document.querySelector('#simPoseStatus').textContent;
+        if (status.startsWith('Rejected')) return { rx, status };
+      }
+      return null;
+    };
+    const coarse = firstRejected(0.5, 0.5);
+    if (!coarse) return null;
+    change('simRXInput', String(coarse.rx - 0.5));
+    const found = firstRejected(coarse.rx - 0.45, 0.05);
+    const ghostOn = red();
+    return { ...found, ghostOn, ghostOff: check('simOverlayRequestedGhost', false),
+      restored: check('simOverlayRequestedGhost', true) };
+  });
+  assert.ok(nearMiss, 'no Rx up to 30° exceeded a 10° upper joint limit');
+  assert.match(nearMiss.status, /ballJoint/, nearMiss.status);
+  assert.ok(nearMiss.ghostOff > 0, `held failing legs drew no red: ${JSON.stringify(nearMiss)}`);
+  // Measured: 97 % of the red survives with the bias, 71 % without it.
+  assert.ok(nearMiss.ghostOn > nearMiss.ghostOff * 0.9,
+    `ghost failure legs were hidden behind the held pose: ${JSON.stringify(nearMiss)}`);
+  assert.equal(nearMiss.restored, nearMiss.ghostOn);
+  for (const id of ['#simMarkers', '#simOverlayServoArcs', '#simOverlayJointCones']) await page.locator(id).check();
   assert.deepEqual(pageErrors, []);
   await page.locator('#optimizeTab').click();
   await page.locator('#referenceLayoutInput').fill('');

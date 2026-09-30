@@ -20,6 +20,9 @@ const COLORS = SCENE_COLORS;
 // The canvas clear colour; the ghost dims toward it instead of blending.
 export const SCENE_BACKGROUND = Object.freeze([0.055, 0.075, 0.11]);
 const GHOST_BRIGHTNESS = 0.35;
+// A small overshoot puts the ghost almost on top of the held pose; its failure
+// lines are drawn this far (mm) toward the camera so they are not hidden there.
+export const GHOST_FAILURE_DEPTH_BIAS_MM = 10;
 const dim = color => color.map((value, k) => SCENE_BACKGROUND[k] + (value - SCENE_BACKGROUND[k]) * GHOST_BRIGHTNESS);
 
 // Toggleable overlays and whether each is drawn when a state or saved file
@@ -40,13 +43,27 @@ function polygon(lines, points, color) {
 
 const hasSolvedLegs = solved => solved?.platformPoints?.length === 6 && solved?.hornTips?.length === 6;
 
+// The rejected assessment the ghost overlay draws, or null when there is no
+// ghost: the request was accepted, or the overlay is off.
+function shownGhost(state) {
+  const requested = state.assessment;
+  if (!requested || requested.reachable !== false || !requested.translation || !requested.rotationMatrix) return null;
+  return { ...OVERLAY_DEFAULTS, ...state.overlays }.requestedGhost ? requested : null;
+}
+
 // Color reports failures in the requested pose, which may have been rejected by
-// the shared evaluator, while the geometry stays at the accepted pose.
+// the shared evaluator, while the geometry stays at the accepted pose. Each
+// failure is coloured once, on the geometry that failed: when the ghost draws a
+// failing leg (the solver reached its horn tip) or the whole-platform failure,
+// that colour is on the ghost and the held leg keeps its normal colour; a leg
+// the ghost cannot draw, or any failure while the ghost is off, colours the held leg.
 function failureColor(state) {
   const violations = state.assessment?.violations ?? [];
-  const affectedLegs = new Set(violations.filter(violation => Number.isInteger(violation.leg))
+  const ghost = shownGhost(state);
+  const ghostLegs = ghost?.hornTips ?? [];
+  const affectedLegs = new Set(violations.filter(violation => Number.isInteger(violation.leg) && !ghostLegs[violation.leg])
     .map(violation => violation.leg));
-  const globalFailure = violations.some(violation => !Number.isInteger(violation.leg));
+  const globalFailure = !ghost && violations.some(violation => !Number.isInteger(violation.leg));
   return index => affectedLegs.has(index) ? COLORS.failure : globalFailure ? COLORS.globalFailure : null;
 }
 
@@ -168,22 +185,23 @@ function jointCones(state, layout, solved) {
 // which turns the whole-platform failure colour on a conditioning failure.
 function requestedGhost(state, layout) {
   const lines = [];
-  const requested = state.assessment;
-  if (!requested || requested.reachable !== false || !requested.translation || !requested.rotationMatrix) {
-    return { lines, points: [] };
-  }
+  const requested = shownGhost({ ...state, overlays: { ...state.overlays, requestedGhost: true } });
+  if (!requested) return { lines, points: [] };
   const violations = requested.violations ?? [];
   const failedLegs = new Set(violations.filter(violation => Number.isInteger(violation.leg)).map(violation => violation.leg));
   const platformFailure = violations.some(violation => !Number.isInteger(violation.leg));
   const platformPoints = layout.platformAnchors.map(anchor =>
     vectorAdd(requested.translation, rotateVector(requested.rotationMatrix, anchor)));
+  const outlineStart = lines.length;
   polygon(lines, platformPoints, platformFailure ? COLORS.globalFailure : dim(COLORS.platform));
+  if (platformFailure) lines.slice(outlineStart).forEach(line => { line.depthBias = GHOST_FAILURE_DEPTH_BIAS_MM; });
   const hornTips = requested.hornTips ?? [];
   for (let i = 0; i < 6; i++) {
     if (!hornTips[i]) continue;
     const failed = failedLegs.has(i);
-    lines.push({ from: layout.baseAnchors[i], to: hornTips[i], color: failed ? COLORS.failure : dim(COLORS.horn) });
-    lines.push({ from: hornTips[i], to: platformPoints[i], color: failed ? COLORS.failure : dim(COLORS.rod) });
+    const emphasis = failed ? { depthBias: GHOST_FAILURE_DEPTH_BIAS_MM } : {};
+    lines.push({ from: layout.baseAnchors[i], to: hornTips[i], color: failed ? COLORS.failure : dim(COLORS.horn), ...emphasis });
+    lines.push({ from: hornTips[i], to: platformPoints[i], color: failed ? COLORS.failure : dim(COLORS.rod), ...emphasis });
   }
   const axis = Math.max(18, layout.hornLength * 0.35);
   const column = index => requested.rotationMatrix.map(row => row[index]);
@@ -235,7 +253,7 @@ export function buildSceneGeometry(state, builders = SCENE_BUILDERS) {
   const { layout, acceptedAssessment: solved } = state;
   if (!layout) return { lines, points };
   const overlays = { ...OVERLAY_DEFAULTS, ...state.overlays };
-  const scene = { ...state, markers: state.markers === undefined ? true : state.markers };
+  const scene = { ...state, overlays, markers: state.markers === undefined ? true : state.markers };
   for (const builder of builders) {
     if (builder.overlay && !overlays[builder.overlay]) continue;
     const part = builder.build(scene, layout, solved ?? null);

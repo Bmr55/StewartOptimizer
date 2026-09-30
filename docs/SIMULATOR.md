@@ -212,10 +212,17 @@ its colours are dimmed to 35 % of the way from the background colour
 (`SCENE_BACKGROUND`, also the canvas clear colour) toward the normal colour,
 instead of blending. Legs named in a violation use the failure colour at full
 brightness, and a whole-platform failure outlines the ghost platform in the
-global-failure colour. An accepted request draws no ghost.
+global-failure colour. An accepted request draws no ghost. Each failure is
+coloured once, on the geometry that failed: while the ghost draws a failing leg
+or the whole-platform failure, the held accepted pose keeps its normal colours
+for it (see Live diagnostics). The ghost's failure-coloured lines are drawn
+with a depth bias of `GHOST_FAILURE_DEPTH_BIAS_MM` (10 mm) toward the camera, which
+changes only their depth value, not where they appear: a request just past a
+limit puts the ghost almost on top of the held legs, and without the bias the
+held legs would hide its red legs.
 
 ## Live diagnostics
 
-The diagnostics panel subscribes to the same controller as the renderer. It reports the six-axis **requested** pose and last valid **rendered accepted** pose separately. A rejected request remains visible with its evaluator failures while the renderer holds the last accepted geometry. Red leg rows and matching WebGL leg colors mark failures in the requested pose; a whole-platform conditioning failure has a separate message and color. Highlighting the accepted legs does not mean the rejected pose was accepted; the rejected pose itself appears only as the dimmed ghost overlay.
+The diagnostics panel subscribes to the same controller as the renderer. It reports the six-axis **requested** pose and last valid **rendered accepted** pose separately. A rejected request remains visible with its evaluator failures while the renderer holds the last accepted geometry. Red leg rows mark failures in the requested pose, and a whole-platform conditioning failure has a separate message; the table always lists every failure. In the scene each failure is coloured once, on the geometry that failed. When the **Rejected pose ghost** overlay is on and the solver reached that leg's horn tip (a joint-limit failure), the ghost leg is red and the held accepted leg keeps its normal colours; a whole-platform failure likewise outlines the ghost platform in magenta instead of tinting the held legs. When the ghost is off, or for a structural failure where the solver stopped before that leg's horn tip, the held accepted leg is coloured red (magenta for a whole-platform failure). A red held leg therefore marks a failure in the request, not in the rendered pose, which the evaluator accepted; the rejected pose itself appears only as the dimmed ghost overlay. The servo arcs and joint cones keep their own failure colours either way.
 
 Each leg shows lower and upper socket deflection against their effective limits, maximum deflection, rod-length deviation against the editable tolerance, and servo angle. Unavailable measurements show a dash because the evaluator may stop at the first structural failure. Lower and upper joint limits and rod tolerance can be edited in the panel; changes reevaluate the current request and last accepted pose, a focused field keeps text the user has typed while an animation plays, an untouched focused field still follows loads and settings changes, and a rejected value is restored. The mandatory reciprocal conditioning cutoff and optional engineering condition limit are displayed. Simulator JSON saves these effective options with the requested and accepted poses, and loading that JSON restores them.

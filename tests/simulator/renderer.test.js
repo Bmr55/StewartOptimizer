@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import { asymmetricJointFixture } from '../fixtures/layout.js';
 import { createSimulatorController } from '../../src/simulator/controller.js';
 import { buildSceneGeometry, createWebGLRenderer, projectPoint } from '../../src/simulator/renderer.js';
-import { NEAR_LIMIT_MARGIN_RAD, OVERLAY_DEFAULTS, OVERLAY_NAMES, SCENE_BACKGROUND, SCENE_BUILDERS,
+import { GHOST_FAILURE_DEPTH_BIAS_MM, NEAR_LIMIT_MARGIN_RAD, OVERLAY_DEFAULTS, OVERLAY_NAMES, SCENE_BACKGROUND, SCENE_BUILDERS,
   SCENE_COLORS } from '../../src/simulator/scene.js';
 import { computeHornTip, hornLocalToWorld } from '../../src/model/kinematics.js';
 import { rotateVector, vectorAdd } from '../../src/math.js';
@@ -408,4 +408,75 @@ test('ghost legs follow the solver and failing legs use the full failure colour'
   // The ghost is gated like any overlay.
   assert.equal(buildSceneGeometry({ ...state, overlays: { ...state.overlays, requestedGhost: false } }).lines.length,
     buildSceneGeometry(state).lines.length - ghost.length);
+});
+
+// Colours of the held (accepted) pose's leg geometry: servo stub, horn, rod and markers.
+function heldLegColors(state) {
+  const scene = buildSceneGeometry(state);
+  const { layout, acceptedAssessment: solved } = state;
+  const line = (from, to) => scene.lines.find(item => item.from === from && item.to === to).color;
+  return [0, 1, 2, 3, 4, 5].map(leg => {
+    const base = layout.baseAnchors[leg];
+    const stub = scene.lines.find(item => item.from === base && item.to !== solved.hornTips[leg]
+      && !layout.baseAnchors.includes(item.to));
+    return { stub: stub.color,
+      horn: line(base, solved.hornTips[leg]), rod: line(solved.hornTips[leg], solved.platformPoints[leg]),
+      markers: scene.points.filter(point => point.at === base || point.at === solved.hornTips[leg]
+        || point.at === solved.platformPoints[leg]).map(point => point.color) };
+  });
+}
+const NORMAL_LEG = { stub: SCENE_COLORS.servo, horn: SCENE_COLORS.horn, rod: SCENE_COLORS.rod,
+  markers: [SCENE_COLORS.servo, SCENE_COLORS.horn, SCENE_COLORS.platform] };
+const paintedLeg = color => ({ stub: color, horn: color, rod: color, markers: [color, color, color] });
+const withGhost = (state, on) => ({ ...state, overlays: { ...state.overlays, requestedGhost: on } });
+
+test('a failure is coloured once: on the ghost when it can draw it, otherwise on the held pose', () => {
+  const controller = createSimulatorController();
+  controller.loadLayout(asymmetricJointFixture(), { options: { ballJointLimitDeg: 180,
+    lowerBallJointLimitDeg: 180, upperBallJointLimitDeg: 3 } });
+  const jointFailure = controller.requestPose({ x: 3, y: -2, z: 5, rx: 0.05, ry: -0.03, rz: 0.04 });
+  const failed = new Set(jointFailure.assessment.violations.map(violation => violation.leg));
+  assert.ok(failed.size > 0 && failed.size < 6);
+  // Ghost on: the joint failures are red on the ghost legs, so the held legs keep their colours.
+  assert.deepEqual(heldLegColors(withGhost(jointFailure, true)), Array(6).fill(NORMAL_LEG));
+  assert.ok(ghostOf(jointFailure).some(line => line.color === SCENE_COLORS.failure));
+  // Ghost off: the held legs carry the failure colour, as before the ghost existed.
+  assert.deepEqual(heldLegColors(withGhost(jointFailure, false)),
+    [0, 1, 2, 3, 4, 5].map(leg => failed.has(leg) ? paintedLeg(SCENE_COLORS.failure) : NORMAL_LEG));
+  // A structural failure leaves no ghost leg to colour, so the held leg stays red with the ghost on.
+  const structural = controller.requestPose({ z: 200 });
+  assert.deepEqual(structural.assessment.violations.map(violation => violation.leg), [0]);
+  assert.deepEqual(heldLegColors(withGhost(structural, true)),
+    [paintedLeg(SCENE_COLORS.failure), ...Array(5).fill(NORMAL_LEG)]);
+  // A whole-platform failure outlines the ghost; the held legs turn magenta only without it.
+  const global = { ...jointFailure, assessment: { ...jointFailure.assessment, violations: [{ type: 'conditionLimit' }] } };
+  assert.deepEqual(heldLegColors(withGhost(global, true)), Array(6).fill(NORMAL_LEG));
+  assert.ok(ghostOf(global).slice(0, 6).every(line => line.color === SCENE_COLORS.globalFailure));
+  assert.deepEqual(heldLegColors(withGhost(global, false)), Array(6).fill(paintedLeg(SCENE_COLORS.globalFailure)));
+  // An accepted request has nothing to colour.
+  assert.deepEqual(heldLegColors(controller.requestPose({})), Array(6).fill(NORMAL_LEG));
+});
+
+test('ghost failure lines carry a depth bias that moves only their depth toward the camera', () => {
+  const controller = createSimulatorController();
+  controller.loadLayout(asymmetricJointFixture(), { options: { ballJointLimitDeg: 180,
+    lowerBallJointLimitDeg: 180, upperBallJointLimitDeg: 3 } });
+  const state = controller.requestPose({ x: 3, y: -2, z: 5, rx: 0.05, ry: -0.03, rz: 0.04 });
+  const ghost = ghostOf(state);
+  assert.ok(ghost.some(line => line.color === SCENE_COLORS.failure));
+  for (const line of ghost) {
+    assert.equal(line.depthBias, line.color === SCENE_COLORS.failure ? GHOST_FAILURE_DEPTH_BIAS_MM : undefined);
+  }
+  const global = { ...state, assessment: { ...state.assessment, violations: [{ type: 'conditionLimit' }] } };
+  assert.ok(ghostOf(global).slice(0, 6).every(line => line.depthBias === GHOST_FAILURE_DEPTH_BIAS_MM));
+  assert.ok(ghostOf(global).slice(6).every(line => line.depthBias === undefined));
+  // No other builder biases its lines.
+  assert.ok(buildSceneGeometry({ ...state, overlays: { ...state.overlays, requestedGhost: false } })
+    .lines.every(line => line.depthBias === undefined));
+  // The bias shifts depth by exactly its length in the depth mapping and leaves x and y alone.
+  const camera = { target: [0, 0, 100], yaw: 0.7, pitch: 0.4, distance: 600 };
+  const plainPoint = projectPoint([10, -20, 150], camera, 800, 500);
+  const biased = projectPoint([10, -20, 150], camera, 800, 500, GHOST_FAILURE_DEPTH_BIAS_MM);
+  assert.deepEqual(biased.slice(0, 2), plainPoint.slice(0, 2));
+  assert.ok(Math.abs((plainPoint[2] - biased[2]) - GHOST_FAILURE_DEPTH_BIAS_MM * 2 / 2000) < 1e-12);
 });
