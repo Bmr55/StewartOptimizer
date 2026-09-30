@@ -140,11 +140,13 @@ export function createGeometryEditor(controller) {
       if (!state.layout) throw new Error('Load a layout before editing geometry.');
       const layout = editGeometry(controller.getReferenceLayout(), action);
       const candidateId = state.source?.candidateId ?? null;
-      return load(layout, { kind: 'editable', candidateId }, state.options);
+      return load(layout, { kind: 'editable', candidateId },
+        { ...state.options, servoRangeRad: layout.servoRangeRad.slice() });
     },
     reset() {
       if (!baseline) throw new Error('No loaded geometry to reset.');
-      return load(copy(baseline.layout), copy(baseline.source), controller.getState().options);
+      return load(copy(baseline.layout), copy(baseline.source),
+        { ...controller.getState().options, servoRangeRad: baseline.layout.servoRangeRad.slice() });
     },
     getBaseline() { return copy(baseline); },
     subscribe(listener) { listeners.add(listener); listener(controller.getState()); return () => listeners.delete(listener); },

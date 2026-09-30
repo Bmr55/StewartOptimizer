@@ -83,6 +83,9 @@ test('mode switching is explicit and controller edits copy candidates, reset, an
   assert.notDeepEqual(state.assessment, initialAssessment);
   assert.deepEqual(candidate, retained);
 
+  state = editor.edit({ type: 'servoRange', degrees: [-10, 10] });
+  assert.deepEqual(state.options.servoRangeRad, state.layout.servoRangeRad);
+
   const exactBeforeSwitch = structuredClone(state.layout);
   state = editor.edit({ type: 'explicitMode' });
   assert.equal(state.layout.topology, 'free');
@@ -100,6 +103,7 @@ test('mode switching is explicit and controller edits copy candidates, reset, an
   state = editor.reset();
   assert.deepEqual(state.layout, retained);
   assert.deepEqual(state.source, { kind: 'candidate', candidateId: 19 });
+  assert.deepEqual(state.options.servoRangeRad, retained.servoRangeRad);
   const next = make('circular');
   controller.loadLayout(next, { source: { kind: 'candidate', candidateId: 20 } });
   editor.edit({ type: 'scalar', field: 'rodLength', value: next.rodLength + 1 });
