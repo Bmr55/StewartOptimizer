@@ -188,7 +188,7 @@ All stochastic choices use a seeded `mulberry32-v1` generator. The run seed driv
 
 Every sampled six-axis pose is checked by the shared pose evaluator (`src/model/pose.js`). For Halton sampling, poses come from radical inverses in bases 2, 3, 5, 7, 11, 13 starting at the recorded `sequenceStart`; a fixed axis stays at its bound and a moving axis never lands exactly on an endpoint. Cartesian grid starts at each minimum and advances by the step. The sweep yields to the event loop before starting and after every 256 poses, checks the abort signal at each yield, and streams statistics with fixed memory. Example poses per class (reachable, unreachable, violations) are reservoir samples capped at 200.
 
-Limits: at most 100,000 workspace poses per layout and 1,000,000 budgeted pose checks per run, both rejected before evaluation.
+Limits: at most 100,000 workspace poses per layout and 1,000,000 budgeted pose checks per run, both rejected before evaluation and, in the UI, before the previous run's results are cleared.
 
 ### Pose evaluator and constraints
 
@@ -301,7 +301,7 @@ totalPoses     = posesPerLayout × populationSize × (generations + 1)
 
 ### Dashboard
 
-The live dashboard shows state, elapsed time, completed/total candidates, generation, front size, approximate remaining time (available after three completed candidates), actual versus budgeted pose work, and a one-line summary of the best completed candidate. It updates at most 10 times per second and shows exact terminal counts on completion.
+The live dashboard shows state, elapsed time, completed/total candidates, generation, front size, approximate remaining time (available after three completed candidates), actual versus budgeted pose work, and a one-line summary of the best completed candidate. It updates at most 10 times per second and shows exact terminal counts on completion. The pose-budget preflight runs before the previous run is replaced, so a rejected budget reports the error in the status line and leaves the previous results, candidate list, simulator candidate and dashboard on screen together.
 
 ### Cancellation
 

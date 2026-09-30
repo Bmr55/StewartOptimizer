@@ -54,6 +54,60 @@ test('snapshot uses actual work, a bounded best summary, and completed populatio
   assert.equal('fitness' in snapshot, false);
   assert.equal('layout' in snapshot.bestCandidate, false);
   assert.match(bestCandidateText(snapshot.bestCandidate), /#7 · passing · coverage 80.0%/);
+  const unavailable = bestCandidateText({ id: 3, passing: false, failedCategories: ['home'], coverage: NaN,
+    torque: null, speedDemand: 1, conditioningQuality: null });
+  assert.match(unavailable, /#3 · diagnostic \(home\) · coverage unavailable · torque unavailable N m/);
+  assert.doesNotMatch(unavailable, /unavailable%/);
+});
+
+test('a run rejected by the pose-budget preflight keeps the previous results and dashboard together', async () => {
+  let time = 0;
+  let budget = 100;
+  const candidate = { layout: { id: 5, baseAnchors: [], platformAnchors: [], betaAngles: [], servoRangeRad: [-1, 1],
+    hornLength: 1, rodLength: 1, homeHeight: 1 }, coverage: 50, torque: 1, speedDemand: 1,
+    feasibility: { passing: true, failedCategories: [] } };
+  class StubOptimizer {
+    constructor(_requirements, options) {
+      this.onProgress = options.onProgress;
+      this.populationSize = options.populationSize;
+      this.generations = options.generations;
+      this.fitness = []; this.pareto = []; this.generation = 0;
+      this.completedEvaluations = 0;
+    }
+    estimateWork() {
+      if (budget > 1000) throw new RangeError('Run exceeds the 1,000,000 pose evaluation limit.');
+      return { totalPoses: budget, evaluations: 8 };
+    }
+    async start() {
+      this.workEstimate = this.estimateWork();
+      time += 100;
+      this.completedPoseWork = 17;
+      this.completedEvaluations = 3;
+      this.fitness = [candidate]; this.pareto = [candidate];
+      this.onProgress({ completed: 17, total: budget, generation: 0 });
+      return { status: 'completed' };
+    }
+    getSelectedCandidate() { return candidate; }
+    selectCandidate() {}
+    effectiveSettings() { return { ballJointLimitDeg: 180 }; }
+  }
+  const element = await loadUI(StubOptimizer, { now: () => time });
+  await element('runOptimization').handlers.click();
+  assert.equal(element('runPhase').textContent, 'completed');
+  assert.match(element('runBestCandidate').textContent, /#5 · passing/);
+  const output = element('resultOutput').value;
+  assert.ok(output.length > 0);
+  budget = 5000;
+  await element('runOptimization').handlers.click();
+  assert.match(element('optStatus').textContent, /1,000,000/);
+  assert.equal(element('runPhase').textContent, 'completed', 'the dashboard still describes the retained run');
+  assert.equal(element('runPoseWork').textContent, '17 actual / 100 budgeted');
+  assert.equal(element('resultOutput').value, output, 'the retained run stays on screen with its dashboard');
+  assert.equal(element('runOptimization').disabled, false);
+  assert.equal(element('cancelOptimization').disabled, true);
+  budget = 100;
+  await element('runOptimization').handlers.click();
+  assert.equal(element('runPhase').textContent, 'completed');
 });
 
 test('dashboard publishes at most 10 Hz and rejects stale snapshots through all states', () => {

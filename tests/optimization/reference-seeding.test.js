@@ -77,6 +77,26 @@ test('finalizeLayout drops the imported servoRangeDeg so direct operator use exp
   assert.deepEqual(imported.servoRangeDeg, [-137, 113]);
 });
 
+test('generated and evolved candidates export the servo range the run settings record', async () => {
+  const optimizer = new Optimizer({ servo_travel_bounds_deg: [-120, 120] }, { ...runOptions, seed: 11 });
+  const random = optimizer.createRandomLayout();
+  assert.deepEqual(layoutToJSON(random).servo_range, [-120, 120]);
+  assert.deepEqual(layoutToJSON(optimizer.mutateLayout(random)).servo_range, [-120, 120]);
+  assert.deepEqual(layoutToJSON(optimizer.crossoverLayouts(random, optimizer.createRandomLayout())).servo_range, [-120, 120]);
+  assert.deepEqual(random.servoRangeRad, [-120, 120].map(degrees => degrees * Math.PI / 180));
+  await optimizer.run();
+  const exported = JSON.parse(optimizer.exportBest());
+  assert.deepEqual(exported.servo_range, exported.run.effective_settings.servoRangeDeg);
+  assert.deepEqual(exported.servo_range, [-120, 120]);
+  // An imported reference keeps its own degrees; its variations take the run's.
+  const source = layoutToJSON(random);
+  source.servo_range = [-119, 119];
+  const seeded = new Optimizer({ servo_travel_bounds_deg: [-120, 120] }, { ...runOptions, referenceLayout: source });
+  const variation = seeded.mutateLayout(seeded.referenceLayout);
+  assert.deepEqual(layoutToJSON(seeded.referenceLayout).servo_range, [-119, 119]);
+  assert.deepEqual(layoutToJSON(variation).servo_range, [-120, 120]);
+});
+
 test('an exported candidate re-imports as the reference without bounds conflicts', () => {
   // ±105° does not round-trip exactly through radians; ±120 (the sample) happens to round inward.
   for (const bound of [105, 114, 96, 57, 52.5, 28.5, 12, 1.5]) {

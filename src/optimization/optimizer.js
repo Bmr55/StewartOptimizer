@@ -189,7 +189,7 @@ export class Optimizer {
   }
 
   layoutOptions() { return { designSpace: this.designSpace, servoRangeRad: this.servoRangeRad,
-    topology: this.topology, random: this.random }; }
+    servoRangeDeg: this.servoRangeDeg, topology: this.topology, random: this.random }; }
   finalizeLayout(layout) { return finalizeLayout(layout, this.layoutOptions()); }
   mutateLayout(layout) { return mutateLayout(layout, this.layoutOptions()); }
   crossoverLayouts(a, b) { return crossoverLayouts(a, b, this.layoutOptions()); }

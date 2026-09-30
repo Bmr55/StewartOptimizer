@@ -138,12 +138,13 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
         simCandidateSelect.disabled = true;
     }
     function loadCandidate(candidate) {
-        simulatorRun = lastOutcome;
         simCandidateSelect.value = String(candidate.layout.id);
         simulatorController.loadLayout(candidate.layout, {
             source: { kind: 'candidate', candidateId: candidate.layout.id },
             options: simulatorOptions(lastOutcome?.effective_settings ?? currentOptimizer?.effectiveSettings?.(), candidate.layout),
         });
+        // As in loadSimulatorLayout: only after the validating load.
+        simulatorRun = lastOutcome;
         document.getElementById('simDownload').disabled = false;
     }
     const resultsView = createResultsView(document, (candidate) => {
@@ -346,9 +347,14 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
                 ballJointClamp: ballJointClampCheckbox.checked,
                 onProgress: progress => reportProgress(thisRun, progress),
             };
-            currentOptimizer = OptimizerClass === WorkerOptimizer
+            const optimizer = OptimizerClass === WorkerOptimizer
                 ? new WorkerOptimizer(normalized, options, workerFactory ? { workerFactory } : {})
                 : new OptimizerClass(normalized, options);
+            // The pose-budget preflight depends only on the new instance. Run it before
+            // replacing the previous run so a rejected budget leaves the previous results,
+            // candidate list, simulator and dashboard on screen together.
+            const work = optimizer.estimateWork();
+            currentOptimizer = optimizer;
             if (currentOptimizer.topology) document.getElementById('optTopology').value = currentOptimizer.topology;
 
             setResultOutput('');
@@ -358,7 +364,6 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
             clearSimulatorSelection();
             document.getElementById('simDownload').disabled = true;
             resultsView.clear();
-            const work = currentOptimizer.estimateWork();
             dashboard.start(thisRun, { candidates: work.evaluations,
                 generations, poseWork: work.totalPoses });
             const reference = currentOptimizer.referenceDiagnostics;
