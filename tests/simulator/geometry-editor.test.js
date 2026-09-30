@@ -103,8 +103,14 @@ test('mode switching is explicit and controller edits copy candidates, reset, an
   const next = make('circular');
   controller.loadLayout(next, { source: { kind: 'candidate', candidateId: 20 } });
   editor.edit({ type: 'scalar', field: 'rodLength', value: next.rodLength + 1 });
+  controller.setOptions({ conditionLimit: 400 });
   state = editor.reset();
   assert.deepEqual(state.layout, next);
   assert.equal(state.source.candidateId, 20);
+  assert.equal(state.options.conditionLimit, 400);
+  controller.loadLayout(next, { source: { kind: 'candidate', candidateId: 21 } });
+  editor.edit({ type: 'scalar', field: 'rodLength', value: next.rodLength + 2 });
+  state = editor.reset();
+  assert.equal(state.source.candidateId, 21);
   editor.dispose();
 });

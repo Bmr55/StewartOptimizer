@@ -4,7 +4,8 @@ import { topologyGeometry, validateTopology } from '../optimization/topology.js'
 import { TOPOLOGIES } from '../contracts.js';
 
 const copy = value => structuredClone(value);
-const geometryKey = layout => layout == null ? null : JSON.stringify(layout);
+const loadKey = state => state.layout == null ? null
+  : JSON.stringify({ layout: state.layout, source: state.source });
 
 export const PARAMETER_FIELDS = Object.freeze({
   circular: ['base_radius', 'platform_radius', 'base_orientation', 'platform_orientation', 'beta_offset'],
@@ -117,11 +118,11 @@ export function createGeometryEditor(controller) {
   let applying = false;
   const listeners = new Set();
   const unsubscribe = controller.subscribe(state => {
-    const key = geometryKey(state.layout);
+    const key = loadKey(state);
     if (key !== observedKey) {
       observedKey = key;
       if (!applying && state.layout) baseline = {
-        layout: copy(state.layout), source: copy(state.source), options: copy(state.options),
+        layout: copy(state.layout), source: copy(state.source),
       };
     }
     for (const listener of listeners) listener(state);
@@ -143,7 +144,7 @@ export function createGeometryEditor(controller) {
     },
     reset() {
       if (!baseline) throw new Error('No loaded geometry to reset.');
-      return load(copy(baseline.layout), copy(baseline.source), copy(baseline.options));
+      return load(copy(baseline.layout), copy(baseline.source), controller.getState().options);
     },
     getBaseline() { return copy(baseline); },
     subscribe(listener) { listeners.add(listener); listener(controller.getState()); return () => listeners.delete(listener); },

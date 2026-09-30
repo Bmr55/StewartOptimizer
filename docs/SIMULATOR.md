@@ -37,8 +37,9 @@ geometry editor in `#simGeometryControls`. Its editor copies the controller's
 layout before every edit and reloads that copy through `loadLayout`, which
 reevaluates the home pose and publishes fresh diagnostics. A selected optimizer
 candidate becomes an `editable` simulator source carrying its `candidateId`;
-the retained optimizer candidate stays unchanged. Reset restores the geometry,
-source, and evaluator options last loaded from outside the editor.
+the retained optimizer candidate stays unchanged. Reset restores the geometry
+and source last loaded from outside the editor while keeping current evaluator
+options.
 
 Circular, C3 paired, and rectangular paired layouts start in parametric mode.
 Radius, C3 anchor pair gap, rectangular aspect, base/platform turn, and horn
