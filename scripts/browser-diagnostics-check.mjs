@@ -1,7 +1,7 @@
 // Development-only active-simulator diagnostics interaction check.
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { chromium } from 'playwright';
+import { launchBrowser } from './browser-launch.mjs';
 import { startServer } from './serve.mjs';
 import { layoutToJSON } from '../src/io/results.js';
 import { asymmetricJointFixture } from '../tests/fixtures/layout.js';
@@ -9,7 +9,7 @@ import { asymmetricJointFixture } from '../tests/fixtures/layout.js';
 const server = await startServer({ port: 0 });
 let browser;
 try {
-  browser = await chromium.launch({ channel: 'chrome', headless: true });
+  browser = await launchBrowser();
   const page = await browser.newPage({ acceptDownloads: true });
   const pageErrors = [];
   page.on('pageerror', error => pageErrors.push(error.message));

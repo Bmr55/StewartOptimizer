@@ -1,12 +1,12 @@
 // Development-only browser check for active simulator mechanical controls.
 import assert from 'node:assert/strict';
-import { chromium } from 'playwright';
+import { launchBrowser } from './browser-launch.mjs';
 import { startServer } from './serve.mjs';
 
 const server = await startServer({ port: 0 });
 let browser;
 try {
-  browser = await chromium.launch({ channel: 'chrome', headless: true });
+  browser = await launchBrowser();
   const page = await browser.newPage();
   await page.goto(`http://127.0.0.1:${server.address().port}/`);
   await page.evaluate(async () => {

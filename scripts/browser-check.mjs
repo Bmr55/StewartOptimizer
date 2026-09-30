@@ -1,13 +1,13 @@
-// Development-only browser interaction check. Uses installed Chrome via Playwright.
+// Development-only browser interaction check. Launches a browser through scripts/browser-launch.mjs.
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { chromium } from 'playwright';
+import { launchBrowser } from './browser-launch.mjs';
 import { startServer } from './serve.mjs';
 
 const server = await startServer({ port: 0 });
 let browser;
 try {
-  browser = await chromium.launch({ channel: 'chrome', headless: true });
+  browser = await launchBrowser();
   const page = await browser.newPage({ acceptDownloads: true });
   await page.goto(`http://127.0.0.1:${server.address().port}/`);
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write'],

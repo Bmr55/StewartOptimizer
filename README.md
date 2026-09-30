@@ -74,7 +74,7 @@ The root app does not implement PSO/hybrid search or an ML surrogate. Collision 
 | src/math.js | Vectors, rotations, ranges and singular-value estimates |
 | examples/ | Runnable sample requirements |
 | tests/ | Checks grouped by responsibility; UI modules imported into a DOM harness |
-| scripts/ | Local server and complete-sample smoke check |
+| scripts/ | Local server, complete-sample smoke check and the Playwright browser checks with their shared launch helper |
 | docs/ | Current architecture, usage and model references |
 | archive/ | Independent simulator and historical research materials |
 
@@ -84,7 +84,7 @@ The small root JavaScript files preserve original import paths. New code should 
 
 Run `npm test` (or `node --test`). The root tests need no package installation. They exercise requirements, UI overrides, feasibility/export metadata, bounded execution, cancellation, selection, topologies, joint and conditioning models, rigid-body dynamics, adaptive cycle sampling, servo envelopes and ratings, load sharing, compliance, payload support, reference import, CAD export, browser-local saves, the worker protocol, reference numerical outputs, the development server and the shipped legacy bundle API. There is no hosted CI workflow in this repository.
 
-Run `npm run smoke` for a complete default sample: it verifies 72 candidate evaluations, a 92,232-pose budget, completed progress and a valid JSON export. It checks execution rather than requiring a particular coverage score or machine-dependent timing. Run `npm ci && npm run test:browser` for the real browser worker lifecycle check; `npm run test:browser:geometry` and `npm run test:browser:diagnostics` exercise the active simulator in a browser. These three scripts launch Playwright's `chrome` channel, so Google Chrome must be installed on the machine.
+Run `npm run smoke` for a complete default sample: it verifies 72 candidate evaluations, a 92,232-pose budget, completed progress and a valid JSON export. It checks execution rather than requiring a particular coverage score or machine-dependent timing. Run `npm ci && npm run test:browser` for the real browser worker lifecycle check; `npm run test:browser:geometry` and `npm run test:browser:diagnostics` exercise the active simulator in a browser. These three scripts launch Google Chrome through Playwright's `chrome` channel by default and fall back to Playwright's bundled Chromium (`npx playwright install chromium`) when Chrome is not installed; set `PLAYWRIGHT_CHANNEL` to a Playwright channel such as `msedge`, or to `bundled`, to choose the browser explicitly.
 
 The optional `npm run legacy:build` delegates to the archived simulator's build. First install its locked development dependencies with `npm --prefix archive/simulator ci`; the active app has no build step or runtime dependencies.
 
