@@ -47,6 +47,15 @@ test('coincident candidates retain independent chart and keyboard-list access', 
   yAxis.handlers.change();
   assert.equal(chart.options.scales.y.title.text, 'coverage (percent)');
   assert.match(document.getElementById('paretoChart')['aria-label'], /coverage \(percent\)/);
+  const xAxis = document.getElementById('chartXAxis');
+  xAxis.value = 'coverage';
+  xAxis.handlers.change();
+  assert.equal(chart.options.scales.x.title.text, 'coverage (percent)');
+  assert.deepEqual(chart.data.datasets[0].data.map(point => point.x), [a.coverage, b.coverage], 'points follow the X axis metric');
+  assert.match(document.getElementById('paretoChart')['aria-label'], /coverage \(percent\) versus coverage \(percent\)/);
+  xAxis.value = 'torque';
+  xAxis.handlers.change();
+  assert.deepEqual(chart.data.datasets[0].data.map(point => point.x), [a.torque, b.torque]);
   chart.options.onClick(null, [{ datasetIndex: 0, index: 0 }], chart);
   assert.equal(selected, 1);
 
