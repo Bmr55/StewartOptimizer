@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { computeWorkspace } from '../../src/workspace/sweep.js';
 import { haltonPose, estimateWorkspaceSize, normalizeSampling, radicalInverse, workspacePoses } from '../../src/workspace/sampling.js';
-import { jointFixture } from '../fixtures/layout.js';
+import { asymmetricJointFixture } from '../fixtures/layout.js';
 import { resolveMounting } from '../../src/model/mounting.js';
 import { Optimizer } from '../../src/optimization/optimizer.js';
 import { degToRad } from '../../src/math.js';
@@ -30,7 +30,7 @@ test('Halton presets, bounds, fixed axes, and endpoints use a recorded sequence'
 });
 
 test('sampling is deterministic, retains bounded examples, and distinguishes strict coverage', async () => {
-  const layout = jointFixture();
+  const layout = asymmetricJointFixture();
   const mounting = resolveMounting(layout).mounting;
   mounting.lower[0] = { direction: mounting.lower[0].direction.map(value => -value), source: 'supplied' };
   layout.mounting = mounting;

@@ -17,7 +17,7 @@ function close(actual, expected, tolerance = 1e-9) {
   }
 }
 
-test('home-aligned sockets change historical joint coverage but preserve IK and actual rods', async () => {
+test('home-aligned sockets and singularity rejection change coverage while preserving IK and actual rods', async () => {
   const oldFeasible = reference.cases.find(c => c.settings.ballJointLimitDeg === 100);
   const current = evaluatePose(jointFixture(), oldFeasible.pose,
     { ...oldFeasible.settings, recordLegData: true });
@@ -30,8 +30,9 @@ test('home-aligned sockets change historical joint coverage but preserve IK and 
     { ...reference.cases[0].settings, sampling: { strategy: 'grid' } });
   assert.deepEqual(workspace.sampling, { strategy: 'grid' });
   assert.equal(workspace.total, 9);
-  assert.equal(workspace.coverage, 100);
-  assert.equal(workspace.relaxedCoverage, 100);
+  assert.equal(workspace.coverage, 800 / 9);
+  assert.equal(workspace.relaxedCoverage, 800 / 9);
+  assert.equal(workspace.stats.violationCounts.numericalSingularity, 1);
   assert.ok(workspace.stats.ballJointOverallMax < 52 * Math.PI / 180);
   assert.equal(reference.cases[0].expected.coverage, 0);
 });

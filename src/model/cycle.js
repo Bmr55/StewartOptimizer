@@ -27,7 +27,7 @@ function solve(matrix, rhs) {
 export function evaluateCyclePose(layout, pose, velocity, acceleration, mass, options = {}) {
   const result = evaluatePose(layout, pose, { ...options, ballJointClamp: false, recordLegData: true });
   if (!result.reachable) return { valid: false, reason: 'Cycle pose violates a modeled mechanical constraint.',
-    violations: result.violations };
+    violations: result.violations, conditioning: result.conditioning };
   const directions = result.rodVectors.map(vectorNormalize);
   // Each column is a rod's unit force and its moment about the moving origin (meters).
   const columns = directions.map((direction, i) => {
@@ -48,18 +48,21 @@ export function evaluateCyclePose(layout, pose, velocity, acceleration, mass, op
     speed.push(Math.abs(vectorDot(directions[i], velocity) / transmission));
   }
   if (![...torque, ...speed].every(Number.isFinite)) return { valid: false, reason: 'Cycle demand is nonfinite.' };
-  return { valid: true, torque, speed, rodForces, requiredForce, equilibrium };
+  return { valid: true, torque, speed, rodForces, requiredForce, equilibrium,
+    conditioning: result.conditioning };
 }
 
 export function computeCycleDemand(layout, { mass = 0, stroke = 0, frequency = 0, axis = 'z',
   ballJointLimitDeg = 52, lowerBallJointLimitDeg = ballJointLimitDeg,
-  upperBallJointLimitDeg = ballJointLimitDeg, mounting, signal, onPose } = {}) {
+  upperBallJointLimitDeg = ballJointLimitDeg, conditionLimit = null,
+  mounting, signal, onPose } = {}) {
   const axisIndex = ['x', 'y', 'z'].indexOf(axis);
   if (axisIndex < 0) throw new RangeError('Unsupported cycle axis.');
   const amplitude = stroke / 2000;
   const omega = 2 * Math.PI * frequency;
   const samples = frequency > 0 && stroke > 0 ? 64 : 1;
   const torque = new Array(6).fill(0), speed = new Array(6).fill(0);
+  let worstCondition = null, worstReciprocal = null;
   const effectiveMounting = mounting ?? resolveMounting(layout).mounting;
   for (let i = 0; i < samples; i++) {
     signal?.throwIfAborted();
@@ -72,12 +75,19 @@ export function computeCycleDemand(layout, { mass = 0, stroke = 0, frequency = 0
       acceleration[axisIndex] = -omega * omega * displacement;
     }
     const result = evaluateCyclePose(layout, pose, velocity, acceleration, mass, {
-      ballJointLimitDeg, lowerBallJointLimitDeg, upperBallJointLimitDeg, mounting: effectiveMounting,
+      ballJointLimitDeg, lowerBallJointLimitDeg, upperBallJointLimitDeg,
+      conditionLimit, mounting: effectiveMounting,
     });
     onPose?.();
     if (!result.valid) return { valid: false, axis, samples, failedSample: i,
       failedPose: pose, reason: result.reason, violations: result.violations ?? [],
+      conditioning: { worstCondition, worstReciprocal, failedPose: result.conditioning ?? null,
+        conditionLimit },
       torqueNm: null, speedRadPerSec: null };
+    const current = result.conditioning;
+    worstCondition = worstCondition == null ? current.condition : Math.max(worstCondition, current.condition);
+    worstReciprocal = worstReciprocal == null ? current.reciprocal
+      : Math.min(worstReciprocal, current.reciprocal);
     for (let leg = 0; leg < 6; leg++) {
       torque[leg] = Math.max(torque[leg], result.torque[leg]);
       speed[leg] = Math.max(speed[leg], result.speed[leg]);
@@ -85,5 +95,6 @@ export function computeCycleDemand(layout, { mass = 0, stroke = 0, frequency = 0
   }
   return { valid: true, axis, samples, torqueNm: Math.max(...torque), speedRadPerSec: Math.max(...speed),
     perServoTorqueNm: torque, perServoSpeedRadPerSec: speed,
+    conditioning: { worstCondition, worstReciprocal, conditionLimit },
     model: '64-phase rigid-rod force balance; centered point payload; gravity along -Z; actuator, platform and rod inertia/friction omitted' };
 }

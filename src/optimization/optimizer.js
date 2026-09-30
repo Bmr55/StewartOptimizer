@@ -8,6 +8,7 @@ import { selectBest, exportResult } from '../io/results.js';
 import { DEFAULT_TOPOLOGY, TOPOLOGIES } from '../contracts.js';
 import { normalizeSampling } from '../workspace/sampling.js';
 import { createRandom, normalizeSeed, RANDOM_ALGORITHM } from './random.js';
+import { validateConditionLimit } from '../model/conditioning.js';
 
 // Owns run state and population lifecycle. Numerical work and browser I/O live elsewhere.
 export class Optimizer {
@@ -24,6 +25,7 @@ export class Optimizer {
     ballJointLimitDeg,
     lowerBallJointLimitDeg,
     upperBallJointLimitDeg,
+    conditionLimit = null,
     ballJointClamp = false,
     onProgress,
   } = {}) {
@@ -46,6 +48,7 @@ export class Optimizer {
     this.ballJointLimitDeg = ballJointLimitDeg ?? requirements.ball_joint_max_deg ?? 52;
     this.lowerBallJointLimitDeg = lowerBallJointLimitDeg ?? this.ballJointLimitDeg;
     this.upperBallJointLimitDeg = upperBallJointLimitDeg ?? this.ballJointLimitDeg;
+    this.conditionLimit = validateConditionLimit(conditionLimit);
     this.ballJointClamp = ballJointClamp;
     this.payload = requirements.mass_kg ?? 0;
     this.stroke = requirements.cycle_mm ?? 0;
@@ -105,6 +108,7 @@ export class Optimizer {
       ballJointLimitDeg: this.ballJointLimitDeg,
       lowerBallJointLimitDeg: this.lowerBallJointLimitDeg,
       upperBallJointLimitDeg: this.upperBallJointLimitDeg,
+      conditionLimit: this.conditionLimit,
       ballJointClamp: this.ballJointClamp,
       servoRangeRad: this.servoRangeRad, sampling: this.sampling };
   }
@@ -211,6 +215,7 @@ export class Optimizer {
       ballJointLimitDeg: this.ballJointLimitDeg,
       lowerBallJointLimitDeg: this.lowerBallJointLimitDeg,
       upperBallJointLimitDeg: this.upperBallJointLimitDeg,
+      conditionLimit: this.conditionLimit,
       ballJointClamp: this.ballJointClamp,
       servoRangeDeg: this.servoRangeDeg,
       objectiveSet: ['coverage', 'relaxedCoverage', 'dexterity', 'stiffness', 'loadBalance',
@@ -310,6 +315,7 @@ export class Optimizer {
         populationSize: this.populationSize, generations: this.generations,
         mutationRate: this.mutationRate, designSpace: this.designSpace,
         ballJointLimitDeg: this.ballJointLimitDeg, ballJointClamp: this.ballJointClamp,
+        conditionLimit: this.conditionLimit,
       },
     }), null, 2);
   }

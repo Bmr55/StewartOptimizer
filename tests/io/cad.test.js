@@ -12,13 +12,15 @@ function evaluatedFixture() {
   layout.platformAnchors[0][0] += 5;
   layout.baseAnchors[2][1] -= 3;
   const homePose = evaluatePose(layout, {}, { ballJointLimitDeg: 180, recordLegData: true });
-  assert.equal(homePose.reachable, true);
+  assert.equal(homePose.geometricallyReachable, true);
   return { layout, homePose, feasibility: { passing: false, homePoseSatisfied: true,
     sampledWorkspaceSatisfied: false, cycleSatisfied: true, failedCategories: ['workspace'] } };
 }
 
 test('CAD skeleton uses solved asymmetric home geometry and retains diagnostic identity', () => {
   const evaluation = evaluatedFixture();
+  assert.equal(evaluation.homePose.reachable, false);
+  assert.equal(canExportCad(evaluation), true);
   const skeleton = buildConstructionSkeleton(evaluation, { id: 'run-4', effective_settings: { seed: 1 } });
   assert.equal(skeleton.candidateId, 17);
   assert.equal(skeleton.diagnostic, true);
