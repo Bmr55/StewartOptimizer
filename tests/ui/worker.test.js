@@ -5,7 +5,7 @@ import { WorkerOptimizer, WorkerStartupError } from '../../src/ui/worker-optimiz
 import { createWorkerRuntime } from '../../src/ui/worker-runtime.js';
 import { optionsFromEffectiveSettings, progressSnapshot } from '../../src/ui/worker-protocol.js';
 import { parseRequirements } from '../../src/model/requirements.js';
-import { layoutToJSON } from '../../src/io/results.js';
+import { layoutToJSON, selectBest } from '../../src/io/results.js';
 import { jointFixture } from '../fixtures/layout.js';
 import { sampleText, loadUI } from './helpers.js';
 
@@ -35,7 +35,14 @@ function connectedWorker() {
   return { workerFactory, workers };
 }
 
-test('worker and headless paths replay the same seed, population, and selected export', async () => {
+// A complete passing population whose ids are 1..size, for driving the fake worker.
+function population(size = 4) {
+  return Array.from({ length: size }, (_, i) => ({ layout: { ...jointFixture(), id: i + 1 },
+    coverage: 100, torque: 1, speedDemand: 1, conditioningQuality: 0.5,
+    feasibility: { passing: true, failedCategories: [] } }));
+}
+
+test('worker and headless paths replay one seed identically: same population and selected export', async () => {
   const { normalized, workspace } = parseRequirements(sampleText);
   const options = { populationSize: 4, generations: 1, ranges: workspace,
     sampling: { strategy: 'halton', sampleCount: 256 }, seed: 713 };
@@ -425,4 +432,82 @@ test('the UI recovers from a malformed worker result: Run is enabled again and t
   assert.equal(element('runOptimization').disabled, false);
   assert.equal(element('cancelOptimization').disabled, true);
   assert.equal(worker.terminated, true);
+});
+
+test('a checkpoint selects the ranked best candidate, not the first one in the population', async () => {
+  const { opt, pending, runId, reply } = idleWorker();
+  const fitness = population();
+  // The first candidate scores best numerically but is diagnostic; candidate 3
+  // has the lowest passing torque and is the ranked best.
+  fitness[0].feasibility = { passing: false, failedCategories: ['cycle'] };
+  fitness[0].torque = 0.01;
+  fitness[1].torque = 5;
+  fitness[2].torque = 2;
+  fitness[3].torque = 3;
+  reply({ type: 'started', runId });
+  reply({ type: 'checkpoint', runId, snapshot: { generation: 0, completedCandidates: 4, fitness, paretoIds: [1, 3] } });
+  assert.equal(selectBest(opt.pareto, opt.fitness).layout.id, 3);
+  assert.equal(opt.selectedCandidateId, 3);
+  assert.equal(opt.getSelectedCandidate().layout.id, 3);
+  assert.deepEqual(opt.pareto.map(candidate => candidate.layout.id), [1, 3]);
+  reply({ type: 'result', runId, outcome: { status: 'completed' },
+    snapshot: { generation: 0, completedCandidates: 4, fitness, paretoIds: [1, 3] } });
+  assert.equal((await pending).status, 'completed');
+  assert.equal(opt.getSelectedCandidate().layout.id, 3);
+  assert.equal(JSON.parse(opt.exportBest()).id, 3);
+});
+
+test('a checkpoint applies its completed count and an oversize population is rejected', async () => {
+  const { opt, pending, runId, reply } = idleWorker();
+  reply({ type: 'started', runId });
+  reply({ type: 'checkpoint', runId, snapshot: { generation: 0, completedCandidates: 4, fitness: population(), paretoIds: [1] } });
+  assert.equal(opt.completedEvaluations, 4);
+  assert.equal(opt.generation, 0);
+  // Five candidates for a population of four is a corrupt reply, not a newer checkpoint.
+  reply({ type: 'checkpoint', runId, snapshot: { generation: 1, completedCandidates: 9, fitness: population(5), paretoIds: [5] } });
+  assert.equal(opt.fitness.length, 4);
+  assert.deepEqual(opt.fitness.map(candidate => candidate.layout.id), [1, 2, 3, 4]);
+  assert.equal(opt.generation, 0);
+  assert.equal(opt.completedEvaluations, 4);
+  assert.equal(opt.pareto[0].layout.id, 1);
+  const summary = { elapsedMs: 40, completedCandidates: 4, totalCandidates: 8, generation: 0, frontSize: 1,
+    bestCandidate: null, actualCompletedPoseWork: 40, budgetedPoseWork: 80, etaMs: null, etaApproximate: false };
+  reply({ type: 'error', runId, phase: 'runtime', message: 'crash', summary });
+  const outcome = await pending;
+  assert.equal(outcome.status, 'failed');
+  assert.equal(outcome.completedEvaluations, 4);
+  assert.equal(outcome.completedGenerations, 0);
+  assert.deepEqual(opt.lastProgress, summary);
+});
+
+test('progress before started is ignored, then reports pose work as completed/total and the result summary is kept', async () => {
+  const { opt, pending, runId, reply } = idleWorker();
+  const received = [];
+  opt.onProgress = progress => received.push(progress);
+  const early = { elapsedMs: 5, completedCandidates: 1, totalCandidates: 8, generation: 0, frontSize: 0,
+    bestCandidate: null, actualCompletedPoseWork: 10, budgetedPoseWork: 100, etaMs: null, etaApproximate: false };
+  reply({ type: 'progress', runId, snapshot: early });
+  assert.equal(opt.lastProgress, null);
+  assert.deepEqual(received, []);
+  reply({ type: 'started', runId });
+  const snapshot = { ...early, elapsedMs: 50, completedCandidates: 3, actualCompletedPoseWork: 30 };
+  reply({ type: 'progress', runId, snapshot });
+  assert.deepEqual(opt.lastProgress, snapshot);
+  assert.equal(received.length, 1);
+  assert.equal(received[0].completed, 30);
+  assert.equal(received[0].total, 100);
+  assert.deepEqual(received[0], { ...snapshot, completed: 30, total: 100 });
+  const summary = { ...snapshot, elapsedMs: 120, completedCandidates: 8, actualCompletedPoseWork: 100 };
+  reply({ type: 'result', runId, outcome: { status: 'completed' },
+    snapshot: { generation: 1, completedCandidates: 8, fitness: population(), paretoIds: [1] }, summary });
+  assert.equal((await pending).status, 'completed');
+  assert.deepEqual(opt.lastProgress, summary);
+  assert.equal(opt.completedEvaluations, 8);
+  assert.equal(received.length, 1);
+});
+
+test('the worker startup timeout defaults to 5 seconds', () => {
+  const opt = new WorkerOptimizer({}, { populationSize: 4, generations: 1 });
+  assert.equal(opt.startupTimeoutMs, 5000);
+  assert.equal(new WorkerOptimizer({}, { populationSize: 4, generations: 1 }, { startupTimeoutMs: 5 }).startupTimeoutMs, 5);
 });

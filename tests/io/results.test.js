@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Optimizer } from '../../src/optimization/optimizer.js';
-import { displayResult, selectBest } from '../../src/io/results.js';
+import { displayResult, exportResult, failureCategories, isPassing, selectBest } from '../../src/io/results.js';
 import { loadUI } from '../ui/helpers.js';
-import { asymmetricJointFixture } from '../fixtures/layout.js';
+import { asymmetricJointFixture, jointFixture } from '../fixtures/layout.js';
 
 test('headless export and display retain their documented fields and partial status', async () => {
   const opt = new Optimizer({}, {ballJointLimitDeg:100});
@@ -48,4 +48,44 @@ test('display and download JSON share one degree conversion for servo_range', as
   opt.fitness = [result];
   const exported = JSON.parse(opt.exportBest());
   assert.deepEqual(displayResult(result).layout.servo_range, exported.servo_range);
+});
+
+test('display and export metrics drop non-finite values and conditioning omits jacobianRows', () => {
+  const evaluation = { layout: { ...jointFixture(), id: 3 }, coverage: NaN, torque: Infinity, speedDemand: 2,
+    conditioningQuality: -Infinity, feasibility: { passing: true, failedCategories: [] },
+    conditioning: { home: { conditionNumber: 4, jacobianRows: [[1, 0, 0, 0, 0, 0]] }, worst: { conditionNumber: 9 } } };
+  const display = displayResult(evaluation);
+  // Checked before any JSON round trip: JSON.stringify would hide Infinity as null.
+  assert.equal(display.metrics.coverage, null);
+  assert.equal(display.metrics.torque, null);
+  assert.equal(display.metrics.conditioningQuality, null);
+  assert.equal(display.metrics.speedDemand, 2);
+  assert.equal(display.metrics.dexterity, null);
+  assert.equal('jacobianRows' in display.conditioning.home, false);
+  assert.equal(display.conditioning.home.conditionNumber, 4);
+  assert.equal(display.conditioning.worst.conditionNumber, 9);
+  assert.equal(evaluation.conditioning.home.jacobianRows.length, 1, 'the evaluation itself was modified');
+  const exported = exportResult(evaluation, { status: 'completed' });
+  assert.equal(exported.metadata.coverage, null);
+  assert.equal(exported.metadata.torque, null);
+  assert.equal(exported.metadata.speed_demand, 2);
+  assert.equal('jacobianRows' in exported.conditioning.home, false);
+  assert.equal(exported.conditioning.home.conditionNumber, 4);
+  assert.equal(displayResult({ ...evaluation, conditioning: undefined }).conditioning, null);
+});
+
+test('an explicit passing: false and cycle.valid === false are failures without any other flag', () => {
+  const layout = { ...jointFixture(), id: 1 };
+  const explicit = { layout, feasibility: { passing: false, failedCategories: [] } };
+  assert.deepEqual(failureCategories(explicit), []);
+  assert.equal(isPassing(explicit), false);
+  assert.equal(displayResult(explicit).diagnostic, true);
+  assert.equal(displayResult(explicit).feasibility.passing, false);
+  const invalidCycle = { layout, feasibility: { passing: true }, cycle: { valid: false } };
+  assert.deepEqual(failureCategories(invalidCycle), ['cycle']);
+  assert.equal(isPassing(invalidCycle), false);
+  assert.deepEqual(displayResult(invalidCycle).feasibility.failedCategories, ['cycle']);
+  assert.equal(exportResult(invalidCycle, {}).diagnostic, true);
+  assert.equal(isPassing({ layout, feasibility: { passing: true }, cycle: { valid: true } }), true);
+  assert.equal(isPassing({ layout, feasibility: {} }), true);
 });

@@ -13,6 +13,20 @@ test('non-dominated sorting keeps tradeoffs and ranks invalid objectives last', 
   assert.deepEqual(selectFromFronts(evaluations, fronts, 2), [evaluations[0], evaluations[2]]);
 });
 
+test('a front with one constant objective keeps finite crowding and front-order survivors', () => {
+  // Coverage 100 across every passing candidate is the common case: the third
+  // objective is constant on the first front and must not divide by zero.
+  const evaluations = [[1, 3, 100], [2, 2, 100], [3, 1, 100], [1, 1, 100]].map(objectives => ({ objectives }));
+  const fronts = fastNonDominatedSort(evaluations);
+  assert.deepEqual(fronts, [[0, 1, 2], [3]]);
+  assignCrowdingDistance(fronts, evaluations);
+  assert.deepEqual(evaluations.map(e => e.crowding), [Infinity, 2, Infinity, Infinity]);
+  assert.ok(evaluations.every(e => !Number.isNaN(e.crowding)));
+  assert.deepEqual(selectFromFronts(evaluations, fronts, 2), [evaluations[0], evaluations[2]]);
+  assert.deepEqual(selectFromFronts(evaluations, fronts, 3), [evaluations[0], evaluations[1], evaluations[2]]);
+  assert.deepEqual(selectFromFronts(evaluations, fronts, 4), evaluations);
+});
+
 test('tournament prefers rank, then crowding, then breaks a tie', t => {
   let draws = [];
   t.mock.method(Math, 'random', () => draws.shift());

@@ -59,7 +59,7 @@ test('search defaults, mutation boundaries, and old objective snapshots are expl
   assert.equal(objectiveDefinitions(legacy).length, 10);
 });
 
-test('effective objective settings and zero mutation replay from saved JSON', () => {
+test('effective objective settings and zero mutation replay identically from saved JSON', () => {
   const optimizer = new Optimizer({}, { populationSize: 4, generations: 1,
     objectiveSet: 'full', mutationRate: 0, seed: 57 });
   const settings = optimizer.effectiveSettings();
