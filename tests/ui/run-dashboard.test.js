@@ -29,6 +29,11 @@ test('controlled elapsed/candidate observations warm ETA only after three comple
   }
   assert.equal(estimateRemainingMs(900, 3, 2), null);
   assert.equal(formatDuration(NaN), 'Unavailable');
+  assert.equal(formatDuration(59940), '59.9 s');
+  assert.equal(formatDuration(59960), '1m 0s');
+  assert.equal(formatDuration(90000), '1m 30s');
+  assert.equal(formatDuration(119600), '2m 0s');
+  assert.equal(formatDuration(3599600), '60m 0s');
 });
 
 test('snapshot uses actual work, a bounded best summary, and completed population selection', () => {
