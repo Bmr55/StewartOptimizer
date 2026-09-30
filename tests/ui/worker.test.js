@@ -5,6 +5,8 @@ import { WorkerOptimizer, WorkerStartupError } from '../../src/ui/worker-optimiz
 import { createWorkerRuntime } from '../../src/ui/worker-runtime.js';
 import { optionsFromEffectiveSettings, progressSnapshot } from '../../src/ui/worker-protocol.js';
 import { parseRequirements } from '../../src/model/requirements.js';
+import { layoutToJSON } from '../../src/io/results.js';
+import { jointFixture } from '../fixtures/layout.js';
 import { sampleText, loadUI } from './helpers.js';
 
 function connectedWorker() {
@@ -38,6 +40,27 @@ test('worker and headless paths replay the same seed, population, and selected e
   assert.deepEqual(JSON.parse(browser.exportBest()), JSON.parse(headless.exportBest()));
   assert.equal(workers.length, 1);
   assert.equal(workers[0].terminated, true);
+});
+
+test('imported asymmetric reference and condition limit replay across worker and headless paths', async () => {
+  const { normalized, workspace } = parseRequirements(sampleText);
+  const reference = layoutToJSON(jointFixture());
+  reference.topology = undefined;
+  reference.topology_parameters = undefined;
+  reference.base_anchors[0][0] += 8;
+  reference.mounting = undefined;
+  const options = { populationSize: 4, generations: 1, ranges: workspace,
+    sampling: { strategy: 'halton', sampleCount: 256 }, seed: 81,
+    referenceLayout: reference, conditionLimit: 500 };
+  const headless = new Optimizer(normalized, options);
+  const { workerFactory } = connectedWorker();
+  const browser = new WorkerOptimizer(normalized, options, { workerFactory });
+  assert.equal((await headless.start()).status, 'completed');
+  assert.equal((await browser.start()).status, 'completed');
+  assert.deepEqual(browser.fitness, headless.fitness);
+  assert.deepEqual(browser.pareto, headless.pareto);
+  assert.deepEqual(JSON.parse(browser.exportBest()), JSON.parse(headless.exportBest()));
+  assert.equal(browser.fitness.some(candidate => candidate.layout.seedOrigin === 'reference'), true);
 });
 
 test('worker adapter rejects stale run messages and keeps only complete-population checkpoints', async () => {
