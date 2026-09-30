@@ -51,3 +51,30 @@ test('explicit joint option takes precedence, including zero', () => {
   assert.equal(new Optimizer({ ball_joint_max_deg: 52 }, { ballJointLimitDeg: 0 }).ballJointLimitDeg, 0);
   assert.equal(new Optimizer({ ball_joint_max_deg: 52 }).ballJointLimitDeg, 52);
 });
+
+test('UI passes sampling presets, grid, seed reuse, and Randomize to core', async () => {
+  const captured = [];
+  class StubOptimizer {
+    constructor(_requirements, options) { captured.push(options); this.pareto = []; this.fitness = []; }
+    estimateWork() { return { totalPoses: 8 }; }
+    start() { return Promise.resolve({ status: 'completed' }); }
+  }
+  const random = { getRandomValues(values) { values[0] = 71; return values; } };
+  const element = await loadUI(StubOptimizer, { window: { crypto: random, addEventListener() {} } });
+  assert.equal(element('optSeed').value || '1', '1');
+  for (const count of [256, 1024, 4096]) {
+    element('optSampling').value = String(count);
+    await element('runOptimization').handlers.click();
+    assert.deepEqual(captured.at(-1).sampling, { strategy: 'halton', sampleCount: count });
+    assert.equal(captured.at(-1).seed, 1);
+  }
+  element('optSampling').value = 'grid';
+  await element('runOptimization').handlers.click();
+  assert.deepEqual(captured.at(-1).sampling, { strategy: 'grid' });
+  element('randomizeSeed').handlers.click();
+  assert.equal(element('optSeed').value, '71');
+  await element('runOptimization').handlers.click();
+  assert.equal(captured.at(-1).seed, 71);
+  await element('runOptimization').handlers.click();
+  assert.equal(captured.at(-1).seed, 71);
+});

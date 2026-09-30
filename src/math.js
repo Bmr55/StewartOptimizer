@@ -191,11 +191,11 @@ export function singularValues(matrix) {
   return eigenvalues.map((val) => Math.sqrt(Math.max(0, val)));
 }
 
-export function randomNormal() {
+export function randomNormal(random = Math.random) {
   let u = 0;
   let v = 0;
-  while (u === 0) u = Math.random();
-  while (v === 0) v = Math.random();
+  while (u === 0) u = random();
+  while (v === 0) v = random();
   return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
 }
 

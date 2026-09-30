@@ -1,4 +1,7 @@
 // Keep defaults separate from input values so explicit user edits survive JSON changes.
+import { normalizeSeed } from '../optimization/random.js';
+import { SAMPLE_PRESETS } from '../workspace/sampling.js';
+
 export function createControls(document) {
     const ballJointLimitInput = document.getElementById('ballJointLimit');
     let lastWorkspaceDefaults = null;
@@ -87,5 +90,28 @@ export function createControls(document) {
         };
     }
 
-        return { populateRequirementsDefaults, readWorkspaceRanges, readHomeHeightBounds };
+    function readSamplingSettings() {
+        const selected = document.getElementById('optSampling').value || '1024';
+        const seedText = document.getElementById('optSeed').value.trim() || '1';
+        const seed = normalizeSeed(Number(seedText));
+        if (selected === 'grid') return { seed, sampling: { strategy: 'grid' } };
+        const sampleCount = Number(selected);
+        if (!SAMPLE_PRESETS.includes(sampleCount)) throw new RangeError('Choose a supported sampling preset.');
+        return { seed, sampling: { strategy: 'halton', sampleCount } };
+    }
+
+    function randomizeSeed(crypto = globalThis.crypto) {
+        if (!crypto?.getRandomValues) throw new Error('Secure randomization is unavailable in this browser. Enter a seed manually.');
+        const input = document.getElementById('optSeed');
+        const previous = Number(input.value.trim() || '1');
+        const value = new Uint32Array(1);
+        crypto.getRandomValues(value);
+        let next = value[0] || 1;
+        if (next === previous) next = next === 0xffffffff ? 1 : next + 1;
+        input.value = next;
+        return next;
+    }
+
+    return { populateRequirementsDefaults, readWorkspaceRanges, readHomeHeightBounds,
+        readSamplingSettings, randomizeSeed };
 }
