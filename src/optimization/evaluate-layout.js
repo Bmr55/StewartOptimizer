@@ -7,6 +7,7 @@ import { computeWorkspace } from '../workspace/sweep.js';
 import { failureCategories } from '../io/results.js';
 import { MODEL_VERSION } from '../contracts.js';
 import { clamp, degToRad } from '../math.js';
+import { objectiveValues } from './objectives.js';
 
 export async function evaluateLayout(layout, options) {
   const { ranges, signal, onProgress, payload, stroke, frequency, ballJointLimitDeg, ballJointClamp,
@@ -65,18 +66,9 @@ export async function evaluateLayout(layout, options) {
   const violationMargin = 1 - (stats.violationRate ?? 0);
   const limitMargin = clamp(Math.max(ballMarginRaw, 0) * Math.max(violationMargin, 0), 0, 1);
   const fatigue = computeFatigue(stats, options);
-  const objectives = [
-    coverage,
-    ballJointClamp ? relaxedCoverage : coverage,
-    dexterity ?? -Infinity,
-    stiffnessScore ?? -Infinity,
-    loadBalance,
-    isotropy,
-    limitMargin,
-    cycle.valid ? -torque : -Infinity,
-    cycle.valid ? -speedDemand : -Infinity,
-    -fatigue,
-  ];
+  const objectives = objectiveValues({ coverage, relaxedCoverage,
+    conditioningQuality: availableQuality, dexterity, stiffness: stiffnessScore,
+    loadBalance, isotropy, limitMargin, torque, speedDemand, fatigue }, options.objectiveSet);
 
   const feasibility = {
     cycleSatisfied: cycle.valid,

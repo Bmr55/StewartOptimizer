@@ -1,5 +1,5 @@
 import { validatePhysicalRequirements } from '../model/requirements.js';
-import { clamp, degToRad } from '../math.js';
+import { degToRad } from '../math.js';
 import { DEFAULT_DESIGN_SPACE, cloneLayout, createRandomLayout, finalizeLayout, mutateLayout, crossoverLayouts, validateDesignSpace } from './layout-operators.js';
 import { dominates, fastNonDominatedSort, assignCrowdingDistance, tournamentSelect, selectFromFronts } from './nsga2.js';
 import { evaluateLayout, evaluateCycle, computeFatigue } from './evaluate-layout.js';
@@ -13,6 +13,7 @@ import { importLayout } from '../io/layout-import.js';
 import { evaluatePose } from '../model/pose.js';
 import { initialPopulation, referenceBoundsConflicts, seedComposition } from './reference-seeding.js';
 import { normalizeServoRatings } from '../model/servo-ratings.js';
+import { normalizeObjectiveSet, objectiveDefinitions } from './objectives.js';
 
 // Owns run state and population lifecycle. Numerical work and browser I/O live elsewhere.
 export class Optimizer {
@@ -40,6 +41,7 @@ export class Optimizer {
     sampling = { strategy: 'halton' },
     seed = 1,
     mutationRate = 0.35,
+    objectiveSet = 'compact',
     designSpace = {},
     topology = DEFAULT_TOPOLOGY,
     referenceLayout = null,
@@ -67,7 +69,11 @@ export class Optimizer {
     this.sampling = normalizeSampling(sampling.strategy === 'halton'
       ? { ...sampling, sequenceStart: sampling.sequenceStart ?? this.seed } : sampling);
     this.random = createRandom(this.seed);
-    this.mutationRate = clamp(mutationRate, 0, 1);
+    if (!Number.isFinite(mutationRate) || mutationRate < 0 || mutationRate > 1) {
+      throw new RangeError('mutationRate must be a finite probability in [0, 1].');
+    }
+    this.mutationRate = mutationRate;
+    this.objectiveSet = normalizeObjectiveSet(objectiveSet);
     const imported = referenceLayout == null ? null : importLayout(referenceLayout);
     this.referenceLayout = imported?.layout ?? null;
     this.referenceSourceRun = imported?.sourceRun ?? null;
@@ -165,7 +171,7 @@ export class Optimizer {
       conditionLimit: this.conditionLimit,
       ballJointClamp: this.ballJointClamp,
       servoRangeRad: this.servoRangeRad, sampling: this.sampling,
-      servoRatings: this.servoRatings };
+      servoRatings: this.servoRatings, objectiveSet: this.objectiveSet };
   }
 
   evaluateLayout(layout) {
@@ -303,8 +309,8 @@ export class Optimizer {
       servoRatings: this.servoRatingsInput,
       effectiveServoRatings: this.servoRatings,
       servoRatingPolicy: this.servoRatings.policy,
-      objectiveSet: ['coverage', 'relaxedCoverage', 'dexterity', 'stiffness', 'loadBalance',
-        'isotropy', 'limitMargin', 'torque', 'speedDemand', 'fatigue'],
+      objectiveSet: this.objectiveSet,
+      objectiveDefinitions: objectiveDefinitions(this.objectiveSet),
       reference_layout: this.referenceLayout ? layoutToJSON(this.referenceLayout) : null,
       seed_composition: this.referenceLayout ? seedComposition(this.populationSize) : null,
     }));
