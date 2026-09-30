@@ -324,3 +324,39 @@ button.primary:hover {
     stroke: white;
     stroke-width: 3px;
 }
+
+#simGeometryControls {
+    display: grid;
+    gap: 10px;
+    min-width: 0;
+}
+
+.sim-geometry-note {
+    margin: 0;
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.sim-geometry-row {
+    display: grid;
+    gap: 5px;
+    font-size: 13px;
+}
+
+.sim-geometry-inputs {
+    display: grid;
+    grid-template-columns: minmax(90px, 1fr) 92px;
+    align-items: center;
+    gap: 8px;
+}
+
+.sim-geometry-row input[type="number"] {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.sim-anchor-row {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(90px, 1fr));
+    gap: 7px;
+}
