@@ -14,7 +14,7 @@ const positive = (value, name) => {
 };
 
 const vector3 = (value, name) => {
-  if (value == null) return [0, 0, 0];
+  if (value === undefined) return [0, 0, 0];
   if (!Array.isArray(value) || value.length !== 3 || !value.every(Number.isFinite)) {
     throw new RangeError(`${name} must be three finite numbers.`);
   }
@@ -37,19 +37,19 @@ export function normalizeStiffnessModel(input) {
   } else {
     servoStiffness = new Array(6).fill(positive(servo, name('servo_torsional_stiffness_nm_per_rad')));
   }
-  const rodSources = ['rod_axial_stiffness_n_per_m', 'rod_material', 'rods'].filter(key => input[key] != null);
+  const rodSources = ['rod_axial_stiffness_n_per_m', 'rod_material', 'rods'].filter(key => input[key] !== undefined);
   if (rodSources.length !== 1) {
     throw new RangeError('stiffness_model needs exactly one of rod_axial_stiffness_n_per_m, rod_material, or rods: "rigid".');
   }
   let rod;
-  if (input.rods != null) {
+  if (input.rods !== undefined) {
     if (input.rods !== 'rigid') throw new RangeError(`${name('rods')} must be "rigid".`);
     rod = { kind: 'rigid' };
-  } else if (input.rod_axial_stiffness_n_per_m != null) {
+  } else if (input.rod_axial_stiffness_n_per_m !== undefined) {
     rod = { kind: 'supplied', stiffnessNPerM: positive(input.rod_axial_stiffness_n_per_m, name('rod_axial_stiffness_n_per_m')) };
   } else {
     const material = input.rod_material;
-    if (typeof material !== 'object' || Array.isArray(material)) throw new TypeError(`${name('rod_material')} must be an object.`);
+    if (!material || typeof material !== 'object' || Array.isArray(material)) throw new TypeError(`${name('rod_material')} must be an object.`);
     const modulusPa = positive(material.youngs_modulus_gpa, name('rod_material.youngs_modulus_gpa')) * 1e9;
     if ((material.area_mm2 == null) === (material.diameter_mm == null)) {
       throw new RangeError(`${name('rod_material')} needs exactly one of area_mm2 or diameter_mm.`);
@@ -59,16 +59,17 @@ export function normalizeStiffnessModel(input) {
     rod = { kind: 'material', modulusPa, areaM2 };
   }
   const length = input.characteristic_length_mm;
-  const characteristicLengthM = length == null ? null : positive(length, name('characteristic_length_mm')) / 1000;
-  const wrenches = input.test_wrenches ?? [];
+  const characteristicLengthM = length === undefined ? null : positive(length, name('characteristic_length_mm')) / 1000;
+  const wrenches = input.test_wrenches === undefined ? [] : input.test_wrenches;
   if (!Array.isArray(wrenches)) throw new TypeError(`${name('test_wrenches')} must be an array.`);
   const testWrenches = wrenches.map((wrench, i) => {
     if (!wrench || typeof wrench !== 'object') throw new TypeError(`${name('test_wrenches')}[${i}] must be an object.`);
+    if (wrench.name === null) throw new TypeError(`${name('test_wrenches')}[${i}].name must not be null.`);
     return { name: String(wrench.name ?? `wrench ${i + 1}`),
       forceN: vector3(wrench.force_n, `${name('test_wrenches')}[${i}].force_n`),
       momentNm: vector3(wrench.moment_nm, `${name('test_wrenches')}[${i}].moment_nm`) };
   });
-  const useAsObjective = input.use_as_objective ?? false;
+  const useAsObjective = input.use_as_objective === undefined ? false : input.use_as_objective;
   if (typeof useAsObjective !== 'boolean') throw new TypeError(`${name('use_as_objective')} must be a boolean.`);
   return { servoStiffnessNmPerRad: servoStiffness, rod, characteristicLengthM, testWrenches, useAsObjective };
 }

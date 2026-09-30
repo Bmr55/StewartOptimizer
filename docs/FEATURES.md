@@ -46,7 +46,7 @@ Feature areas:
 
 ## 1. Requirements input
 
-The Requirements textarea accepts a JSON document that is either flat or grouped into `payload`, `workspace`, `rotations` and optional `constraints`. The bundled sample (`examples/sample-requirements.json`) loads automatically at startup and again from **Load Sample Requirements**; loading the sample resets every derived control (range rows, ball-joint limit, home-height bounds, servo rating fields). **Clear** empties the requirements and discards the current optimizer, results, simulator layout and dashboard.
+The Requirements textarea accepts a JSON document that is either flat or grouped into `payload`, `workspace`, `rotations` and optional `constraints`; in the grouped form, constraint keys left at the top level are merged into `constraints`, and a key present in both places is an error. The bundled sample (`examples/sample-requirements.json`) loads automatically at startup and again from **Load Sample Requirements**; loading the sample resets every derived control (range rows, ball-joint limit, home-height bounds, servo rating fields). **Clear** empties the requirements and discards the current optimizer, results, simulator layout and dashboard.
 
 A collapsible **Requirements reference** panel inside the page repeats the field table from [REQUIREMENTS.md](./REQUIREMENTS.md). The two copies are maintained by hand.
 

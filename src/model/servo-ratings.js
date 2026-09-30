@@ -44,12 +44,12 @@ function normalizeCurve(input, field) {
     if (!Number.isFinite(value) || value < 0) throw new RangeError(`${field}.${name} must be finite and >= 0.`);
   });
   checkTorques(torques, 'torque_nm');
-  const quadrants = input.quadrants ?? 'symmetric';
+  const quadrants = input.quadrants === undefined ? 'symmetric' : input.quadrants;
   if (!['symmetric', 'motoring-braking'].includes(quadrants)) {
     throw new RangeError(`${field}.quadrants must be symmetric or motoring-braking.`);
   }
   let braking = null;
-  if (input.braking_torque_nm != null) {
+  if (input.braking_torque_nm !== undefined) {
     if (quadrants !== 'motoring-braking') throw new RangeError(`${field}.braking_torque_nm requires quadrants motoring-braking.`);
     if (!Array.isArray(input.braking_torque_nm) || input.braking_torque_nm.length !== speeds.length) {
       throw new RangeError(`${field}.braking_torque_nm must have one torque per speed.`);
@@ -79,7 +79,7 @@ function normalizeActuator(input, field) {
   if (input == null) return null;
   plainObject(input, field);
   const value = key => {
-    const entry = input[key] ?? 0;
+    const entry = input[key] === undefined ? 0 : input[key];
     if (!Number.isFinite(entry) || entry < 0) throw new RangeError(`${field}.${key} must be finite and >= 0.`);
     return entry;
   };
