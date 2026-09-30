@@ -1,15 +1,20 @@
 import { computeCycleDemand } from '../model/cycle.js';
 import { evaluatePose } from '../model/pose.js';
+import { resolveMounting } from '../model/mounting.js';
 import { computeWorkspace } from '../workspace/sweep.js';
 import { clamp, singularValues, degToRad } from '../math.js';
 
 const EPS = 1e-9;
 
 export async function evaluateLayout(layout, options) {
-  const { ranges, signal, onProgress, payload, stroke, frequency, ballJointLimitDeg, ballJointClamp } = options;
+  const { ranges, signal, onProgress, payload, stroke, frequency, ballJointLimitDeg, ballJointClamp,
+    lowerBallJointLimitDeg, upperBallJointLimitDeg } = options;
+  const mounting = resolveMounting(layout).mounting;
+  layout.mounting = mounting;
   const workspaceResult = await computeWorkspace(layout, ranges, {
     signal, onProgress,
-    payload, stroke, frequency, ballJointLimitDeg, ballJointClamp,
+    payload, stroke, frequency, ballJointLimitDeg, lowerBallJointLimitDeg,
+    upperBallJointLimitDeg, ballJointClamp, mounting,
   });
 
   const coverage = Number.isFinite(workspaceResult.coverage) ? workspaceResult.coverage : 0;
@@ -24,7 +29,7 @@ export async function evaluateLayout(layout, options) {
     ry: 0,
     rz: 0,
   }, {
-    ballJointLimitDeg, ballJointClamp,
+    ballJointLimitDeg, lowerBallJointLimitDeg, upperBallJointLimitDeg, ballJointClamp, mounting,
     servoRangeRad: layout.servoRangeRad,
     recordLegData: true,
   });
@@ -43,16 +48,21 @@ export async function evaluateLayout(layout, options) {
     }
   }
 
-  const cycle = evaluateCycle(layout, options);
+  const cycle = evaluateCycle(layout, { ...options, mounting });
   const torque = cycle.torqueNm;
   const speedDemand = cycle.speedRadPerSec;
   const loadBalance = stats.loadBalanceScore ?? 0;
   const isotropy = stats.averageIsotropy ?? 0;
   const stiffnessScore = stats.averageStiffness > 0 ? stats.averageStiffness : stiffness;
-  const ballLimit = degToRad(ballJointLimitDeg || 0);
-  const ballMarginRaw = ballLimit > 0 && Number.isFinite(stats.ballJointOverallMax)
-    ? 1 - stats.ballJointOverallMax / ballLimit
-    : 1;
+  const marginFor = (maxAngle, limitDeg) => {
+    const limit = degToRad(limitDeg ?? ballJointLimitDeg ?? 0);
+    if (!Number.isFinite(maxAngle)) return 0;
+    return limit > 0 ? 1 - maxAngle / limit : (maxAngle <= 1e-6 ? 1 : 0);
+  };
+  const ballMarginRaw = Math.min(
+    marginFor(Math.max(0, ...(stats.lowerJointMax ?? [])), lowerBallJointLimitDeg),
+    marginFor(Math.max(0, ...(stats.upperJointMax ?? [])), upperBallJointLimitDeg),
+  );
   const violationMargin = 1 - (stats.violationRate ?? 0);
   const limitMargin = clamp(Math.max(ballMarginRaw, 0) * Math.max(violationMargin, 0), 0, 1);
   const fatigue = computeFatigue(stats, options);
@@ -97,16 +107,20 @@ export async function evaluateLayout(layout, options) {
   };
 }
 
-export function evaluateCycle(layout, { payload, stroke, frequency, cycleAxis, ballJointLimitDeg, signal }) {
+export function evaluateCycle(layout, { payload, stroke, frequency, cycleAxis, ballJointLimitDeg,
+  lowerBallJointLimitDeg, upperBallJointLimitDeg, mounting, signal }) {
   return computeCycleDemand(layout, { mass: payload, stroke,
-    frequency, axis: cycleAxis, ballJointLimitDeg, signal });
+    frequency, axis: cycleAxis, ballJointLimitDeg, lowerBallJointLimitDeg,
+    upperBallJointLimitDeg, mounting, signal });
 }
 
-export function computeFatigue(stats, { ballJointLimitDeg, servoRangeRad, stroke, frequency }) {
+export function computeFatigue(stats, { ballJointLimitDeg, lowerBallJointLimitDeg,
+  upperBallJointLimitDeg, servoRangeRad, stroke, frequency }) {
   if (!stats) return 0;
   const ballJointAvg = Number.isFinite(stats.ballJointAverage) ? stats.ballJointAverage : 0;
   const servoAvg = Number.isFinite(stats.servoUsageAvg) ? stats.servoUsageAvg : 0;
-  const ballLimit = degToRad(ballJointLimitDeg || 0);
+  const ballLimit = degToRad(Math.min(lowerBallJointLimitDeg ?? ballJointLimitDeg ?? 0,
+    upperBallJointLimitDeg ?? ballJointLimitDeg ?? 0));
   const ballRatio = ballLimit > 0 ? ballJointAvg / ballLimit : 0;
   const servoSpan = Math.abs(servoRangeRad[1] - servoRangeRad[0]) || Math.PI;
   const servoDuty = servoSpan > 0 ? servoAvg / servoSpan : 0;

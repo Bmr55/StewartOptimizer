@@ -15,6 +15,8 @@ export class Optimizer {
     mutationRate = 0.35,
     designSpace = {},
     ballJointLimitDeg,
+    lowerBallJointLimitDeg,
+    upperBallJointLimitDeg,
     ballJointClamp = false,
     onProgress,
   } = {}) {
@@ -29,6 +31,8 @@ export class Optimizer {
     this.ranges = ranges;
     this.mutationRate = clamp(mutationRate, 0, 1);
     this.ballJointLimitDeg = ballJointLimitDeg ?? requirements.ball_joint_max_deg ?? 52;
+    this.lowerBallJointLimitDeg = lowerBallJointLimitDeg ?? this.ballJointLimitDeg;
+    this.upperBallJointLimitDeg = upperBallJointLimitDeg ?? this.ballJointLimitDeg;
     this.ballJointClamp = ballJointClamp;
     this.payload = requirements.mass_kg ?? 0;
     this.stroke = requirements.cycle_mm ?? 0;
@@ -50,6 +54,11 @@ export class Optimizer {
       frequency_hz: this.frequency, cycle_axis: this.cycleAxis,
       ball_joint_max_deg: this.ballJointLimitDeg, servo_travel_bounds_deg: this.servoRangeDeg,
       horn_length_bounds_mm: hornBounds, rod_length_bounds_mm: rodBounds });
+    for (const value of [this.lowerBallJointLimitDeg, this.upperBallJointLimitDeg]) {
+      if (!Number.isFinite(value) || value < 0 || value > 180) {
+        throw new RangeError('Ball-joint limits must be finite angles from 0 to 180 degrees.');
+      }
+    }
 
     this.servoRangeRad = this.servoRangeDeg.map((deg) => degToRad(deg));
 
@@ -75,7 +84,10 @@ export class Optimizer {
   evaluationOptions() {
     return { ranges: this.ranges, signal: this.abortController?.signal,
       payload: this.payload, stroke: this.stroke, frequency: this.frequency, cycleAxis: this.cycleAxis,
-      ballJointLimitDeg: this.ballJointLimitDeg, ballJointClamp: this.ballJointClamp,
+      ballJointLimitDeg: this.ballJointLimitDeg,
+      lowerBallJointLimitDeg: this.lowerBallJointLimitDeg,
+      upperBallJointLimitDeg: this.upperBallJointLimitDeg,
+      ballJointClamp: this.ballJointClamp,
       servoRangeRad: this.servoRangeRad };
   }
 

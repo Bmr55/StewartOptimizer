@@ -1,5 +1,6 @@
 import { degToRad, buildRange, rangeCount } from '../math.js';
 import { ensureLayout, evaluatePose } from '../model/pose.js';
+import { resolveMounting } from '../model/mounting.js';
 import { createWorkspaceStatistics } from './statistics.js';
 
 function toRadiansRange(range) {
@@ -29,6 +30,8 @@ export async function computeWorkspace(layout, ranges = {}, options = {}) {
   ensureLayout(layout);
   const {
     ballJointLimitDeg = 45,
+    lowerBallJointLimitDeg = ballJointLimitDeg,
+    upperBallJointLimitDeg = ballJointLimitDeg,
     ballJointClamp = false,
     payload = 0,
     stroke = 0,
@@ -40,6 +43,7 @@ export async function computeWorkspace(layout, ranges = {}, options = {}) {
   } = options;
 
   signal?.throwIfAborted();
+  const mounting = options.mounting ?? resolveMounting(layout).mounting;
   const totalPoses = estimateWorkspaceSize(ranges);
   const xs = buildRange(ranges.x, 0);
   const ys = buildRange(ranges.y, 0);
@@ -63,7 +67,10 @@ export async function computeWorkspace(layout, ranges = {}, options = {}) {
               const pose = { x, y, z, rx, ry, rz };
               const result = evaluatePose(layout, pose, {
                 ballJointLimitDeg,
+                lowerBallJointLimitDeg,
+                upperBallJointLimitDeg,
                 ballJointClamp,
+                mounting,
                 servoRangeRad: layout.servoRangeRad,
                 recordLegData: false,
               });
@@ -84,7 +91,8 @@ export async function computeWorkspace(layout, ranges = {}, options = {}) {
 
   return {
     ...statistics.finish(),
-    constraintPolicy: { mode: ballJointClamp ? 'soft-ball-joint' : 'strict', ballJointLimitDeg },
+    constraintPolicy: { mode: ballJointClamp ? 'soft-ball-joint' : 'strict', ballJointLimitDeg,
+      lowerBallJointLimitDeg, upperBallJointLimitDeg },
     payload, stroke, frequency,
   };
 }
