@@ -5,7 +5,8 @@ import { vectorNormalize, vectorCross, vectorDot, vectorScale, vectorAdd, vector
 import { GRAVITY, massPropertiesDescription, normalizeMassProperties } from './mass-properties.js';
 import { isStationary, legacyTrajectory, trajectoryIdentity, trajectoryState } from './trajectory.js';
 import { CYCLE_MODEL_VERSION } from '../contracts.js';
-import { LEGACY_CYCLE_SAMPLING, normalizeCycleSampling } from './cycle-sampling.js';
+import { LEGACY_CYCLE_SAMPLING, normalizeCycleSampling, periodicSampleWeights } from './cycle-sampling.js';
+import { actuatorTorque } from './servo-ratings.js';
 
 const TRANSMISSION_CUTOFF = 1e-10;
 
@@ -163,7 +164,7 @@ const normalizedEstimate = (estimate, scales) =>
   estimate.reduce((worst, value, i) => Math.max(worst, value / scales[i]), 0);
 
 export function computeCycleDemand(layout, { mass = 0, stroke = 0, frequency = 0, axis = 'z',
-  trajectory, massProperties, trajectorySource, sampling = LEGACY_CYCLE_SAMPLING,
+  trajectory, massProperties, trajectorySource, sampling = LEGACY_CYCLE_SAMPLING, actuators = null,
   ballJointLimitDeg = 52, lowerBallJointLimitDeg = ballJointLimitDeg,
   upperBallJointLimitDeg = ballJointLimitDeg, conditionLimit = null,
   mounting, signal, onPose } = {}) {
@@ -278,14 +279,34 @@ export function computeCycleDemand(layout, { mass = 0, stroke = 0, frequency = 0
       }
     }
   });
+  // Output-shaft actuator torque: load torque plus any supplied reduced actuator model.
+  const times = samples.map(sample => sample.time);
+  const weights = periodicSampleWeights(times, period);
+  const signedActuatorTorque = Array.from({ length: 6 }, (_, leg) => samples.map(({ result }) =>
+    actuatorTorque(actuators?.[leg] ?? null, result.signedTorque[leg], result.signedSpeed[leg],
+      result.servoAcceleration[leg])));
+  const actuatorPeaks = signedActuatorTorque.map(values => Math.max(...values.map(Math.abs)));
+  const actuatorRms = signedActuatorTorque.map(values =>
+    Math.sqrt(values.reduce((sum, value, k) => sum + weights[k] * value * value, 0)));
+  const actuator = {
+    model: actuators?.some(Boolean) ? 'reduced' : 'ideal',
+    reference: 'output shaft',
+    perServoPeakTorqueNm: actuatorPeaks, perServoRmsTorqueNm: actuatorRms,
+    peakTorqueNm: Math.max(...actuatorPeaks), rmsTorqueNm: Math.max(...actuatorRms),
+  };
   const samplingResult = samplingSummary(status, { maxUnresolved });
-  return { valid: true, axis: legacyAxis, samples: evaluated, periodS: period,
+  const output = { valid: true, axis: legacyAxis, samples: evaluated, periodS: period,
     torqueNm: Math.max(...torque), speedRadPerSec: Math.max(...speed),
     accelerationRadPerSec2: Math.max(...acceleration),
     perServoTorqueNm: torque, perServoSpeedRadPerSec: speed, perServoAccelerationRadPerSec2: acceleration,
-    limiting,
+    limiting, actuator,
     conditioning: { ...conditionTrack, conditionLimit },
     sampling: samplingResult,
     ...identity,
     model: cycleModelDescription(effectiveMass, samplingResult) };
+  // Bounded per-sample operating points for capacity checks; not serialized with the result.
+  Object.defineProperty(output, 'history', { enumerable: false, value: { times, weights, periodS: period,
+    signedTorqueNm: signedActuatorTorque,
+    signedSpeedRadPerSec: Array.from({ length: 6 }, (_, leg) => samples.map(({ result }) => result.signedSpeed[leg])) } });
+  return output;
 }

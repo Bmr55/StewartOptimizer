@@ -131,7 +131,7 @@ export function createResultsView(document, onSelect, ChartClass = globalThis.Ch
       : '';
     const capacity = selected.servoCapacity;
     const capacityText = capacity?.hasRatings
-      ? ` Servo capacity ${capacity.status} (${capacity.policy}${capacity.policy === 'advisory' && ['above', 'unavailable'].includes(capacity.status) ? ' warning' : ''}); worst headroom ${printable(capacity.worstHeadroomFraction)} of rating.`
+      ? ` Servo capacity ${capacity.status} (${capacity.policy}${capacity.policy === 'advisory' && ['above', 'unavailable', 'outOfDomain'].includes(capacity.status) ? ' warning' : ''}); peak ${capacity.peak?.status ?? capacity.status}, continuous RMS ${capacity.continuous?.status ?? 'unrated'}; worst headroom ${printable(capacity.worstHeadroomFraction)} of rating.`
       : '';
     const cycle = selected.cycle;
     const cycleText = cycle?.trajectoryId ? ` Cycle ${cycle.trajectorySource === 'supplied' ? 'trajectory' : 'single-axis'} ${cycle.trajectoryId}; ${cycle.massModel === 'rigid-body' ? 'rigid-body mass properties' : 'legacy centered point mass'}.` : '';

@@ -1,4 +1,4 @@
-import { normalizeServoRatings } from './servo-ratings.js';
+import { normalizeServoRatings, PER_SERVO_RATING_KEYS, SERVO_RATING_KEYS } from './servo-ratings.js';
 import { normalizeTrajectory } from './trajectory.js';
 import { normalizeMassProperties, RIGID_BODY_FIELDS } from './mass-properties.js';
 
@@ -87,20 +87,19 @@ export function parseRequirements(text) {
     }
   }
   const constraints = nested ? ('constraints' in data ? object(data.constraints, 'constraints') : {}) : data;
-  for (const key of ['servo_torque_rating_nm', 'servo_speed_rating_deg_s', 'servo_rating_policy', 'per_servo_ratings']) {
+  for (const key of SERVO_RATING_KEYS) {
     if (key in constraints && constraints[key] === null) throw new Error(`${key} must not be null.`);
   }
   if (Array.isArray(constraints.per_servo_ratings)) {
     constraints.per_servo_ratings.forEach((entry, index) => {
-      for (const key of ['torque_nm', 'speed_deg_s']) {
+      for (const key of PER_SERVO_RATING_KEYS) {
         if (entry && typeof entry === 'object' && key in entry && entry[key] === null) {
           throw new Error(`per_servo_ratings[${index}].${key} must not be null.`);
         }
       }
     });
   }
-  for (const key of [...Object.keys(DEFAULTS), 'servo_max_deg', 'servo_torque_rating_nm',
-    'servo_speed_rating_deg_s', 'per_servo_ratings', 'servo_rating_policy']) {
+  for (const key of [...Object.keys(DEFAULTS), 'servo_max_deg', ...SERVO_RATING_KEYS]) {
     if (key in constraints) source[key] = constraints[key];
   }
   const normalized = { ...source };

@@ -45,6 +45,10 @@
                                 <tr><th scope="row"><code>servo_torque_rating_nm</code></th><td>Optional finite positive shared peak torque rating in N m</td><td>Omitted</td></tr>
                                 <tr><th scope="row"><code>servo_speed_rating_deg_s</code></th><td>Optional finite positive shared peak angular speed rating in deg/s</td><td>Omitted</td></tr>
                                 <tr><th scope="row"><code>per_servo_ratings</code></th><td>Optional six-entry array in servo order; each entry may set positive <code>torque_nm</code> and/or <code>speed_deg_s</code>, or be null</td><td>Omitted</td></tr>
+                                <tr><th scope="row"><code>servo_continuous_torque_rating_nm</code></th><td>Optional finite positive shared continuous (RMS) torque rating in N m; per-servo <code>continuous_torque_nm</code></td><td>Omitted</td></tr>
+                                <tr><th scope="row"><code>servo_torque_speed_curve</code></th><td>Optional <code>{ "speed_deg_s": [...], "torque_nm": [...], "quadrants": "symmetric" | "motoring-braking", "braking_torque_nm": [...] }</code>; strictly increasing speeds, linear interpolation, no extrapolation; per-servo <code>torque_speed_curve</code></td><td>Omitted</td></tr>
+                                <tr><th scope="row"><code>servo_duration_ratings</code></th><td>Optional <code>[{ "torque_nm": t, "duration_s": d }]</code>; worst moving-window RMS torque over d must not exceed t; per-servo <code>duration_ratings</code></td><td>Omitted</td></tr>
+                                <tr><th scope="row"><code>servo_actuator</code></th><td>Optional output-referred <code>output_inertia_kg_m2</code>, <code>viscous_nm_s_per_rad</code>, <code>coulomb_nm</code> added to load torque; per-servo <code>actuator</code></td><td>Unmodeled</td></tr>
                                 <tr><th scope="row"><code>servo_rating_policy</code></th><td><code>enforced</code> or <code>advisory</code>; supplied ratings constrain feasibility by default</td><td><code>enforced</code></td></tr>
                             </tbody>
                         </table>
@@ -214,10 +218,11 @@
                 </label>
             </div>
             <div class="section-title"><h2>Servo ratings</h2></div>
-            <p>Optional capacity limits. Speed is entered in degrees per second and compared with cycle demand in radians per second. Per-servo values override shared values.</p>
+            <p>Optional capacity limits. Speed is entered in degrees per second and compared with cycle demand in radians per second. Per-servo values override shared values. Continuous torque is compared with time-weighted RMS cycle torque, a screening metric rather than a thermal prediction. Torque-speed curves, duration-limited ratings and actuator inertia/friction are set in the requirements JSON.</p>
             <div class="grid result-controls">
                 <label class="field">Shared torque (N m)<input type="number" id="servoTorqueRating" min="0" step="any" placeholder="Unrated"></label>
                 <label class="field">Shared speed (deg/s)<input type="number" id="servoSpeedRating" min="0" step="any" placeholder="Unrated"></label>
+                <label class="field">Shared continuous torque (N m RMS)<input type="number" id="servoContinuousTorqueRating" min="0" step="any" placeholder="Unrated"></label>
                 <label class="field">Rating policy<select id="servoRatingPolicy"><option value="enforced">Enforced</option><option value="advisory">Advisory</option></select></label>
             </div>
             <div class="servo-rating-grid" aria-label="Per-servo rating overrides">

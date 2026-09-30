@@ -27,7 +27,7 @@ try {
   assert.equal(await requirementsGuide.locator('table').isVisible(), false);
   await requirementsGuide.locator('summary').click();
   assert.equal(await requirementsGuide.locator('table').isVisible(), true);
-  assert.equal(await requirementsGuide.locator('tbody tr').count(), 20);
+  assert.equal(await requirementsGuide.locator('tbody tr').count(), 24);
   assert.equal(await page.locator('a[href="./docs/REQUIREMENTS.md"]').count(), 0);
   await requirementsGuide.locator('summary').click();
   const optimizationPanel = page.locator('#optimizationParameters');
