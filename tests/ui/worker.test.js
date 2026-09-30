@@ -9,6 +9,15 @@ import { layoutToJSON } from '../../src/io/results.js';
 import { jointFixture } from '../fixtures/layout.js';
 import { sampleText, loadUI } from './helpers.js';
 
+function idleWorker() {
+  let worker;
+  const opt = new WorkerOptimizer({}, { populationSize: 4, generations: 1 }, {
+    workerFactory: () => (worker = { postMessage() {}, terminate() { this.terminated = true; }, onmessage: null, onerror: null }),
+  });
+  const pending = opt.start();
+  return { opt, pending, runId: opt.runId, reply: data => worker.onmessage({ data }), worker: () => worker };
+}
+
 function connectedWorker() {
   const workers = [];
   const workerFactory = () => {
@@ -224,7 +233,7 @@ test('runtime failure retains a completed checkpoint with explicit partial metad
   });
   const pending = opt.start();
   const runId = opt.runId;
-  const fitness = Array.from({ length: 4 }, (_, id) => ({ layout: { id: id + 1 }, coverage: id }));
+  const fitness = Array.from({ length: 4 }, (_, id) => ({ layout: { ...jointFixture(), id: id + 1 }, coverage: id }));
   worker.onmessage({ data: { type: 'started', runId } });
   worker.onmessage({ data: { type: 'checkpoint', runId, snapshot: {
     generation: 0, completedCandidates: 4, fitness, paretoIds: [4],
@@ -281,4 +290,121 @@ test('worker start propagates callback errors without leaving a pending run', as
     outcome: { status: 'completed' }, snapshot: { fitness: [] } } });
   await assert.rejects(pending, /callback failed/);
   assert.equal(opt.running, false);
+});
+
+test('a result without an outcome fails the run instead of leaving it pending', async () => {
+  const { opt, pending, runId, reply, worker } = idleWorker();
+  reply({ type: 'started', runId });
+  reply({ type: 'result', runId, snapshot: { fitness: [] } });
+  const outcome = await pending;
+  assert.equal(outcome.status, 'failed');
+  assert.match(outcome.error, /missing its outcome/);
+  assert.equal(outcome.partialResults, false);
+  assert.equal(opt.running, false);
+  assert.equal(opt.runStatus, 'failed');
+  assert.equal(worker().terminated, true);
+});
+
+test('checkpoint and result candidates that fail the layout check end the run and keep the last valid population', async () => {
+  const valid = Array.from({ length: 4 }, (_, id) => ({ layout: { ...jointFixture(), id: id + 1 }, coverage: id }));
+  const cases = [
+    [{ fitness: [null, null, null, null] }, /candidate 0 is not an object/],
+    [{ fitness: valid.map(({ coverage }) => ({ coverage })) }, /candidate 0: Layout is required/],
+    [{ fitness: valid.map(item => ({ ...item, layout: { id: item.layout.id, baseAnchors: 'x' } })) }, /candidate 0: Layout must provide six base anchors/],
+    [{ fitness: valid.map(item => ({ ...item, layout: { ...item.layout, id: undefined } })) }, /candidate 0 layout has no id/],
+    [{ fitness: valid.map(item => ({ ...item, layout: { ...item.layout, servoRangeRad: null } })) }, /candidate 0 layout must provide two finite servo bounds/],
+  ];
+  for (const type of ['checkpoint', 'result']) {
+    for (const [snapshot, expected] of cases) {
+      const { opt, pending, runId, reply } = idleWorker();
+      reply({ type: 'started', runId });
+      reply({ type: 'checkpoint', runId, snapshot: { generation: 0, completedCandidates: 4, fitness: valid, paretoIds: [4] } });
+      assert.equal(opt.fitness.length, 4);
+      reply({ type, runId, outcome: { status: 'completed' }, snapshot: { generation: 1, completedCandidates: 8, ...snapshot } });
+      const outcome = await pending;
+      assert.equal(outcome.status, 'failed', `${type}: ${expected}`);
+      assert.match(outcome.error, expected);
+      assert.equal(outcome.partialResults, true);
+      assert.equal(opt.fitness.length, 4, 'the last valid population was replaced');
+      assert.equal(opt.generation, 0);
+      assert.equal(opt.pareto[0].layout.id, 4);
+      assert.equal(opt.running, false);
+      assert.doesNotThrow(() => JSON.parse(opt.exportBest()));
+    }
+  }
+});
+
+test('a runtime error with a corrupt final snapshot still reports the worker message', async () => {
+  const { opt, pending, runId, reply } = idleWorker();
+  reply({ type: 'started', runId });
+  reply({ type: 'error', runId, phase: 'runtime', message: 'crash', snapshot: { fitness: [null, null, null, null] } });
+  const outcome = await pending;
+  assert.equal(outcome.error, 'crash');
+  assert.equal(outcome.partialResults, false);
+  assert.equal(opt.running, false);
+});
+
+test('an empty onerror and a worker factory that returns nothing give readable startup failures', async () => {
+  const { opt, pending, worker } = idleWorker();
+  worker().onerror(undefined);
+  await assert.rejects(pending, error => error instanceof WorkerStartupError && /Worker failed to start/.test(error.message));
+  assert.equal(opt.running, false);
+  const nothing = new WorkerOptimizer({}, { populationSize: 4, generations: 1 }, { workerFactory: () => null });
+  await assert.rejects(nothing.start(), error => error instanceof WorkerStartupError && /did not return a worker/.test(error.message));
+  assert.equal(nothing.running, false);
+  assert.equal(nothing.startupFailure, true);
+});
+
+test('worker runtime ignores an idle cancel without runId, a duplicate start, and rejects settings without requirements', async () => {
+  const messages = [];
+  let release;
+  let constructed = 0;
+  class DeferredOptimizer {
+    constructor() { constructed++; this.populationSize = 4; this.generations = 1; this.pareto = []; this.fitness = []; }
+    estimateWork() { return { totalPoses: 8 }; }
+    run() { return new Promise(resolve => { release = resolve; }); }
+    stop() {}
+  }
+  const runtime = createWorkerRuntime({ postMessage: message => messages.push(message), OptimizerClass: DeferredOptimizer });
+  await runtime.handleMessage({ type: 'cancel' });
+  await runtime.handleMessage({ type: 'cancel', runId: undefined });
+  for (const settings of [undefined, null, 'abc', 42, [], {}, { requirements: 'x' }]) {
+    await runtime.handleMessage({ type: 'start', runId: 'bad', settings });
+    assert.deepEqual(messages.at(-1), { type: 'error', runId: 'bad', phase: 'startup', name: 'TypeError',
+      message: 'start settings must be an object with a requirements object.' });
+  }
+  assert.equal(constructed, 0);
+  assert.equal(runtime.activeRunId, null);
+  const pending = runtime.handleMessage({ type: 'start', runId: 'a', settings: { requirements: {}, bounds: {} } });
+  assert.equal(runtime.activeRunId, 'a');
+  const before = messages.length;
+  await runtime.handleMessage({ type: 'start', runId: 'a', settings: { requirements: {}, bounds: {} } });
+  assert.equal(messages.length, before, 'a duplicate start for the live run posted a message');
+  assert.equal(runtime.activeRunId, 'a');
+  assert.equal(constructed, 1);
+  await runtime.handleMessage({ type: 'cancel' });
+  assert.equal(runtime.activeRunId, 'a');
+  release({ status: 'completed' });
+  await pending;
+  assert.equal(messages.at(-1).type, 'result');
+});
+
+test('the UI recovers from a malformed worker result: Run is enabled again and the failure is shown', async () => {
+  let worker;
+  const element = await loadUI(Optimizer, { workerFactory: () => (worker = {
+    onmessage: null, onerror: null, terminated: false,
+    postMessage(message) {
+      if (message.type !== 'start') return;
+      queueMicrotask(() => {
+        worker.onmessage({ data: { type: 'started', runId: message.runId } });
+        worker.onmessage({ data: { type: 'result', runId: message.runId, snapshot: { fitness: [] } } });
+      });
+    },
+    terminate() { this.terminated = true; },
+  }) });
+  await element('runOptimization').handlers.click();
+  assert.match(element('optStatus').textContent, /missing its outcome/);
+  assert.equal(element('runOptimization').disabled, false);
+  assert.equal(element('cancelOptimization').disabled, true);
+  assert.equal(worker.terminated, true);
 });
