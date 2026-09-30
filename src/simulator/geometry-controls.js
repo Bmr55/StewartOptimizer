@@ -66,9 +66,20 @@ export function createGeometryControls({ document, container, controller }) {
       editor.edit(action);
       report('Geometry changed. Home pose and diagnostics were reevaluated.');
     } catch (error) {
-      sync(controller.getState());
+      sync(controller.getState(), { force: true });
       report(error.message, true);
     }
+  }
+
+  // Number('') is 0, so a cleared field must be rejected explicitly instead of
+  // silently moving an anchor, horn direction or servo bound to zero.
+  function numeric(text, label) {
+    const trimmed = String(text ?? '').trim();
+    const value = trimmed === '' ? NaN : Number(trimmed);
+    if (Number.isFinite(value)) return value;
+    sync(controller.getState(), { force: true });
+    report(`${label} must be a finite number.`, true);
+    return null;
   }
 
   function addButton(parent, label, id, handler) {
@@ -88,7 +99,10 @@ export function createGeometryControls({ document, container, controller }) {
     range.max = String(Math.max(max, value));
     range.step = String(step);
     number.step = String(step);
-    const change = event => edit(Number(event.target.value));
+    const change = event => {
+      const value = numeric(event.target.value, label);
+      if (value !== null) edit(value);
+    };
     range.addEventListener('input', change);
     number.addEventListener('change', change);
     sliders.append(range, number);
@@ -102,7 +116,10 @@ export function createGeometryControls({ document, container, controller }) {
     row.appendChild(element(document, 'span', { text: label }));
     const number = element(document, 'input', { id: `sim-${key}-number`, type: 'number' });
     number.step = String(step);
-    number.addEventListener('change', event => edit(Number(event.target.value)));
+    number.addEventListener('change', event => {
+      const value = numeric(event.target.value, label);
+      if (value !== null) edit(value);
+    });
     row.appendChild(number);
     parent.appendChild(row);
     controls.set(key, { number, value });
@@ -217,8 +234,11 @@ export function createGeometryControls({ document, container, controller }) {
     container.appendChild(status);
   }
 
-  function sync(state) {
+  // Animation ticks notify every frame; a focused input keeps the user's text
+  // unless the caller forces a rewrite after a rejected edit.
+  function sync(state, { force = false } = {}) {
     if (!state.layout) return;
+    const active = document.activeElement;
     const layout = state.layout;
     const values = { hornLength: layout.hornLength, rodLength: layout.rodLength,
       homeHeight: layout.homeHeight,
@@ -241,11 +261,11 @@ export function createGeometryControls({ document, container, controller }) {
     for (const [key, control] of controls) {
       const value = values[key];
       if (value == null) continue;
-      control.number.value = String(value);
+      if (force || control.number !== active) control.number.value = String(value);
       if (control.range) {
         control.range.min = String(Math.min(Number(control.range.min), value));
         control.range.max = String(Math.max(Number(control.range.max), value));
-        control.range.value = String(value);
+        if (force || control.range !== active) control.range.value = String(value);
       }
     }
     report(state.source?.kind === 'editable'

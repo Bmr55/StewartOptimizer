@@ -61,8 +61,11 @@ base/platform XYZ coordinate and each horn direction. **Generate selected
 topology** is the deliberate reverse mode switch: it replaces explicit anchors
 with coordinates from the chosen shared generator. Changing unrelated lengths,
 height, or servo bounds never regenerates explicit anchors. Sliders and numeric
-fields show the same current value; invalid edits leave the last valid layout
-in place and report a field-specific error.
+fields show the same current value; invalid edits, including an empty or
+non-numeric field (never read as 0), leave the last valid layout in place,
+restore the field and report a field-specific error. A focused field is not
+rewritten by animation frames, so geometry can be edited while a pattern
+plays; a rejected edit still restores the stored value.
 ## Browser workflow
 
 The Optimize and Simulate tabs share the retained candidate selection. The
@@ -75,7 +78,9 @@ The native WebGL2 renderer reads only the accepted evaluator geometry: base
 anchors, solved horn tips, actual rods, platform points, servo orientation
 angles and platform frame. Orbit camera is the initial mouse mode: dragging changes yaw and pitch, the
 wheel zooms between 80 and 2,500 units, and **Reset camera** restores the
-default view. Moving the platform by pointer requires selecting **Move
+default view. The projected depth range follows the camera distance so a
+zoomed-out view keeps near/far line ordering instead of saturating the depth
+buffer. Moving the platform by pointer requires selecting **Move
 platform**, which converts drag distance to X/Y requests. Numeric controls and
 sliders request six-axis poses; sliders span ±50 mm and ±30°, while the numeric
 fields accept any finite value. Keyboard arrows move X/Y, Page Up/Down moves Z,
@@ -103,4 +108,4 @@ the first animation has been started.
 
 The diagnostics panel subscribes to the same controller as the renderer. It reports the six-axis **requested** pose and last valid **rendered accepted** pose separately. A rejected request remains visible with its evaluator failures while the renderer holds the last accepted geometry. Red leg rows and matching WebGL leg colors mark failures in the requested pose; a whole-platform conditioning failure has a separate message and color. Highlighting does not imply that the rejected pose was rendered.
 
-Each leg shows lower and upper socket deflection against their effective limits, maximum deflection, rod-length deviation against the editable tolerance, and servo angle. Unavailable measurements show a dash because the evaluator may stop at the first structural failure. Lower and upper joint limits and rod tolerance can be edited in the panel; changes reevaluate the current request and last accepted pose. The mandatory reciprocal conditioning cutoff and optional engineering condition limit are displayed. Simulator JSON saves these effective options with the requested and accepted poses, and loading that JSON restores them.
+Each leg shows lower and upper socket deflection against their effective limits, maximum deflection, rod-length deviation against the editable tolerance, and servo angle. Unavailable measurements show a dash because the evaluator may stop at the first structural failure. Lower and upper joint limits and rod tolerance can be edited in the panel; changes reevaluate the current request and last accepted pose, a focused field keeps its text while an animation plays, and a rejected value is restored. The mandatory reciprocal conditioning cutoff and optional engineering condition limit are displayed. Simulator JSON saves these effective options with the requested and accepted poses, and loading that JSON restores them.

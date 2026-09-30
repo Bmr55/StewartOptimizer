@@ -417,10 +417,12 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
     function loadSimulatorLayout(parsed, activate = true) {
         const { layout, sourceRun } = importLayout(parsed);
         layout.id = parsed.id ?? parsed.layout?.id ?? parsed.result?.layout?.id ?? null;
-        simulatorRun = sourceRun;
         const saved = parsed.simulator;
         simulatorController.loadLayout(layout, { source: { kind: 'import', candidateId: layout.id ?? null },
             options: saved?.options ?? simulatorOptions(sourceRun?.effective_settings, layout) });
+        // Only after the validating load, so a rejected file never pairs its run
+        // metadata with the candidate that stays loaded.
+        simulatorRun = sourceRun;
         simCandidateSelect.innerHTML = `<option value="">Imported reference</option>${candidateOptions}`;
         simCandidateSelect.value = '';
         if (saved?.accepted) simulatorController.requestPose(saved.accepted, { source: 'replay' });

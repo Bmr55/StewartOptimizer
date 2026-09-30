@@ -31,3 +31,20 @@ test('unavailable WebGL2 leaves renderer inactive with actionable error', () => 
   assert.match(renderer.error, /WebGL2.*hardware acceleration.*optimization remains available/i);
   renderer.render({});
 });
+
+test('projected depth keeps near/far ordering for a zoomed-out camera', () => {
+  const target = [0, 0, 100];
+  const yaw = 0.7, pitch = 0.4;
+  const towardEye = [Math.cos(pitch) * Math.cos(yaw), Math.cos(pitch) * Math.sin(yaw), Math.sin(pitch)];
+  const offset = (sign, units) => target.map((value, i) => value + sign * units * towardEye[i]);
+  for (const distance of [600, 1900, 2500]) {
+    const camera = { target, yaw, pitch, distance };
+    const [nearer, middle, farther] = [offset(1, 300), target, offset(-1, 300)]
+      .map(point => projectPoint(point, camera, 800, 500)[2]);
+    assert.ok(nearer < middle && middle < farther, `distance ${distance}: ${nearer} ${middle} ${farther}`);
+    assert.ok(farther < 0.999 && nearer > -0.999, `distance ${distance} saturates the depth range`);
+  }
+  // The depth mapping is unchanged for the default camera distance.
+  const home = projectPoint(target, { target, yaw, pitch, distance: 600 }, 800, 500)[2];
+  assert.ok(Math.abs(home - (599 / 2000 * 2 - 1)) < 1e-12);
+});

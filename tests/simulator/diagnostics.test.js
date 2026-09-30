@@ -4,7 +4,8 @@ import { asymmetricJointFixture } from '../fixtures/layout.js';
 import { resolveMounting } from '../../src/model/mounting.js';
 import { evaluatePose } from '../../src/model/pose.js';
 import { createSimulatorController, HOME_POSE } from '../../src/simulator/controller.js';
-import { buildPoseDiagnostics } from '../../src/simulator/diagnostics.js';
+import { buildPoseDiagnostics, mountSimulatorDiagnostics } from '../../src/simulator/diagnostics.js';
+import { createFakeDocument } from './helpers.js';
 import { buildSceneGeometry } from '../../src/simulator/renderer.js';
 
 test('diagnostics use active evaluator angles, rod deviations, limits, and retained pose', () => {
@@ -90,4 +91,33 @@ test('diagnostics refresh on settings, animation, and geometry changes', () => {
   assert.ok(updates.some(item => item.source === 'animation' && item.requestedStatus === 'rejected'));
   assert.equal(updates.at(-1).source, 'load');
   assert.equal(updates.at(-1).requestedStatus, 'accepted');
+});
+
+test('focused limit fields keep their text across animation frames and are restored after a rejected edit', () => {
+  const document = createFakeDocument();
+  const controller = createSimulatorController();
+  controller.loadLayout(asymmetricJointFixture(), { options: { ballJointLimitDeg: 180,
+    lowerBallJointLimitDeg: 120, upperBallJointLimitDeg: 130, rodLengthTolerance: 0.5 } });
+  mountSimulatorDiagnostics({ document, controller, host: document.createElement('section') });
+  const lower = document.getElementById('simLowerJointLimit');
+  const tolerance = document.getElementById('simRodTolerance');
+  assert.equal(lower.value, '120');
+  controller.setAnimation('wobble', true);
+  document.activeElement = lower;
+  lower.value = '3';
+  tolerance.value = '9';
+  controller.tick(0.016);
+  assert.equal(lower.value, '3', 'focused field was rewritten by the frame');
+  assert.equal(tolerance.value, '0.5', 'unfocused field was not refreshed');
+  lower.dispatch('change');
+  assert.equal(controller.getState().options.lowerBallJointLimitDeg, 3);
+  lower.value = '-1';
+  lower.dispatch('change');
+  assert.equal(document.getElementById('simDiagnosticError').hidden, false);
+  assert.equal(lower.value, '3', 'rejected edit did not restore the field');
+  document.activeElement = null;
+  lower.value = '7';
+  controller.setAnimation('wobble', true);
+  controller.tick(0.016);
+  assert.equal(lower.value, '3');
 });

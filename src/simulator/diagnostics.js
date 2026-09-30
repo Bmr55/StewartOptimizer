@@ -76,15 +76,22 @@ export function mountSimulatorDiagnostics({ document, controller, host = documen
   const field = id => document.getElementById(id);
   const error = field('simDiagnosticError');
 
-  function redraw(state) {
+  // Redraws arrive on every animation frame, so a focused limit field keeps the
+  // user's text unless a rejected edit forces the stored value back.
+  function redraw(state, force = false) {
     const diagnostics = buildPoseDiagnostics(state);
+    const active = document.activeElement;
+    const setValue = (id, value) => {
+      const input = field(id);
+      if (force || input !== active) input.value = String(value);
+    };
     const requested = field('simRequestedDiagnostic');
     requested.textContent = `Requested pose (${diagnostics.source ?? 'manual'}): ${poseText(diagnostics.requested)} — ${diagnostics.requestedStatus}.`;
     requested.classList.toggle('error', diagnostics.requestedStatus === 'rejected');
     field('simAcceptedDiagnostic').textContent = `Rendered accepted pose: ${poseText(diagnostics.accepted)}.`;
-    field('simLowerJointLimit').value = String(diagnostics.lowerLimitDeg);
-    field('simUpperJointLimit').value = String(diagnostics.upperLimitDeg);
-    field('simRodTolerance').value = String(diagnostics.rodLengthToleranceMm);
+    setValue('simLowerJointLimit', diagnostics.lowerLimitDeg);
+    setValue('simUpperJointLimit', diagnostics.upperLimitDeg);
+    setValue('simRodTolerance', diagnostics.rodLengthToleranceMm);
     field('simConditionPolicy').textContent = `Condition limit: ${diagnostics.conditionLimit ?? 'none'}; mandatory reciprocal cutoff: 1e-10. Joint limits ${diagnostics.lowerLimitDeg}° lower / ${diagnostics.upperLimitDeg}° upper; rod tolerance ±${diagnostics.rodLengthToleranceMm} mm.`;
     field('simGlobalFailures').textContent = diagnostics.globalFailures.length
       ? `Whole-platform failure: ${diagnostics.globalFailures.map(failure => failure.type).join(', ')}.` : 'No whole-platform failure.';
@@ -102,7 +109,7 @@ export function mountSimulatorDiagnostics({ document, controller, host = documen
     }).join('');
   }
 
-  const unsubscribe = controller.subscribe(redraw);
+  const unsubscribe = controller.subscribe(state => redraw(state));
   for (const [id, key, maximum] of [
     ['simLowerJointLimit', 'lowerBallJointLimitDeg', 180],
     ['simUpperJointLimit', 'upperBallJointLimitDeg', 180],
@@ -120,7 +127,7 @@ export function mountSimulatorDiagnostics({ document, controller, host = documen
       } catch (problem) {
         error.textContent = problem.message;
         error.hidden = false;
-        redraw(controller.getState());
+        redraw(controller.getState(), true);
       }
     });
   }
