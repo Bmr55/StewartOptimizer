@@ -51,13 +51,26 @@ try {
       input.dispatchEvent(new Event('change'));
       return count();
     };
+    // A joint-limit edit redraws the socket cones within the same change event.
+    const upperLimit = value => {
+      const input = document.getElementById('simUpperJointLimit');
+      input.value = value;
+      input.dispatchEvent(new Event('change'));
+      return count();
+    };
     const all = toggle('simOverlayWorldAxes', true);
+    const narrowCones = upperLimit('20');
+    const wideCones = upperLimit('120');
+    const withoutCones = toggle('simOverlayJointCones', false);
     const withoutArcs = toggle('simOverlayServoArcs', false);
     const withoutAxes = toggle('simOverlayWorldAxes', false);
-    return { all, withoutArcs, withoutAxes, withoutEither: toggle('simOverlayPlatformAxes', false),
-      restored: toggle('simOverlayPlatformAxes', true) };
+    return { all, narrowCones, wideCones, withoutCones, withoutArcs, withoutAxes,
+      withoutEither: toggle('simOverlayPlatformAxes', false), restored: toggle('simOverlayPlatformAxes', true) };
   });
-  assert.ok(overlayPixels.all > overlayPixels.withoutArcs, `servo arcs toggle drew nothing: ${JSON.stringify(overlayPixels)}`);
+  assert.ok(overlayPixels.narrowCones < overlayPixels.all, `a narrower joint limit did not shrink the cones: ${JSON.stringify(overlayPixels)}`);
+  assert.equal(overlayPixels.wideCones, overlayPixels.all);
+  assert.ok(overlayPixels.all > overlayPixels.withoutCones, `joint cones toggle drew nothing: ${JSON.stringify(overlayPixels)}`);
+  assert.ok(overlayPixels.withoutCones > overlayPixels.withoutArcs, `servo arcs toggle drew nothing: ${JSON.stringify(overlayPixels)}`);
   assert.ok(overlayPixels.withoutArcs > overlayPixels.withoutAxes, `world axes toggle drew nothing: ${JSON.stringify(overlayPixels)}`);
   assert.ok(overlayPixels.withoutAxes > overlayPixels.withoutEither, `platform axes toggle drew nothing: ${JSON.stringify(overlayPixels)}`);
   assert.equal(overlayPixels.restored, overlayPixels.withoutAxes);
@@ -70,13 +83,14 @@ try {
   assert.equal(exported.simulator.options.rodLengthTolerance, 0.01);
   assert.equal(exported.simulator.requested.z, 100);
   assert.equal(exported.simulator.accepted.z, 0);
-  assert.deepEqual(exported.simulator.overlays, { servoArcs: false, platformAxes: true, worldAxes: false });
+  assert.deepEqual(exported.simulator.overlays, { servoArcs: false, jointCones: false, platformAxes: true, worldAxes: false });
   await page.locator('#optimizeTab').click();
   await page.locator('#referenceLayoutInput').fill(JSON.stringify(exported));
   await page.locator('#simulateTab').click();
   await page.locator('#simLoadReference').click();
   assert.equal(await page.locator('#simRodTolerance').inputValue(), '0.01');
   assert.equal(await page.locator('#simOverlayServoArcs').isChecked(), false);
+  assert.equal(await page.locator('#simOverlayJointCones').isChecked(), false);
   assert.equal(await page.locator('#simOverlayWorldAxes').isChecked(), false);
   assert.equal(await page.locator('#simOverlayPlatformAxes').isChecked(), true);
   assert.match(await page.locator('#simRequestedDiagnostic').textContent(), /rejected/);
