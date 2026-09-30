@@ -67,4 +67,4 @@ Replay uses the saved normalized requirements, bounds, sampling strategy/count a
 
 An imported reference is reevaluated. Its old metadata is never trusted, and it can remain a selectable diagnostic even if outside search bounds or invalid at home. The downloaded `run.effective_settings.reference_layout` stores the original reference for replay. See [reference import](./IMPORT.md).
 
-JSON is the only implemented export format. Import into CAD or the archived simulator may require an adapter; no general compatibility guarantee is made.
+The selected candidate can be downloaded as JSON. Candidates with valid solved home geometry can also be exported as a [Fusion construction script and coordinate CSV](./CAD.md), including diagnostic candidates whose other requirements fail. The archived simulator uses a separate legacy format; no general compatibility guarantee is made.

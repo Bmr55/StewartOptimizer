@@ -41,6 +41,7 @@ The root app does not implement PSO/hybrid search or an ML surrogate. Collision 
 - [Reference-layout import and seeding](./docs/IMPORT.md)
 - [Cycle demand model and assumptions](./docs/CYCLE_MODEL.md)
 - [Metrics and exported fields](./docs/RESULTS.md)
+- [Fusion construction script and coordinate CSV](./docs/CAD.md)
 - [Current architecture and reproduction guide](./docs/architecture.md)
 - [Browser worker protocol and fallback](./docs/WORKER_PROTOCOL.md)
 - [Active simulator, controls and replay](./docs/SIMULATOR.md)
