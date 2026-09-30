@@ -1,5 +1,6 @@
 import { degToRad } from '../math.js';
 import { ensureLayout } from '../model/pose.js';
+import { resolveMounting } from '../model/mounting.js';
 import { topologyGeometry, validateTopology } from '../optimization/topology.js';
 import { TOPOLOGIES } from '../contracts.js';
 
@@ -106,6 +107,9 @@ export function editGeometry(source, edit) {
   }
   ensureLayout(layout);
   validateTopology(layout);
+  // Derived socket directions follow the home geometry; supplied ones stay fixed.
+  // Without this the exported JSON would carry the pre-edit directions.
+  if (layout.mounting != null) layout.mounting = resolveMounting(layout).mounting;
   return layout;
 }
 

@@ -339,7 +339,7 @@ Seeding for population N places 1 exact reference, `round((N − 1) / 4)` fresh 
 
 ## 8. Integrated simulator
 
-The **Simulate** tab shares the retained candidate selection with Optimize and loads the selected candidate automatically. Tab switches keep pose, camera, input mode and animation state.
+The **Simulate** tab shares the retained candidate selection with Optimize and loads the selected candidate automatically. Tab switches keep pose, camera, input mode and animation state. The **Optimizer candidate** select lists the run's candidates plus an **Imported reference** entry after a reference load; the entry reloads that import when chosen again, and the select stays enabled whenever it has an entry, even without a run.
 
 ### Pose control
 
@@ -370,7 +370,7 @@ The diagnostics panel shows the requested and rendered accepted poses, editable 
 ### Transfer
 
 - **Use geometry as optimizer reference** writes the current simulator layout plus a `simulator` snapshot (source, requested and accepted poses, options, animation, markers, traces, camera, pointer mode) and the originating run into the reference textarea and switches to Optimize.
-- **Load optimizer reference** loads that textarea into the simulator, replaying saved poses, camera, animation (paused), pointer mode, markers and traces; an unrecognized or idle animation pattern defaults to Wobble.
+- **Load optimizer reference** loads that textarea into the simulator, replaying saved poses, camera, animation (paused), pointer mode, markers and traces, with the Markers and Traces checkboxes synced to the replayed state; an unrecognized or idle animation pattern defaults to Wobble.
 - **Download simulator JSON** saves the same document as `stewart_simulator.json`.
 
 ## 9. Browser workspace save

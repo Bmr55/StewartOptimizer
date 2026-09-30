@@ -3,8 +3,13 @@ import assert from 'node:assert/strict';
 import { loadUI } from './helpers.js';
 import { asymmetricJointFixture } from '../fixtures/layout.js';
 import { importLayout } from '../../src/io/layout-import.js';
+import { layoutToJSON } from '../../src/io/results.js';
+import { resolveMounting } from '../../src/model/mounting.js';
+import { createGeometryEditor } from '../../src/simulator/geometry-editor.js';
 
 const source = { ...asymmetricJointFixture(), id: 19, topology: 'free', topologyParameters: {} };
+// Evaluated candidates carry their resolved mounting, as evaluateLayout leaves it.
+source.mounting = resolveMounting(source).mounting;
 const candidate = { layout: source, torque: 2, speedDemand: 3, coverage: 100,
   feasibility: { passing: true, homePoseSatisfied: true, sampledWorkspaceSatisfied: true, cycleSatisfied: true } };
 
@@ -99,6 +104,92 @@ test('repeated reference loads keep a single Imported reference option', async (
   assert.equal(options.length, 2);
   assert.equal(element('simCandidateSelect').innerHTML.match(/Imported reference/g).length, 1);
   assert.match(element('simCandidateSelect').innerHTML, /Candidate 19/);
+});
+
+test('simulator JSON exports the mounting of the edited geometry, not the candidate it started from', async () => {
+  const element = await loadUI(FixtureOptimizer);
+  await element('runOptimization').handlers.click();
+  const editor = createGeometryEditor(element.app.simulatorController);
+  editor.edit({ type: 'scalar', field: 'homeHeight', value: source.homeHeight + 20 });
+  element('simUseReference').handlers.click();
+  const transfer = JSON.parse(element('referenceLayoutInput').value);
+  const state = element.app.simulatorController.getState();
+  assert.equal(state.assessment.reachable, true);
+  const expected = resolveMounting(state.layout).mounting;
+  assert.deepEqual(transfer.mounting, expected);
+  assert.deepEqual(state.assessment.mounting, expected);
+  assert.notDeepEqual(transfer.mounting.lower[0].direction, resolveMounting(source).mounting.lower[0].direction);
+});
+
+test('marker and trace checkboxes follow the controller on snapshot load and restore', async () => {
+  const element = await loadUI(FixtureOptimizer);
+  await element('runOptimization').handlers.click();
+  const controller = element.app.simulatorController;
+  assert.equal(element('simMarkers').checked, true);
+  assert.equal(element('simTraces').checked, false);
+  element('simMarkers').checked = false;
+  element('simMarkers').handlers.change({ target: element('simMarkers') });
+  element('simTraces').checked = true;
+  element('simTraces').handlers.change({ target: element('simTraces') });
+  assert.equal(controller.getState().markers, false);
+  assert.equal(controller.getState().tracesEnabled, true);
+  element('simUseReference').handlers.click();
+  element('simMarkers').checked = true;
+  element('simMarkers').handlers.change({ target: element('simMarkers') });
+  element('simTraces').checked = false;
+  element('simTraces').handlers.change({ target: element('simTraces') });
+  element('simLoadReference').handlers.click();
+  assert.equal(controller.getState().markers, false);
+  assert.equal(controller.getState().tracesEnabled, true);
+  assert.equal(element('simMarkers').checked, false);
+  assert.equal(element('simTraces').checked, true);
+  const storage = new Map();
+  const window = { localStorage: { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value),
+    removeItem: key => storage.delete(key) }, addEventListener() {} };
+  const restored = await loadUI(FixtureOptimizer, { window });
+  await restored('runOptimization').handlers.click();
+  restored('simMarkers').checked = false;
+  restored('simMarkers').handlers.change({ target: restored('simMarkers') });
+  restored('saveLocalWorkspace').handlers.click();
+  restored('simMarkers').checked = true;
+  restored('simMarkers').handlers.change({ target: restored('simMarkers') });
+  restored('restoreLocalWorkspace').handlers.click();
+  assert.equal(restored.app.simulatorController.getState().markers, false);
+  assert.equal(restored('simMarkers').checked, false);
+  assert.equal(restored('simTraces').checked, false);
+});
+
+test('the Imported reference option reloads the import and the select is enabled without a run', async () => {
+  const element = await loadUI(FixtureOptimizer);
+  const controller = element.app.simulatorController;
+  element('referenceLayoutInput').value = JSON.stringify(layoutToJSON(source));
+  element('simLoadReference').handlers.click();
+  assert.equal(element('simCandidateSelect').disabled, false);
+  assert.match(element('simCandidateSelect').innerHTML, /Imported reference/);
+  assert.equal(controller.getState().source.kind, 'import');
+  await element('runOptimization').handlers.click();
+  assert.equal(controller.getState().source.kind, 'candidate');
+  assert.doesNotMatch(element('simCandidateSelect').innerHTML, /Imported reference/);
+  element('simUseReference').handlers.click();
+  element('simLoadReference').handlers.click();
+  assert.equal(controller.getState().source.kind, 'import');
+  element('simCandidateSelect').value = '19';
+  element('simCandidateSelect').handlers.change();
+  assert.deepEqual(controller.getState().source, { kind: 'candidate', candidateId: 19 });
+  assert.equal(element('simCandidateSelect').value, '19');
+  element('simZInput').value = '3';
+  element('simZInput').handlers.change();
+  element('simCandidateSelect').value = '';
+  element('simCandidateSelect').handlers.change();
+  assert.equal(controller.getState().source.kind, 'import');
+  assert.equal(controller.getState().source.candidateId, 19);
+  assert.equal(element('simCandidateSelect').value, '');
+  assert.equal(element('simCandidateSelect').innerHTML.match(/Imported reference/g).length, 1);
+  assert.match(element('simCandidateSummary').textContent, /import/);
+  // A new run drops the imported entry, so the empty value no longer reloads anything.
+  await element('runOptimization').handlers.click();
+  assert.doesNotMatch(element('simCandidateSelect').innerHTML, /Imported reference/);
+  assert.equal(controller.getState().source.kind, 'candidate');
 });
 
 test('reset, play, and speed controls surface controller errors instead of throwing', async () => {

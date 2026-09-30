@@ -118,13 +118,22 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
         ratingControls.populate(parsed.normalized, preserveEdits);
     }
     installTooltips(document, window);
-    simCandidateSelect.addEventListener('change', () => {
-        if (simCandidateSelect.value) resultsView.select(simCandidateSelect.value);
-    });
     // Candidate options of the current results, without any imported-reference entry.
     let candidateOptions = '';
+    // The last successfully imported reference document, so the empty
+    // "Imported reference" option can reload it after a candidate was shown.
+    let importedReference = null;
+    simCandidateSelect.addEventListener('change', () => {
+        if (simCandidateSelect.value) {
+            resultsView.select(simCandidateSelect.value);
+        } else if (importedReference) {
+            try { loadSimulatorLayout(structuredClone(importedReference), false); }
+            catch (error) { showStatus(error.message, true); }
+        }
+    });
     function clearSimulatorSelection() {
         candidateOptions = '';
+        importedReference = null;
         simCandidateSelect.innerHTML = '';
         simCandidateSelect.disabled = true;
     }
@@ -423,8 +432,11 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
         // Only after the validating load, so a rejected file never pairs its run
         // metadata with the candidate that stays loaded.
         simulatorRun = sourceRun;
+        importedReference = structuredClone(parsed);
         simCandidateSelect.innerHTML = `<option value="">Imported reference</option>${candidateOptions}`;
         simCandidateSelect.value = '';
+        // The select holds at least the imported entry, even without a run.
+        simCandidateSelect.disabled = false;
         if (saved?.accepted) simulatorController.requestPose(saved.accepted, { source: 'replay' });
         if (saved?.requested) simulatorController.requestPose(saved.requested, { source: 'replay' });
         if (saved?.camera) simulatorView.setCamera(saved.camera);

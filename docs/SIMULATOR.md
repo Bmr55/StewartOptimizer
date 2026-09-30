@@ -39,9 +39,11 @@ geometry editor in `#simGeometryControls`. Its editor copies the controller's
 layout before every edit and reloads that copy through `loadLayout`, which
 reevaluates the home pose and publishes fresh diagnostics. A selected optimizer
 candidate becomes an `editable` simulator source carrying its `candidateId`;
-the retained optimizer candidate stays unchanged. Reset restores the geometry
-and source last loaded from outside the editor while keeping current evaluator
-options.
+the retained optimizer candidate stays unchanged. Every edit rederives the
+layout's `derived` mounting directions against the new home geometry and keeps
+`supplied` ones, so the exported `mounting` block matches the evaluator's.
+Reset restores the geometry and source last loaded from outside the editor
+while keeping current evaluator options.
 
 Circular, C3 paired, and rectangular paired layouts start in parametric mode.
 Radius, C3 anchor pair gap, rectangular aspect, base/platform turn, and horn
@@ -72,7 +74,10 @@ The Optimize and Simulate tabs share the retained candidate selection. The
 simulator loads the selected candidate automatically after a run and when the
 chart or either candidate list changes. Switching tabs leaves the current pose,
 camera, input mode and animation state in memory. A new run clears the previous
-candidate selection.
+candidate selection. After **Load optimizer reference** the candidate select
+gains an **Imported reference** entry, is enabled even without a run, and
+choosing that entry again reloads the imported document after a candidate was
+shown.
 
 The native WebGL2 renderer reads only the accepted evaluator geometry: base
 anchors, solved horn tips, actual rods, platform points, servo orientation
