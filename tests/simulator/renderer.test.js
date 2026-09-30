@@ -1,8 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { asymmetricJointFixture } from '../fixtures/layout.js';
 import { createSimulatorController } from '../../src/simulator/controller.js';
 import { buildSceneGeometry, createWebGLRenderer, projectPoint } from '../../src/simulator/renderer.js';
+import { OVERLAY_DEFAULTS, OVERLAY_NAMES, SCENE_BUILDERS } from '../../src/simulator/scene.js';
 
 test('scene uses solved asymmetric anchor, horn, rod and platform frames', () => {
   const controller = createSimulatorController();
@@ -98,4 +100,70 @@ test('a lost context cancels the default, stops drawing, and restore rebuilds th
   renderer.dispose();
   assert.deepEqual(Object.keys(handlers), []);
   assert.equal(gl.calls.deleteProgram, 1);
+});
+
+// Scene states whose output was frozen from the single-function scene before it
+// was split into builders (tests/fixtures/scene-geometry.json). The default
+// toggles must keep drawing the same lines and points in the same order.
+function frozenSceneStates() {
+  const controller = createSimulatorController();
+  controller.loadLayout(asymmetricJointFixture(), { options: { ballJointLimitDeg: 180 } });
+  controller.setTraces(true);
+  for (const z of [2, 4, 6]) controller.requestPose({ z, rx: 0.02 * z, rz: 0.01 });
+  const accepted = controller.requestPose({ x: 3, y: -2, z: 5, rx: 0.05, ry: -0.03, rz: 0.04 });
+  const legFailure = controller.requestPose({ z: 200 });
+  const globalFailure = { ...accepted, markers: false,
+    assessment: { ...accepted.assessment, violations: [{ type: 'conditioning' }] } };
+  const noAcceptedPose = createSimulatorController().loadLayout(asymmetricJointFixture(),
+    { options: { ballJointLimitDeg: 180, conditionLimit: 1 } });
+  return { accepted, legFailure, globalFailure, noAcceptedPose };
+}
+const frozenScene = JSON.parse(fs.readFileSync(new URL('../fixtures/scene-geometry.json', import.meta.url), 'utf8'));
+const plain = value => JSON.parse(JSON.stringify(value));
+
+test('default overlay builders reproduce the frozen single-function scene exactly', () => {
+  const states = frozenSceneStates();
+  assert.equal(states.legFailure.rejected, true);
+  assert.deepEqual(states.accepted.overlays, OVERLAY_DEFAULTS);
+  for (const [name, state] of Object.entries(states)) {
+    assert.deepEqual(plain(buildSceneGeometry(state)), frozenScene[name], name);
+    // A state without an overlay map (older callers) draws the defaults.
+    const { overlays, ...withoutOverlays } = state;
+    assert.deepEqual(plain(buildSceneGeometry(withoutOverlays)), frozenScene[name], `${name} without overlays`);
+  }
+});
+
+test('each overlay toggle removes only its own builder output', () => {
+  const { accepted } = frozenSceneStates();
+  const full = buildSceneGeometry(accepted);
+  const parts = Object.fromEntries(SCENE_BUILDERS.map(builder =>
+    [builder.name, builder.build(accepted, accepted.layout, accepted.acceptedAssessment)]));
+  assert.deepEqual(SCENE_BUILDERS.map(builder => builder.name),
+    ['base', 'platform', 'legs', 'platformAxes', 'worldAxes', 'trace']);
+  assert.deepEqual(SCENE_BUILDERS.filter(builder => builder.overlay).map(builder => builder.overlay), OVERLAY_NAMES);
+  assert.equal(parts.platformAxes.lines.length, 3);
+  assert.equal(parts.worldAxes.lines.length, 3);
+  assert.equal(parts.trace.lines.length, accepted.trace.length - 1);
+  for (const name of OVERLAY_NAMES) {
+    const scene = buildSceneGeometry({ ...accepted, overlays: { ...accepted.overlays, [name]: false } });
+    const removed = new Set(parts[name].lines.map(line => JSON.stringify(line)));
+    const expected = full.lines.filter(line => !removed.has(JSON.stringify(line)));
+    assert.equal(scene.lines.length, full.lines.length - 3, name);
+    assert.deepEqual(plain(scene.lines), plain(expected), name);
+    assert.deepEqual(plain(scene.points), plain(full.points), name);
+  }
+  const bare = buildSceneGeometry({ ...accepted, overlays: { platformAxes: false, worldAxes: false } });
+  assert.equal(bare.lines.length, full.lines.length - 6);
+  // Unknown names in a hand-built state are ignored rather than drawn.
+  assert.deepEqual(plain(buildSceneGeometry({ ...accepted, overlays: { ...accepted.overlays, ghost: true } })), plain(full));
+});
+
+test('a custom builder list is drawn in order and overlay-gated', () => {
+  const { accepted } = frozenSceneStates();
+  const marker = { at: [0, 0, 0], color: [1, 1, 1], size: 3 };
+  const builders = [{ name: 'dot', build: () => ({ lines: [], points: [marker] }) },
+    { name: 'gated', overlay: 'worldAxes', build: () => ({ lines: [], points: [marker, marker] }) }];
+  assert.equal(buildSceneGeometry(accepted, builders).points.length, 3);
+  assert.equal(buildSceneGeometry({ ...accepted, overlays: { worldAxes: false } }, builders).points.length, 1);
+  assert.deepEqual(buildSceneGeometry({ ...accepted, layout: null }, builders), { lines: [], points: [] });
 });

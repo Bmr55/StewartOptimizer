@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createSimulatorController } from '../../src/simulator/controller.js';
-import { CAMERA_DISTANCE_RANGE, CAMERA_PITCH_LIMIT, createSimulatorView } from '../../src/simulator/view.js';
+import { CAMERA_DISTANCE_RANGE, CAMERA_PITCH_LIMIT, createSimulatorView, overlayInputId } from '../../src/simulator/view.js';
+import { OVERLAY_DEFAULTS, OVERLAY_NAMES } from '../../src/simulator/scene.js';
 import { asymmetricJointFixture } from '../fixtures/layout.js';
 import { createFakeDocument } from './helpers.js';
 
@@ -134,4 +135,18 @@ test('Clear trace empties the recorded trace while traces stay enabled', () => {
   assert.equal(controller.getState().tracesEnabled, true);
   controller.requestPose({ x: 15 });
   assert.equal(controller.getState().trace.length, cleared + 1, 'tracing continues from the cleared trace');
+});
+
+test('overlay checkboxes toggle the controller and follow its state', () => {
+  const { controller, renderer, input } = mount();
+  for (const name of OVERLAY_NAMES) assert.equal(input(overlayInputId(name)).checked, true, name);
+  assert.equal(overlayInputId('worldAxes'), 'simOverlayWorldAxes');
+  const renders = renderer.renders;
+  input('simOverlayWorldAxes').checked = false;
+  input('simOverlayWorldAxes').dispatch('change');
+  assert.deepEqual(controller.getState().overlays, { ...OVERLAY_DEFAULTS, worldAxes: false });
+  assert.ok(renderer.renders > renders, 'a toggle did not redraw');
+  controller.setOverlays({ worldAxes: true, platformAxes: false });
+  assert.equal(input('simOverlayWorldAxes').checked, true);
+  assert.equal(input('simOverlayPlatformAxes').checked, false);
 });

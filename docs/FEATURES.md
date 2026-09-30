@@ -357,7 +357,11 @@ Patterns: Wobble, Ping-pong, Rotation, Tilt, Helical, at a speed multiplier of 0
 
 ### Rendering
 
-A native WebGL2 line/point renderer draws the base polygon, servo direction stubs, horns, rods, the platform polygon, platform axes and the world axes, colouring legs that fail in the requested pose red and the whole platform magenta on a global (conditioning) failure. If WebGL2 is unavailable the tab shows an actionable error and the optimizer remains usable. If the browser loses the WebGL2 context, the pose status reports it, the renderer rebuilds its program and buffers when the context is restored and redraws; pose requests are still evaluated meanwhile. The six pose fields and sliders keep text the user is typing during animation, follow every request when untouched (a committed entry counts as untouched), and are restored after an invalid entry.
+A native WebGL2 line/point renderer draws the base polygon, servo direction stubs, horns, rods, the platform polygon, platform axes and the world axes (the two axis sets can be hidden under **Overlays**), colouring legs that fail in the requested pose red and the whole platform magenta on a global (conditioning) failure. If WebGL2 is unavailable the tab shows an actionable error and the optimizer remains usable. If the browser loses the WebGL2 context, the pose status reports it, the renderer rebuilds its program and buffers when the context is restored and redraws; pose requests are still evaluated meanwhile. The six pose fields and sliders keep text the user is typing during animation, follow every request when untouched (a committed entry counts as untouched), and are restored after an invalid entry.
+
+### Overlays
+
+The **Overlays** group toggles optional scene layers: **Platform axes** (the accepted platform frame) and **World axes** (the fixed X/Y/Z frame at the origin), both on by default. Each toggle is saved in simulator JSON and browser saves as `simulator.overlays`; a file without it keeps the current toggles. See [SIMULATOR.md](./SIMULATOR.md#scene-builders-and-overlays).
 
 ### Mechanical geometry controls
 
@@ -369,13 +373,13 @@ The diagnostics panel shows the requested and rendered accepted poses, editable 
 
 ### Transfer
 
-- **Use geometry as optimizer reference** writes the current simulator layout plus a `simulator` snapshot (source, requested and accepted poses, options, animation, markers, traces, camera, pointer mode) and the originating run into the reference textarea and switches to Optimize.
-- **Load optimizer reference** loads that textarea into the simulator, replaying saved poses, camera, animation (paused), pointer mode, markers and traces, with the Markers and Traces checkboxes synced to the replayed state; an unrecognized or idle animation pattern defaults to Wobble.
+- **Use geometry as optimizer reference** writes the current simulator layout plus a `simulator` snapshot (source, requested and accepted poses, options, animation, markers, traces, overlay toggles, camera, pointer mode) and the originating run into the reference textarea and switches to Optimize.
+- **Load optimizer reference** loads that textarea into the simulator, replaying saved poses, camera, animation (paused), pointer mode, markers, traces and overlay toggles, with the Markers, Traces and overlay checkboxes synced to the replayed state; an unrecognized or idle animation pattern defaults to Wobble.
 - **Download simulator JSON** saves the same document as `stewart_simulator.json`.
 
 ## 9. Browser workspace save
 
-**Save in browser** stores, under the `localStorage` key `stewart-optimizer.workspace.v1`, the requirements and reference textareas, every optimization control (topology, home-height bounds, population, generations, objective set, mutation rate, workspace and cycle sampling, seed, ball-joint limit and soft checkbox, all shared and per-servo rating fields, every axis min/max/step) and, when a layout is loaded, the full simulator JSON. **Restore saved workspace** and an automatic restore on page load (skipped, with a status note, when an optimization is already running) apply those values, re-populate derived controls when the saved requirements parse, and reload the saved simulator layout without activating the tab. **Delete browser save** removes the entry. Optimization results are not saved and must be regenerated. Saves are validated for shape and version before use, and the saved simulator document (layout, options, poses, camera, animation, markers, traces, mouse mode) is validated before any input or layout changes, so a rejected save leaves the current inputs and loaded layout as they were.
+**Save in browser** stores, under the `localStorage` key `stewart-optimizer.workspace.v1`, the requirements and reference textareas, every optimization control (topology, home-height bounds, population, generations, objective set, mutation rate, workspace and cycle sampling, seed, ball-joint limit and soft checkbox, all shared and per-servo rating fields, every axis min/max/step) and, when a layout is loaded, the full simulator JSON. **Restore saved workspace** and an automatic restore on page load (skipped, with a status note, when an optimization is already running) apply those values, re-populate derived controls when the saved requirements parse, and reload the saved simulator layout without activating the tab. **Delete browser save** removes the entry. Optimization results are not saved and must be regenerated. Saves are validated for shape and version before use, and the saved simulator document (layout, options, poses, camera, animation, markers, traces, overlay toggles, mouse mode) is validated before any input or layout changes, so a rejected save leaves the current inputs and loaded layout as they were.
 
 ## 10. Headless API and replay
 

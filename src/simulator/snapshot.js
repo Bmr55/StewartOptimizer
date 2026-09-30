@@ -1,5 +1,6 @@
 import { evaluatePose } from '../model/pose.js';
 import { ANIMATION_PATTERNS, HOME_POSE, normalizePose } from './controller.js';
+import { parseOverlays } from './scene.js';
 import { parseCamera } from './view.js';
 
 export const POINTER_MODES = Object.freeze(['orbit', 'platform']);
@@ -39,7 +40,7 @@ export function parseSimulatorSnapshot(saved, layout, fallbackOptions) {
 
   const result = { options, requested: pose(block.requested, 'simulator.requested'),
     accepted: pose(block.accepted, 'simulator.accepted'), camera: null, animation: null,
-    markers: null, tracesEnabled: null, pointerMode: null };
+    markers: null, tracesEnabled: null, overlays: null, pointerMode: null };
   if (block.camera != null) result.camera = parseCamera(block.camera, 'simulator.camera');
   if (block.animation != null) {
     const animation = plainObject(block.animation, 'simulator.animation');
@@ -57,6 +58,7 @@ export function parseSimulatorSnapshot(saved, layout, fallbackOptions) {
     if (typeof block[key] !== 'boolean') throw new TypeError(`simulator.${key} must be true or false.`);
     result[key] = block[key];
   }
+  if (block.overlays != null) result.overlays = parseOverlays(block.overlays, 'simulator.overlays');
   // An empty mode (a select without a value) counts as not saved.
   if (block.pointerMode != null && block.pointerMode !== '') {
     if (!POINTER_MODES.includes(block.pointerMode)) {

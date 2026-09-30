@@ -29,7 +29,9 @@ support wobble, ping-pong, rotation, tilt, and helical motion. An invalid
 animation frame pauses playback and leaves its request and failure visible.
 Markers and bounded accepted-position traces (the most recent 300 accepted
 platform-origin positions) are controlled by `setMarkers`, `setTraces`, and
-`clearTrace`. Animation patterns advance at most 0.1 s of simulated time per
+`clearTrace`. `setOverlays(patch)` switches named scene overlays on or off;
+names left out of the patch keep their state, and an unknown name or a
+non-boolean value throws without changing anything. Animation patterns advance at most 0.1 s of simulated time per
 frame, scaled by the speed multiplier (0.1 to 5 in the UI).
 
 ## Mechanical geometry controls
@@ -111,14 +113,16 @@ a 0.15 dead zone. Pose requests do not change anchor coordinates.
 snapshot to the optimizer's reference JSON field. **Load optimizer reference**
 can restore that layout and saved requested/accepted poses. **Download simulator
 JSON** saves the same geometry plus run settings, simulator options, pose,
-camera, animation, markers, traces and input mode. The shared importer validates
+camera, animation, markers, traces, overlay toggles and input mode. The shared importer validates
 the layout and ignores old scores; every pose is checked again by the current
 evaluator. The `simulator` block is validated as a whole before anything is
 applied: `options` (only the known keys are kept; limits, servo bounds,
 tolerance, condition limit and the clamp flag must have the right type),
 `requested` and `accepted` poses, `camera` (finite yaw, pitch within ±1.4,
 distance 80 to 2,500, three-coordinate target), `animation.speed` (positive),
-`markers`, `tracesEnabled` and `pointerMode` (`orbit` or `platform`). A rejected
+`markers`, `tracesEnabled`, `overlays` (each known overlay name true or false;
+unknown names are dropped, and a file without the block keeps the current
+toggles) and `pointerMode` (`orbit` or `platform`). A rejected
 file or browser save reports the offending `simulator.` field and leaves the
 current layout, pose, camera, animation and, for a browser save, the optimizer
 inputs untouched. If WebGL2 is unavailable, the simulator names the missing capability
@@ -132,6 +136,28 @@ evaluated while the context is lost.
 Loaded animations remain paused. A saved idle (`none`) or unrecognized pattern
 selects Wobble as the playable default, so Play works after a save/load before
 the first animation has been started.
+
+## Scene builders and overlays
+
+`buildSceneGeometry(state)` in `src/simulator/scene.js` (re-exported by the
+renderer) concatenates the output of an ordered list of builders,
+`SCENE_BUILDERS`. Each builder is `(state, layout, solved) => { lines, points }`,
+where `solved` is the accepted assessment or `null`, so builders only draw data
+the evaluator already produced. The list order is the draw order: `base`
+(base polygon, servo direction stubs and base markers), `platform` (platform
+polygon), `legs` (horns, rods and their markers), `platformAxes`, `worldAxes`
+and `trace`. Markers and traces keep their own controls.
+
+A builder with an `overlay` key is drawn only when that key is on in
+`state.overlays`. `OVERLAY_DEFAULTS` lists every toggleable overlay and its
+default; today these are **Platform axes** (`platformAxes`) and **World axes**
+(`worldAxes`), both on, so the default scene is unchanged from the
+single-function renderer (a frozen fixture in `tests/fixtures/scene-geometry.json`
+checks this). The Simulate tab shows one checkbox per overlay in the
+**Overlays** group, with the id `simOverlay` plus the capitalised name (for
+example `simOverlayWorldAxes`). A new overlay adds one builder, one default,
+one checkbox and a paragraph here; new overlays default off unless their
+issue says otherwise.
 
 ## Live diagnostics
 

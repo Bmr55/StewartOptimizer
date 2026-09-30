@@ -33,6 +33,32 @@ try {
   await page.locator('#simRodTolerance').press('Tab');
   assert.match(await page.locator('#simConditionPolicy').textContent(), /120° upper; rod tolerance ±0.01 mm/);
 
+  // Overlay toggles change what is drawn: count non-background pixels right
+  // after each synchronous redraw, before the browser composites and clears.
+  const overlayPixels = await page.evaluate(() => {
+    const canvas = document.querySelector('#simCanvas');
+    const gl = canvas.getContext('webgl2');
+    const count = () => {
+      const pixels = new Uint8Array(canvas.width * canvas.height * 4);
+      gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+      let drawn = 0;
+      for (let i = 0; i < pixels.length; i += 4) if (Math.abs(pixels[i] - 14) + Math.abs(pixels[i + 1] - 19) + Math.abs(pixels[i + 2] - 28) > 12) drawn++;
+      return drawn;
+    };
+    const toggle = (id, checked) => {
+      const input = document.getElementById(id);
+      input.checked = checked;
+      input.dispatchEvent(new Event('change'));
+      return count();
+    };
+    const both = toggle('simOverlayWorldAxes', true);
+    const withoutAxes = toggle('simOverlayWorldAxes', false);
+    return { both, withoutAxes, withoutEither: toggle('simOverlayPlatformAxes', false), restored: toggle('simOverlayPlatformAxes', true) };
+  });
+  assert.ok(overlayPixels.both > overlayPixels.withoutAxes, `world axes toggle drew nothing: ${JSON.stringify(overlayPixels)}`);
+  assert.ok(overlayPixels.withoutAxes > overlayPixels.withoutEither, `platform axes toggle drew nothing: ${JSON.stringify(overlayPixels)}`);
+  assert.equal(overlayPixels.restored, overlayPixels.withoutAxes);
+
   const downloadPromise = page.waitForEvent('download');
   await page.locator('#simDownload').click();
   const exported = JSON.parse(await readFile(await (await downloadPromise).path(), 'utf8'));
@@ -41,11 +67,14 @@ try {
   assert.equal(exported.simulator.options.rodLengthTolerance, 0.01);
   assert.equal(exported.simulator.requested.z, 100);
   assert.equal(exported.simulator.accepted.z, 0);
+  assert.deepEqual(exported.simulator.overlays, { platformAxes: true, worldAxes: false });
   await page.locator('#optimizeTab').click();
   await page.locator('#referenceLayoutInput').fill(JSON.stringify(exported));
   await page.locator('#simulateTab').click();
   await page.locator('#simLoadReference').click();
   assert.equal(await page.locator('#simRodTolerance').inputValue(), '0.01');
+  assert.equal(await page.locator('#simOverlayWorldAxes').isChecked(), false);
+  assert.equal(await page.locator('#simOverlayPlatformAxes').isChecked(), true);
   assert.match(await page.locator('#simRequestedDiagnostic').textContent(), /rejected/);
   assert.match(await page.locator('#simAcceptedDiagnostic').textContent(), /X 0 Y 0 Z 0/);
   assert.equal(await page.locator('#simPattern').inputValue(), 'wobble');
@@ -104,7 +133,7 @@ try {
   await page.locator('#simulateTab').click();
   assert.equal(await page.locator('#simLowerJointLimit').inputValue(), '60');
   assert.equal(await page.locator('#simUpperJointLimit').inputValue(), '60');
-  console.log('Browser evaluator diagnostics, rejected/accepted pose, settings, animation replay, JSON round trip and optimizer transfer passed.');
+  console.log('Browser evaluator diagnostics, rejected/accepted pose, settings, overlay toggles, animation replay, JSON round trip and optimizer transfer passed.');
 } finally {
   await browser?.close();
   await new Promise(resolve => server.close(resolve));

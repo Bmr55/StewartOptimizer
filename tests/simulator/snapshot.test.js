@@ -70,3 +70,14 @@ test('every simulator field is type-checked and the error names the field', () =
     assert.throws(() => parse(simulator), expected, JSON.stringify(simulator));
   }
 });
+
+test('saved overlay toggles keep known names, drop unknown ones and are type-checked', () => {
+  assert.equal(parse({}).overlays, null);
+  assert.equal(parse({ overlays: null }).overlays, null);
+  assert.deepEqual(parse({ overlays: { worldAxes: false, ghost: true } }).overlays, { worldAxes: false });
+  assert.deepEqual(parse({ overlays: { platformAxes: true, worldAxes: false } }).overlays,
+    { platformAxes: true, worldAxes: false });
+  assert.throws(() => parse({ overlays: 'all' }), /simulator.overlays must be an object/);
+  assert.throws(() => parse({ overlays: [true] }), /simulator.overlays must be an object/);
+  assert.throws(() => parse({ overlays: { platformAxes: 1 } }), /simulator.overlays.platformAxes must be true or false/);
+});

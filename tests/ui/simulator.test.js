@@ -256,3 +256,46 @@ test('Load optimizer reference reports the importer message for bad JSON and typ
   element('simLoadReference').handlers.click();
   assert.match(element('simCandidateSummary').textContent, /import/);
 });
+
+test('overlay toggles round-trip through the optimizer reference, simulator JSON and a browser save', async () => {
+  const downloads = [];
+  const element = await loadUI(FixtureOptimizer, { downloadFile: (data, name) => downloads.push({ data, name }) });
+  await element('runOptimization').handlers.click();
+  const controller = element.app.simulatorController;
+  const toggle = (ui, id, checked) => { ui(id).checked = checked; ui(id).handlers.change({ target: ui(id) }); };
+  assert.equal(element('simOverlayWorldAxes').checked, true);
+  assert.equal(element('simOverlayPlatformAxes').checked, true);
+  toggle(element, 'simOverlayWorldAxes', false);
+  element('simUseReference').handlers.click();
+  assert.deepEqual(JSON.parse(element('referenceLayoutInput').value).simulator.overlays,
+    { platformAxes: true, worldAxes: false });
+  element('simDownload').handlers.click();
+  assert.equal(downloads.at(-1).name, 'stewart_simulator.json');
+  assert.deepEqual(JSON.parse(downloads.at(-1).data).simulator.overlays, { platformAxes: true, worldAxes: false });
+  toggle(element, 'simOverlayWorldAxes', true);
+  toggle(element, 'simOverlayPlatformAxes', false);
+  element('simLoadReference').handlers.click();
+  assert.deepEqual(controller.getState().overlays, { platformAxes: true, worldAxes: false });
+  assert.equal(element('simOverlayWorldAxes').checked, false);
+  assert.equal(element('simOverlayPlatformAxes').checked, true);
+  // A file saved before overlays existed keeps the current toggles.
+  const legacy = JSON.parse(element('referenceLayoutInput').value);
+  delete legacy.simulator.overlays;
+  toggle(element, 'simOverlayPlatformAxes', false);
+  element('referenceLayoutInput').value = JSON.stringify(legacy);
+  element('simLoadReference').handlers.click();
+  assert.deepEqual(controller.getState().overlays, { platformAxes: false, worldAxes: false });
+
+  const storage = new Map();
+  const window = { localStorage: { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value),
+    removeItem: key => storage.delete(key) }, addEventListener() {} };
+  const restored = await loadUI(FixtureOptimizer, { window });
+  await restored('runOptimization').handlers.click();
+  toggle(restored, 'simOverlayPlatformAxes', false);
+  restored('saveLocalWorkspace').handlers.click();
+  toggle(restored, 'simOverlayPlatformAxes', true);
+  restored('restoreLocalWorkspace').handlers.click();
+  assert.deepEqual(restored.app.simulatorController.getState().overlays, { platformAxes: false, worldAxes: true });
+  assert.equal(restored('simOverlayPlatformAxes').checked, false);
+  assert.equal(restored('simOverlayWorldAxes').checked, true);
+});

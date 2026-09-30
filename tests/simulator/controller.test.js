@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { asymmetricJointFixture } from '../fixtures/layout.js';
 import { animationPose, createSimulatorController, HOME_POSE } from '../../src/simulator/controller.js';
+import { OVERLAY_DEFAULTS } from '../../src/simulator/scene.js';
 
 const settings = { ballJointLimitDeg: 180 };
 
@@ -210,4 +211,27 @@ test('non-object poses and option patches are rejected by name instead of throwi
   }
   assert.deepEqual(controller.getState(), before);
   assert.throws(() => controller.loadLayout(asymmetricJointFixture(), { options: 'abc' }), /Simulator options must be an object/);
+});
+
+test('overlay toggles start at their defaults, patch by name and reject unknown or non-boolean values', () => {
+  const controller = createSimulatorController();
+  let notified = 0;
+  controller.subscribe(() => notified++);
+  assert.deepEqual(controller.getState().overlays, OVERLAY_DEFAULTS);
+  controller.loadLayout(asymmetricJointFixture(), { options: settings });
+  let state = controller.setOverlays({ worldAxes: false });
+  assert.deepEqual(state.overlays, { ...OVERLAY_DEFAULTS, worldAxes: false });
+  state.overlays.worldAxes = true;
+  assert.equal(controller.getState().overlays.worldAxes, false, 'state exposed the live overlay map');
+  const before = notified;
+  assert.throws(() => controller.setOverlays({ ghost: true }), /Unknown overlay: ghost/);
+  assert.throws(() => controller.setOverlays({ platformAxes: 'no' }), /overlays.platformAxes must be true or false/);
+  assert.throws(() => controller.setOverlays(['worldAxes']), /overlays must be an object/);
+  assert.throws(() => controller.setOverlays({ platformAxes: false, ghost: true }), /Unknown overlay/);
+  assert.equal(notified, before, 'a rejected patch notified listeners');
+  assert.deepEqual(controller.getState().overlays, { ...OVERLAY_DEFAULTS, worldAxes: false });
+  // Toggles survive a layout reload, like markers and traces.
+  state = controller.loadLayout(asymmetricJointFixture(), { options: settings });
+  assert.equal(state.overlays.worldAxes, false);
+  assert.equal(controller.setOverlays({}).overlays.worldAxes, false);
 });
