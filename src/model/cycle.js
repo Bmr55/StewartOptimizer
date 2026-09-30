@@ -131,7 +131,7 @@ export function dynamicsAtPose(layout, result, state, massProperties) {
   if (!values.every(Number.isFinite)) return { valid: false, reason: 'Cycle demand is nonfinite.' };
   return { valid: true, torque: signedTorque.map(Math.abs), speed: signedSpeed.map(Math.abs),
     signedTorque, signedSpeed, servoAcceleration, rodForces,
-    requiredForce: wrench.force, requiredMoment: wrench.moment, equilibrium,
+    requiredForce: wrench.force, requiredMoment: wrench.moment, equilibrium, rodDirections: motion.directions,
     motionJacobian: motion.rows, conditioning: result.conditioning, rotationMatrix: result.rotationMatrix,
     servoAngles: result.servoAngles, jointAngles: result.jointAngles, jointLimits: result.jointLimits };
 }
@@ -310,7 +310,7 @@ export function computeCycleDemand(layout, { mass = 0, stroke = 0, frequency = 0
     peakTorqueNm: Math.max(...actuatorPeaks), rmsTorqueNm: Math.max(...actuatorRms),
   };
   const loadSharing = createLoadSharingAccumulator();
-  samples.forEach(({ time, result }, k) => loadSharing.add(result.rodForces, weights[k], time));
+  samples.forEach(({ time, result }, k) => loadSharing.add(result, weights[k], time));
   const samplingResult = samplingSummary(status, { maxUnresolved });
   const output = { valid: true, axis: legacyAxis, samples: evaluated, periodS: period,
     torqueNm: Math.max(...torque), speedRadPerSec: Math.max(...speed),

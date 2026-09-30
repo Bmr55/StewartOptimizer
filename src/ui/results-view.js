@@ -136,7 +136,7 @@ export function createResultsView(document, onSelect, ChartClass = globalThis.Ch
     const cycle = selected.cycle;
     const cycleText = cycle?.trajectoryId ? ` Cycle ${cycle.trajectorySource === 'supplied' ? 'trajectory' : 'single-axis'} ${cycle.trajectoryId}; ${cycle.massModel === 'rigid-body' ? 'rigid-body mass properties' : 'legacy centered point mass'}.` : '';
     const sharing = cycle?.loadSharing;
-    const sharingText = sharing ? ` Rod load sharing ${sharing.status === 'available' ? `CV ${printable(sharing.meanCv)} (score ${printable(sharing.balanceScore)})` : sharing.status}.` : '';
+    const sharingText = sharing ? ` Rod load sharing ${sharing.status === 'available' ? `score ${printable(sharing.balanceScore)} (worst sample ${printable(sharing.worstShareRatio)})` : sharing.status}.` : '';
     const physical = selected.compliance;
     const physicalText = physical?.status === 'available' ? ` Physical stiffness ${printable(physical.minScaledStiffnessNPerM)} N/m (L = ${printable(physical.characteristicLengthM * 1000)} mm).`
       : physical?.status === 'singular' ? ' Physical stiffness singular.' : '';

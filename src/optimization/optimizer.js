@@ -19,6 +19,7 @@ import { normalizeMassProperties, RIGID_BODY_FIELDS } from '../model/mass-proper
 import { normalizeStiffnessModel } from '../model/compliance.js';
 import { normalizePayloadSupport } from '../workspace/payload-support.js';
 import { CYCLE_MODEL_VERSION } from '../contracts.js';
+import { LOAD_SHARING_MODEL } from '../model/load-sharing.js';
 import { DEFAULT_CYCLE_SAMPLING, LEGACY_CYCLE_SAMPLING, normalizeCycleSampling } from '../model/cycle-sampling.js';
 
 // Owns run state and population lifecycle. Numerical work and browser I/O live elsewhere.
@@ -346,7 +347,8 @@ export class Optimizer {
       servoRatings: this.servoRatingsInput,
       effectiveServoRatings: this.servoRatings,
       servoRatingPolicy: this.servoRatings.policy,
-      cycleModel: { modelVersion: CYCLE_MODEL_VERSION, trajectory: this.trajectory,
+      // The load-sharing measure ranks Full runs, so its version travels with the export.
+      cycleModel: { modelVersion: CYCLE_MODEL_VERSION, loadSharingModel: LOAD_SHARING_MODEL, trajectory: this.trajectory,
         trajectoryId: trajectoryIdentity(this.trajectory), trajectorySource: this.trajectorySource,
         massProperties: this.massProperties },
       objectiveSet: this.objectiveSet,
