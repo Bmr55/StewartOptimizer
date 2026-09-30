@@ -27,6 +27,8 @@ export function createFakeDocument() {
   }
   return {
     activeElement: null,
+    addEventListener() {},
+    removeEventListener() {},
     createElement: tag => new FakeElement(tag),
     getElementById(id) {
       if (!byId.has(id)) new FakeElement('div').id = id;

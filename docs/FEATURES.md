@@ -357,7 +357,7 @@ Patterns: Wobble, Ping-pong, Rotation, Tilt, Helical, at a speed multiplier of 0
 
 ### Rendering
 
-A native WebGL2 line/point renderer draws the base polygon, servo direction stubs, horns, rods, the platform polygon, platform axes and the world axes, colouring legs that fail in the requested pose red and the whole platform magenta on a global (conditioning) failure. If WebGL2 is unavailable the tab shows an actionable error and the optimizer remains usable.
+A native WebGL2 line/point renderer draws the base polygon, servo direction stubs, horns, rods, the platform polygon, platform axes and the world axes, colouring legs that fail in the requested pose red and the whole platform magenta on a global (conditioning) failure. If WebGL2 is unavailable the tab shows an actionable error and the optimizer remains usable. If the browser loses the WebGL2 context, the pose status reports it, the renderer rebuilds its program and buffers when the context is restored and redraws; pose requests are still evaluated meanwhile. The six pose fields and sliders keep text the user is typing during animation, follow every request when untouched (a committed entry counts as untouched), and are restored after an invalid entry.
 
 ### Mechanical geometry controls
 

@@ -71,6 +71,10 @@ can be edited while a pattern plays; a rejected edit still restores the stored
 value. A focused field that has not been edited follows every layout change,
 so Reset geometry, a candidate or reference load and a browser-save restore
 update it even in browsers where clicking a button leaves focus in the field.
+A committed entry counts as untouched even when the stored value prints
+differently from the typed text (`77.0` for 77), and values print with at most
+12 significant digits so a degree that round-trips through radians shows 30
+rather than 29.999999999999996.
 ## Browser workflow
 
 The Optimize and Simulate tabs share the retained candidate selection. The
@@ -93,7 +97,10 @@ zoomed-out view keeps near/far line ordering instead of saturating the depth
 buffer. Moving the platform by pointer requires selecting **Move
 platform**, which converts drag distance to X/Y requests. Numeric controls and
 sliders request six-axis poses; sliders span ±50 mm and ±30°, while the numeric
-fields accept any finite value. Keyboard arrows move X/Y, Page Up/Down moves Z,
+fields accept any finite value. As with the geometry and diagnostics fields, a
+pose field the user is typing into keeps its text while an animation plays, an
+untouched focused field follows every request, a committed entry counts as
+untouched, and an invalid entry restores the requested value. Keyboard arrows move X/Y, Page Up/Down moves Z,
 W/S tilts about X, A/D tilts about Y, and Q/E rotates about Z, each by 1 mm or
 1° per press (Shift doubles the step); keys are ignored while a field has focus
 or the Simulate tab is hidden. An optional gamepad maps the left stick to X/Y,
@@ -108,7 +115,11 @@ camera, animation, markers, traces and input mode. The shared importer validates
 the layout and ignores old scores; every pose is checked again by the current
 evaluator. If WebGL2 is unavailable, the simulator names the missing capability
 and suggests enabling hardware acceleration or a modern desktop browser;
-optimization remains usable.
+optimization remains usable. If the browser loses the WebGL2 context (GPU reset,
+driver crash, backgrounded mobile tab, too many contexts on one page), the pose
+status reports it, the renderer rebuilds its program and buffers when the
+context is restored and redraws the accepted pose; pose requests are still
+evaluated while the context is lost.
 
 Loaded animations remain paused. A saved idle (`none`) or unrecognized pattern
 selects Wobble as the playable default, so Play works after a save/load before

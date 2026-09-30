@@ -59,6 +59,37 @@ try {
     return text;
   });
   assert.equal(playingText, 'Pause');
+  // A pose field being typed into is not rewritten by animation frames; the
+  // committed value pauses the animation and is requested (#106).
+  await page.locator('#simPlay').click();
+  assert.equal(await page.locator('#simPlay').textContent(), 'Pause');
+  await page.locator('#simXInput').focus();
+  await page.keyboard.press('Control+a');
+  await page.keyboard.type('1');
+  await page.evaluate(() => new Promise(resolve => setTimeout(resolve, 120)));
+  assert.equal(await page.locator('#simXInput').inputValue(), '1', 'typed pose text was rewritten by the frame loop');
+  await page.keyboard.press('Tab');
+  assert.equal(await page.locator('#simPlay').textContent(), 'Play');
+  assert.match(await page.locator('#simPoseStatus').textContent(), /Accepted request: X 1,/);
+  // A lost WebGL2 context is reported, restored and redrawn.
+  const contextLoss = await page.evaluate(async () => {
+    const gl = document.querySelector('#simCanvas').getContext('webgl2');
+    const extension = gl?.getExtension('WEBGL_lose_context');
+    if (!extension) return null;
+    const status = () => document.querySelector('#simPoseStatus').textContent;
+    extension.loseContext();
+    await new Promise(resolve => setTimeout(resolve, 50));
+    const lost = { status: status(), isLost: gl.isContextLost() };
+    extension.restoreContext();
+    await new Promise(resolve => setTimeout(resolve, 200));
+    return { lost, restored: { status: status(), isLost: gl.isContextLost() } };
+  });
+  if (contextLoss) {
+    assert.match(contextLoss.lost.status, /WebGL2 context lost/);
+    assert.equal(contextLoss.lost.isLost, true);
+    assert.equal(contextLoss.restored.isLost, false, 'the browser was not allowed to restore the context');
+    assert.match(contextLoss.restored.status, /Accepted request/);
+  } else console.warn('WEBGL_lose_context is unavailable; the context-loss check was skipped.');
   assert.deepEqual(pageErrors, []);
   await page.locator('#optimizeTab').click();
   await page.locator('#referenceLayoutInput').fill('');
