@@ -1,11 +1,30 @@
 import { Optimizer } from '../optimization/optimizer.js';
 import { selectBest } from '../io/results.js';
+import { ensureLayout } from '../model/pose.js';
 
 let nextRunId = 1;
 const WORKER_URL = new URL('./optimizer-worker.js', import.meta.url);
 
 export class WorkerStartupError extends Error {
   constructor(message) { super(message); this.name = 'WorkerStartupError'; this.startupFailure = true; }
+}
+
+function errorText(error, fallback) {
+  if (typeof error === 'string' && error) return error;
+  return error?.message || fallback;
+}
+
+// A checkpoint candidate must carry a layout the selection and export paths
+// can use; anything else is a corrupt reply rather than partial data.
+function validateCandidate(candidate, index) {
+  if (!candidate || typeof candidate !== 'object') throw new TypeError(`Checkpoint candidate ${index} is not an object.`);
+  try { ensureLayout(candidate.layout); }
+  catch (error) { throw new TypeError(`Checkpoint candidate ${index}: ${error.message}`); }
+  const { id, servoRangeRad } = candidate.layout;
+  if (id === undefined || id === null) throw new TypeError(`Checkpoint candidate ${index} layout has no id.`);
+  if (!Array.isArray(servoRangeRad) || servoRangeRad.length !== 2 || !servoRangeRad.every(Number.isFinite)) {
+    throw new TypeError(`Checkpoint candidate ${index} layout must provide two finite servo bounds.`);
+  }
 }
 
 // Browser adapter: numerical work remains owned by Optimizer inside the worker.
@@ -23,9 +42,12 @@ export class WorkerOptimizer extends Optimizer {
     this.lastProgress = null;
   }
 
+  // Incomplete populations are ignored; an invalid candidate throws before any
+  // state changes, so the last valid checkpoint survives a corrupt reply.
   applyCheckpoint(snapshot) {
     if (!snapshot || !Array.isArray(snapshot.fitness)
       || snapshot.fitness.length !== this.populationSize) return;
+    snapshot.fitness.forEach(validateCandidate);
     this.fitness = snapshot.fitness;
     this.population = snapshot.fitness.map(candidate => candidate.layout);
     const ids = new Set(snapshot.paretoIds || []);
@@ -73,12 +95,13 @@ export class WorkerOptimizer extends Optimizer {
         this.runStatus = 'failed';
         this.startupFailure = true;
         cleanup();
-        reject(new WorkerStartupError(error?.message || String(error)));
+        reject(new WorkerStartupError(errorText(error, 'Worker failed to start.')));
       };
       const failRuntime = (message, snapshot, summary) => {
         if (settled) return;
         settled = true;
-        this.applyCheckpoint(snapshot);
+        // A corrupt final checkpoint must not hide the failure; keep the last valid one.
+        try { this.applyCheckpoint(snapshot); } catch { /* keep the previous checkpoint */ }
         if (summary) this.lastProgress = summary;
         this.runStatus = 'failed';
         const outcome = { status: 'failed', completedGenerations: this.generation,
@@ -88,48 +111,63 @@ export class WorkerOptimizer extends Optimizer {
         try { callback?.(this, outcome); resolve(outcome); }
         catch (error) { reject(error); }
       };
+      const handle = message => {
+        switch (message.type) {
+          case 'started':
+            started = true;
+            clearTimeout(timer);
+            break;
+          case 'progress':
+            if (!started) break;
+            this.lastProgress = message.snapshot;
+            this.onProgress?.({ ...message.snapshot,
+              completed: message.snapshot.actualCompletedPoseWork,
+              total: message.snapshot.budgetedPoseWork });
+            break;
+          case 'checkpoint':
+            if (started) this.applyCheckpoint(message.snapshot);
+            break;
+          case 'result': {
+            if (!started) break;
+            const outcome = message.outcome;
+            if (!outcome || typeof outcome !== 'object' || typeof outcome.status !== 'string') {
+              throw new TypeError('Worker result is missing its outcome.');
+            }
+            this.applyCheckpoint(message.snapshot);
+            if (message.summary) this.lastProgress = message.summary;
+            settled = true;
+            this.runStatus = outcome.status;
+            cleanup();
+            try { callback?.(this, outcome); resolve(outcome); }
+            catch (error) { reject(error); }
+            break;
+          }
+          case 'error':
+            if (!started || message.phase === 'startup') failStartup(new Error(message.message));
+            else failRuntime(message.message, message.snapshot, message.summary);
+            break;
+        }
+      };
       try {
         worker = this.workerFactory(WORKER_URL, { type: 'module' });
+        if (!worker || typeof worker.postMessage !== 'function') {
+          throw new TypeError('The worker factory did not return a worker.');
+        }
         this.worker = worker;
         worker.onmessage = event => {
-          const message = event.data;
+          const message = event?.data;
           if (!message || message.runId !== this.runId || settled) return;
-          switch (message.type) {
-            case 'started':
-              started = true;
-              clearTimeout(timer);
-              break;
-            case 'progress':
-              if (!started) break;
-              this.lastProgress = message.snapshot;
-              this.onProgress?.({ ...message.snapshot,
-                completed: message.snapshot.actualCompletedPoseWork,
-                total: message.snapshot.budgetedPoseWork });
-              break;
-            case 'checkpoint':
-              if (started) this.applyCheckpoint(message.snapshot);
-              break;
-            case 'result': {
-              if (!started) break;
-              this.applyCheckpoint(message.snapshot);
-              if (message.summary) this.lastProgress = message.summary;
-              settled = true;
-              this.runStatus = message.outcome.status;
-              const outcome = message.outcome;
-              cleanup();
-              try { callback?.(this, outcome); resolve(outcome); }
-              catch (error) { reject(error); }
-              break;
-            }
-            case 'error':
-              if (!started || message.phase === 'startup') failStartup(new Error(message.message));
-              else failRuntime(message.message, message.snapshot, message.summary);
-              break;
+          // A malformed reply is a failure of this run, never an exception that
+          // escapes onmessage and leaves the run pending forever.
+          try { handle(message); }
+          catch (error) {
+            if (!started) failStartup(error);
+            else failRuntime(errorText(error, 'Worker reply could not be processed.'));
           }
         };
         worker.onerror = error => {
           if (!started) failStartup(error);
-          else failRuntime(error?.message || 'Worker execution failed.');
+          else failRuntime(errorText(error, 'Worker execution failed.'));
         };
         timer = setTimeout(() => failStartup(new Error('Worker startup timed out.')), this.startupTimeoutMs);
         worker.postMessage({ type: 'start', runId, settings: this.effectiveSettings() });

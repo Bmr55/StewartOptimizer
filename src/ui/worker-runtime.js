@@ -7,13 +7,22 @@ export function createWorkerRuntime({ postMessage, now = () => performance.now()
 
   async function handleMessage(message) {
     if (message?.type === 'cancel') {
-      if (active?.runId === message.runId) active.optimizer.stop();
+      // A cancel without a runId while idle must not match the missing active run.
+      if (active && active.runId === message.runId) active.optimizer.stop();
       return;
     }
     if (message?.type !== 'start') return;
     const { runId, settings } = message;
     if (active) {
+      // A repeated start for the live run is a duplicate, not a failure of that run.
+      if (active.runId === runId) return;
       postMessage({ type: 'error', runId, phase: 'overlap', message: 'An optimization is already running.' });
+      return;
+    }
+    if (!settings || typeof settings !== 'object' || Array.isArray(settings)
+      || !settings.requirements || typeof settings.requirements !== 'object') {
+      postMessage({ type: 'error', runId, phase: 'startup', name: 'TypeError',
+        message: 'start settings must be an object with a requirements object.' });
       return;
     }
 
