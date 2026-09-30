@@ -372,6 +372,21 @@ button.primary:hover {
     filter: brightness(1.1);
 }
 
+#cancelOptimization {
+    transition: none;
+}
+
+#cancelOptimization:enabled {
+    background: #b4232d;
+    border-color: #b4232d;
+    color: #fff;
+}
+
+#cancelOptimization:enabled:hover {
+    background: #cf303b;
+    border-color: #cf303b;
+}
+
 .button-row {
     display: flex;
     flex-wrap: wrap;
