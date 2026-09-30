@@ -337,7 +337,8 @@
             <h2>Execution</h2>
             <div class="button-row">
                 <button class="primary" id="runOptimization">Run Optimization</button>
-                <button id="exportBestLayout">Download Layout JSON</button>
+                <button id="cancelOptimization" disabled>Cancel</button>
+                <button id="exportBestLayout" disabled>Download Layout JSON</button>
             </div>
             <div id="optStatus" class="status">Idle</div>
             <textarea id="resultOutput" spellcheck="false" readonly aria-label="Optimization output"></textarea>
@@ -533,7 +534,21 @@
             showStatus('Requirements cleared.');
         });
 
+        function setRunning(running) {
+            for (const id of ['runOptimization', 'loadSampleRequirements', 'clearRequirements']) {
+                document.getElementById(id).disabled = running;
+            }
+            document.getElementById('cancelOptimization').disabled = !running;
+            document.getElementById('exportBestLayout').disabled = running || !currentOptimizer?.fitness.length;
+        }
+
+        document.getElementById('cancelOptimization').addEventListener('click', () => {
+            currentOptimizer?.stop();
+            showStatus('Cancelling optimization...');
+        });
+
         document.getElementById('runOptimization').addEventListener('click', async () => {
+            if (currentOptimizer?.running) return;
             try {
                 const text = requirementsInput.value.trim();
                 if (!text) {
@@ -560,17 +575,22 @@
                 resultOutput.value = '';
                 const work = currentOptimizer.estimateWork();
                 showStatus(`Optimization starting: ${work.totalPoses.toLocaleString()} pose evaluations.`);
-                await new Promise((resolve) => {
-                    currentOptimizer.start(() => resolve());
-                });
+                setRunning(true);
+                const outcome = await currentOptimizer.start();
 
                 const pareto = currentOptimizer.pareto && currentOptimizer.pareto.length ? currentOptimizer.pareto : currentOptimizer.fitness;
                 const best = pareto.slice().sort((a, b) => b.coverage - a.coverage)[0];
-                resultOutput.value = serializeBest(best);
+                resultOutput.value = best ? JSON.stringify({ run: outcome, result: JSON.parse(serializeBest(best)) }, null, 2) : '';
+                if (outcome.status === 'cancelled') {
+                    showStatus(best ? 'Optimization cancelled. Showing partial results from the last completed population.' : 'Optimization cancelled before a population completed.');
+                    return;
+                }
                 showStatus(`Optimization complete. Feasible coverage: ${best?.coverage ?? 0}%. Pareto front contains ${currentOptimizer.pareto.length || pareto.length} layouts. Coverage applies only to sampled poses and modeled constraints.`);
             } catch (error) {
                 console.error(error);
                 showStatus(error.message, true);
+            } finally {
+                setRunning(false);
             }
         });
 

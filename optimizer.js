@@ -118,6 +118,7 @@ export class Optimizer {
     this.pareto = [];
     this.generation = 0;
     this.running = false;
+    this.runStatus = 'idle';
     this.nextLayoutId = 1;
   }
 
@@ -239,10 +240,11 @@ export class Optimizer {
 
   async evaluateLayout(layout) {
     const workspaceResult = await computeWorkspace(layout, this.ranges, {
+      signal: this.abortController?.signal,
       onProgress: ({ completed, total }) => this.onProgress?.({
         completed: (this.completedEvaluations || 0) * total + completed,
         total: this.workEstimate?.totalPoses ?? total,
-        generation: this.generation,
+        generation: this.activeGeneration ?? this.generation,
       }),
       payload: this.payload,
       stroke: this.stroke,
@@ -506,6 +508,7 @@ export class Optimizer {
   async evaluatePopulation(layouts) {
     const results = [];
     for (const layout of layouts) {
+      this.abortController?.signal.throwIfAborted();
       results.push(await this.evaluateLayout(layout));
       this.completedEvaluations += 1;
     }
@@ -522,7 +525,7 @@ export class Optimizer {
     return { posesPerLayout, evaluations, totalPoses };
   }
 
-  async run() {
+  async executeRun() {
     this.workEstimate = this.estimateWork();
     this.completedEvaluations = 0;
     this.population = Array.from({ length: this.populationSize }, () => this.createRandomLayout());
@@ -532,7 +535,8 @@ export class Optimizer {
     this.updateState(evaluations, fronts);
 
     for (let gen = 0; gen < this.generations; gen++) {
-      this.generation = gen + 1;
+      this.abortController?.signal.throwIfAborted();
+      this.activeGeneration = gen + 1;
       const offspringLayouts = this.createOffspring(evaluations);
       const offspringEvaluations = await this.evaluatePopulation(offspringLayouts);
       const combined = evaluations.concat(offspringEvaluations);
@@ -542,29 +546,52 @@ export class Optimizer {
       fronts = this.fastNonDominatedSort(evaluations);
       this.assignCrowdingDistance(fronts, evaluations);
       this.updateState(evaluations, fronts);
+      this.generation = gen + 1;
     }
   }
 
-  start(callback) {
-    if (this.running) return;
+  async run() {
+    if (this.running) throw new Error('An optimization is already running.');
     this.running = true;
-    this.run()
-      .catch((error) => {
-        console.error(error);
-      })
-      .finally(() => {
-        this.running = false;
-        if (typeof callback === 'function') {
-          callback(this);
-        }
-      });
+    this.runStatus = 'running';
+    this.abortController = new AbortController();
+    this.population = [];
+    this.fitness = [];
+    this.pareto = [];
+    this.generation = 0;
+    this.activeGeneration = 0;
+    this.completedEvaluations = 0;
+    try {
+      await this.executeRun();
+      this.runStatus = 'completed';
+    } catch (error) {
+      if (error.name !== 'AbortError') {
+        this.runStatus = 'failed';
+        throw error;
+      }
+      this.runStatus = 'cancelled';
+    } finally {
+      this.running = false;
+      this.abortController = null;
+    }
+    return { status: this.runStatus, completedGenerations: this.generation,
+      completedEvaluations: this.completedEvaluations,
+      partialResults: this.runStatus === 'cancelled' && this.fitness.length > 0 };
+  }
+
+  start(callback) {
+    return this.run().then(outcome => {
+      callback?.(this, outcome);
+      return outcome;
+    });
   }
 
   stop() {
-    this.running = false;
+    this.abortController?.abort();
   }
 
   exportBest(format = 'json') {
+    if (this.running) throw new Error('Wait for completion or cancellation before exporting.');
     if (!this.fitness.length) {
       console.warn('No evaluated layouts available for export.');
       return;
@@ -580,6 +607,7 @@ export class Optimizer {
       return;
     }
     const json = layoutToJSON(best.layout, best);
+    json.run = { status: this.runStatus, completedGenerations: this.generation, partial: this.runStatus !== 'completed' };
     const data = JSON.stringify(json, null, 2);
     this.download(data, 'optimized_layout.json', 'application/json');
   }
