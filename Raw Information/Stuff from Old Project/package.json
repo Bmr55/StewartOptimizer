@@ -1,0 +1,14 @@
+{
+  "name": "stewart-legacy-simulator",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "quaternion": "2.2.0",
+    "bezier-js": "6.1.4",
+    "ajv": "8.20.0"
+  }
+}

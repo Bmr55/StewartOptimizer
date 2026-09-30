@@ -7,9 +7,9 @@
  **/
 
 import Quaternion from 'quaternion';
-import Bezier from 'bezier-js';
+import { Bezier } from 'bezier-js';
 import Ajv from 'ajv';
-import layoutSchema from '../Stewart_Layout_Schema.json' assert { type: 'json' };
+import layoutSchema from '../Stewart_Layout_Schema.json' with { type: 'json' };
 /* !simple-compilation */
 
 const ajv = new Ajv();
@@ -1336,3 +1336,5 @@ Stewart.prototype = {
 };
 
 Stewart.Animation = StewartAnimation;
+
+export default Stewart;
