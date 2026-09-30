@@ -1,3 +1,4 @@
+import { computeCycleDemand } from './cycle.js';
 import { computeWorkspace, evaluatePose, estimateWorkspaceSize } from './workspace.js';
 import {
   clamp,
@@ -61,6 +62,7 @@ function layoutToJSON(layout, metrics = {}) {
       limit_margin: metrics.limitMargin ?? null,
       fatigue: metrics.fatigue ?? null,
     },
+    cycle: metrics.cycle ?? null,
     feasibility: metrics.feasibility ?? null,
     constraint_policy: metrics.workspace?.constraintPolicy ?? null,
     workspace_counts: metrics.workspace?.counts ?? null,
@@ -242,7 +244,7 @@ export class Optimizer {
     const workspaceResult = await computeWorkspace(layout, this.ranges, {
       signal: this.abortController?.signal,
       onProgress: ({ completed, total }) => this.onProgress?.({
-        completed: (this.completedEvaluations || 0) * total + completed,
+        completed: (this.completedEvaluations || 0) * (this.workEstimate?.posesPerLayout ?? total) + completed,
         total: this.workEstimate?.totalPoses ?? total,
         generation: this.activeGeneration ?? this.generation,
       }),
@@ -285,8 +287,9 @@ export class Optimizer {
       }
     }
 
-    const torque = this.computeTorque(layout);
-    const speedDemand = this.computeSpeedDemand(stats);
+    const cycle = this.evaluateCycle(layout);
+    const torque = cycle.torqueNm;
+    const speedDemand = cycle.speedRadPerSec;
     const loadBalance = stats.loadBalanceScore ?? 0;
     const isotropy = stats.averageIsotropy ?? 0;
     const stiffnessScore = stats.averageStiffness > 0 ? stats.averageStiffness : stiffness;
@@ -305,8 +308,8 @@ export class Optimizer {
       loadBalance,
       isotropy,
       limitMargin,
-      -torque,
-      -speedDemand,
+      cycle.valid ? -torque : -Infinity,
+      cycle.valid ? -speedDemand : -Infinity,
       -fatigue,
     ];
 
@@ -315,7 +318,9 @@ export class Optimizer {
       workspace: workspaceResult,
       coverage,
       relaxedCoverage,
+      cycle,
       feasibility: {
+        cycleSatisfied: cycle.valid,
         sampledWorkspaceSatisfied: coverage === 100,
         homePoseSatisfied: homeResult.reachable,
         scope: 'Sampled poses under the modeled geometry, servo, rod and ball-joint constraints only',
@@ -336,24 +341,14 @@ export class Optimizer {
     };
   }
 
-  computeTorque(layout) {
-    if (!this.payload || layout.hornLength <= 0) return 0;
-    const amplitudeMeters = (this.stroke / 2) / 1000;
-    const accel = Math.pow(2 * Math.PI * this.frequency, 2) * amplitudeMeters;
-    const dynamicForce = this.payload * accel;
-    const staticForce = this.payload * 9.81;
-    const totalForce = dynamicForce + staticForce;
-    const hornLengthMeters = layout.hornLength / 1000;
-    return (totalForce * hornLengthMeters) / 6;
+  evaluateCycle(layout) {
+    return computeCycleDemand(layout, { mass: this.payload, stroke: this.stroke,
+      frequency: this.frequency, axis: this.cycleAxis, ballJointLimitDeg: this.ballJointLimitDeg,
+      signal: this.abortController?.signal });
   }
 
-  computeSpeedDemand(stats) {
-    if (!stats || !Number.isFinite(stats.servoUsagePeak)) {
-      return 0;
-    }
-    const servoAmplitude = stats.servoUsagePeak / 2;
-    return servoAmplitude * 2 * Math.PI * this.frequency;
-  }
+  computeTorque(layout) { return this.evaluateCycle(layout).torqueNm; }
+  computeSpeedDemand(layout) { return this.evaluateCycle(layout).speedRadPerSec; }
 
   computeFatigue(stats) {
     if (!stats) return 0;
@@ -443,7 +438,7 @@ export class Optimizer {
         const maxVal = evaluations[sorted[sorted.length - 1]].objectives[m];
         evaluations[sorted[0]].crowding = Infinity;
         evaluations[sorted[sorted.length - 1]].crowding = Infinity;
-        if (maxVal - minVal === 0) continue;
+        if (!Number.isFinite(minVal) || !Number.isFinite(maxVal) || maxVal === minVal) continue;
         for (let i = 1; i < sorted.length - 1; i++) {
           if (!Number.isFinite(evaluations[sorted[i]].crowding)) continue;
           const prev = evaluations[sorted[i - 1]].objectives[m];
@@ -511,18 +506,22 @@ export class Optimizer {
       this.abortController?.signal.throwIfAborted();
       results.push(await this.evaluateLayout(layout));
       this.completedEvaluations += 1;
+      this.onProgress?.({ completed: this.completedEvaluations * this.workEstimate.posesPerLayout,
+        total: this.workEstimate.totalPoses, generation: this.activeGeneration });
     }
     return results;
   }
 
   estimateWork() {
-    const posesPerLayout = estimateWorkspaceSize(this.ranges);
+    const workspacePosesPerLayout = estimateWorkspaceSize(this.ranges);
+    const cyclePosesPerLayout = this.stroke > 0 && this.frequency > 0 ? 64 : 1;
+    const posesPerLayout = workspacePosesPerLayout + cyclePosesPerLayout + 1;
     const evaluations = this.populationSize * (this.generations + 1);
     const totalPoses = posesPerLayout * evaluations;
     if (!Number.isSafeInteger(totalPoses) || totalPoses > 1000000) {
       throw new RangeError('Run exceeds 1,000,000 pose evaluations. Increase sweep steps or reduce population/generations.');
     }
-    return { posesPerLayout, evaluations, totalPoses };
+    return { posesPerLayout, workspacePosesPerLayout, cyclePosesPerLayout, evaluations, totalPoses };
   }
 
   async executeRun() {
