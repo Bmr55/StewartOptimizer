@@ -3,9 +3,10 @@ import { normalizeTrajectory } from './trajectory.js';
 import { normalizeMassProperties, RIGID_BODY_FIELDS } from './mass-properties.js';
 import { normalizeStiffnessModel } from './compliance.js';
 import { normalizePayloadSupport } from '../workspace/payload-support.js';
+import { DEFAULT_BALL_JOINT_LIMIT_DEG } from '../contracts.js';
 
 const DEFAULTS = {
-  ball_joint_max_deg: 45,
+  ball_joint_max_deg: DEFAULT_BALL_JOINT_LIMIT_DEG,
   servo_travel_bounds_deg: [-120, 120],
   rod_length_bounds_mm: [160, 420],
   horn_length_bounds_mm: [30, 110],

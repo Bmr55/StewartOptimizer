@@ -21,7 +21,8 @@ function inertiaTensor(value) {
     }
     tensor = value.map(row => row.slice());
   } else if (value && typeof value === 'object') {
-    const get = key => value[key] ?? 0;
+    // Omitted products default to zero; null is rejected by the finite check like every other parser path.
+    const get = key => value[key] === undefined ? 0 : value[key];
     for (const key of ['ixx', 'iyy', 'izz']) {
       if (!(key in value)) throw new RangeError(`inertia_kg_m2.${key} is required.`);
     }

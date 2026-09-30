@@ -10,7 +10,7 @@ Requirements may be flat or grouped into `payload`, `workspace`, `rotations`, an
 | cycle_axis | x, y or z, case-insensitive | Required unless `trajectory` |
 | trajectory | Optional payload field replacing the three cycle fields: `{ type, frequency_hz, components: [{ axis, amplitude_mm or amplitude_deg, phase_deg }] }`; `type` is optional and must be `sinusoid`, each axis may appear once, and `phase_deg` defaults to 0 | Single-axis cycle |
 | center_of_mass_mm | Optional payload field; [x, y, z] platform-frame offset from the moving origin, mm | [0, 0, 0] |
-| inertia_kg_m2 | Optional payload field; admissible inertia tensor about the center of mass, kg m^2 | Zero |
+| inertia_kg_m2 | Optional payload field; admissible inertia tensor about the center of mass, kg m^2, as a 3x3 matrix or an `ixx`/`iyy`/`izz`/`ixy`/`ixz`/`iyz` object (omitted products default to zero; null is rejected) | Zero |
 | external_force_n / external_moment_nm | Optional payload fields; base-frame external force at the center of mass (N) and moment (N m) | Zero |
 | x_range_mm, y_range_mm, z_range_mm | Finite min/max with max >= min; offsets from home, mm | Required |
 | rx_range_deg, ry_range_deg, rz_range_deg | Finite min/max with max >= min; roll/pitch/yaw, degrees | Required |

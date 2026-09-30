@@ -37,8 +37,11 @@ export async function computeWorkspace(layout, ranges = {}, options = {}) {
   const effectiveSampling = normalizeSampling(sampling);
   const totalPoses = estimateWorkspaceSize(ranges, effectiveSampling);
 
+  // normalizeSampling admits any safe-integer sequence start; fold it into the 32-bit seed range.
+  const reservoirSeed = effectiveSampling.strategy === 'halton'
+    ? ((effectiveSampling.sequenceStart - 1) % 0xffffffff) + 1 : null;
   const statistics = createWorkspaceStatistics({ totalPoses, sampleLimit, violationSampleLimit,
-    random: random ?? (effectiveSampling.strategy === 'halton' ? createRandom(effectiveSampling.sequenceStart) : Math.random) });
+    random: random ?? (reservoirSeed ? createRandom(reservoirSeed) : Math.random) });
 
   // Optional static holding check at every strictly feasible pose; each check is one extra work unit.
   const support = payloadSupport ? createPayloadSupportStatistics(payloadSupport) : null;
