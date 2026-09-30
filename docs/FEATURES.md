@@ -222,7 +222,7 @@ Cycle poses always use the strict joint policy, both socket limits, the numerica
 
 ### Rod load sharing and actuator utilization
 
-`cycle.loadSharing` (`rod-load-sharing-v1`) reports the time-weighted mean and worst coefficient of variation of the six rod-force magnitudes, `balanceScore = 1 / (1 + meanCv)`, per-rod peak compression and tension, and a `zero-load` status instead of a perfect score when no sample carries load. `actuator_utilization` separately reports per-servo peak actuator torque, its CV, and utilization against peak torque ratings.
+`cycle.loadSharing` (`rod-load-sharing-v2`) reports `balanceScore`, the time-weighted mean over loaded samples of the equal-share ratio ideal / max|f| (ideal = |F| / Σ|uᵢ · F̂|, the peak rod force if all six rods carried the required force equally in the same sense; 1 is perfect, opposing tension/compression rods score lower), the worst sample's ratio and time, the magnitude CV as a spread diagnostic, per-rod peak compression and tension, and a `zero-load` status instead of a perfect score when no sample carries load. `actuator_utilization` separately reports per-servo peak actuator torque, its CV, and utilization against peak torque ratings.
 
 ### Servo capacity
 
@@ -257,7 +257,7 @@ With `stiffness_model`, the home-pose Cartesian stiffness matrix `K = Aᵀ diag(
 | physicalStiffness | physical_stiffness | max | N/m | Minimum scaled eigenvalue of the physical stiffness matrix |
 | torque | torque | min | N m | Peak sampled absolute servo load torque |
 | speedDemand | speed_demand | min | rad/s | Peak sampled absolute servo speed |
-| loadSharing | load_sharing | max | ratio | 1 / (1 + mean CV of solved rod forces) |
+| loadSharing | load_sharing | max | ratio | Mean equal-share ratio of solved rod forces (ideal same-sense peak / actual peak) |
 | loadBalance | load_balance | max | proxy | Legacy directional leg-share proxy |
 | isotropy | isotropy | max | ratio | Mean reciprocal condition over feasible poses |
 | limitMargin | limit_margin | max | ratio | Worst socket headroom × violation-free fraction, clipped to [0, 1] |

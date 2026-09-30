@@ -32,7 +32,7 @@ The p5/quaternion/Stewart scripts belong only to the [archived simulator](../arc
 | `src/model/mounting.js` | Derived or supplied lower/upper socket directions and legacy migration |
 | `src/model/conditioning.js` | Dimensionless rotary Jacobian, one-sided SVD, numerical and engineering condition checks |
 | `src/model/cycle.js`, `cycle-sampling.js` | Newton-Euler rod-force balance, servo rate/acceleration, uniform and adaptive time schedules, periodic weights |
-| `src/model/load-sharing.js` | Streamed rod-force CV statistics and actuator utilization |
+| `src/model/load-sharing.js` | Streamed rod-force sharing statistics (equal-share ratio, magnitude CV, peaks) and actuator utilization |
 | `src/model/servo-ratings.js` | Rating normalization, envelopes, RMS/duration windows and capacity status |
 | `src/model/compliance.js` | Physical Cartesian stiffness model and test-wrench predictions |
 | `src/workspace/sampling.js` | Halton/grid pose generation, size estimate and the per-layout limit |
