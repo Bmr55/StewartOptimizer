@@ -33,7 +33,8 @@ test('headless export and display retain their documented fields and partial sta
 
 test('UI passes headless export data to its browser download adapter', async () => {
   let downloaded;
-  const element = await loadUI(Optimizer, {downloadFile: data => { downloaded = JSON.parse(data); }});
+  class HeadlessOptimizer extends Optimizer {}
+  const element = await loadUI(HeadlessOptimizer, {downloadFile: data => { downloaded = JSON.parse(data); }});
   await element('runOptimization').handlers.click();
   element('exportBestLayout').handlers.click();
   assert.equal(downloaded.run.status, 'completed');

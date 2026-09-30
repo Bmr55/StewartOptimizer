@@ -13,6 +13,8 @@ The p5/quaternion/Stewart scripts belong only to the [archived simulator](../arc
 | Module | Owns |
 | --- | --- |
 | `src/ui/app.js` | Event handlers, status display and run/cancel control |
+| `src/ui/worker-optimizer.js` | Browser adapter retaining selection/export and completed checkpoints |
+| `src/ui/optimizer-worker.js`, `worker-runtime.js`, `worker-protocol.js` | Module worker entry, run lifecycle and serializable message shapes |
 | `src/ui/controls.js` | Workspace inputs and preservation of explicit overrides |
 | `src/ui/tooltips.js`, `download.js` | Browser-only interactions |
 | `src/model/requirements.js` | Parsing, normalization and physical input validation |
@@ -89,9 +91,9 @@ population * (generations + 1) * (workspace poses + cycle phases + 1 home pose)
 
 Cycle phases are 64 for moving cycles and 1 for stationary cycles. The default sample budgets 72 * (729 + 64 + 1) = 57,168 checks; early cycle failure can perform fewer actual checks. Progress accounts for the candidate budget, not wall-clock time.
 
-Workspace sweeps yield to the event loop before starting and every 256 poses. Statistics use running means; reservoir samples cap retained example poses at 200/class. A run's AbortController is checked during evaluation and after each yield. Cycle checks are bounded and observe the same signal. There is no worker thread or server compute service.
+Workspace sweeps yield to the event loop before starting and every 256 poses. Statistics use running means; reservoir samples cap retained example poses at 200/class. A run's AbortController is checked during evaluation and after each yield. Cycle checks are bounded and observe the same signal. The browser creates one module worker per run; the headless API still runs directly. See [worker protocol](./WORKER_PROTOCOL.md).
 
-`await optimizer.start()` or `await optimizer.run()` returns a completed/cancelled outcome. `optimizer.stop()` requests cancellation. Overlapping runs reject. Errors propagate; they are not reported as successful completion. Cancellation retains the most recent fully evaluated population, not an unfinished sweep/generation. UI and download mark retained results partial.
+`await optimizer.start()` or `await optimizer.run()` returns a completed/cancelled outcome. `optimizer.stop()` requests cancellation. Overlapping runs reject. Browser worker errors are reported as failed outcomes with any completed checkpoint retained. Cancellation retains the most recent fully evaluated population, not an unfinished sweep/generation. UI and download mark retained results partial. A worker startup failure offers an explicit main-thread fallback.
 
 ## Verification and reproduction
 
@@ -99,4 +101,4 @@ Run `npm test` for the checked-in regression suite, organized under `tests/model
 
 Run `npm run smoke` for the complete default sample and export checks. Browser smoke checks are manual: complete the sample, observe progress, cancel a longer run, inspect/download the result, and verify the archived canvas/animation separately. The local development server has HTTP checks for entry points, content types and path restrictions.
 
-The search is a heuristic. Reproduction of numerical runs requires preserving a layout and settings or adding controlled random seeding; the public UI currently has no seed control. Exported geometry and metrics are a starting point for independent engineering analysis, not a manufacturing specification.
+The search is a heuristic. The UI exposes a seed, and exports include effective settings for replay. Exported geometry and metrics are a starting point for independent engineering analysis, not a manufacturing specification.

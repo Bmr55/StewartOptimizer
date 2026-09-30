@@ -1,0 +1,11 @@
+# Browser worker execution
+
+The browser UI creates one module worker for each optimization run. The worker owns a headless `Optimizer`; the main thread uses `WorkerOptimizer` to retain selection, JSON/CAD export, and the most recent completed population. Direct imports of the headless `Optimizer` and the root compatibility adapter remain available without a worker.
+
+Every message has a unique `runId`. Main to worker: `start` includes serializable `effectiveSettings()` and `cancel` requests an abort for that ID. Worker to main: `started` acknowledges initialization; `progress` contains a bounded summary; `checkpoint` contains one fully evaluated retained population; `result` contains the outcome and final checkpoint; `error` identifies startup or runtime failure. The adapter ignores mismatched IDs and messages after settlement. A second start while a worker run is active reports an overlap error; the UI also disables Run during an active run.
+
+Progress contains elapsed milliseconds, completed/total candidates, generation, front size, a compact best-candidate summary, actual completed pose work, budgeted pose work, and approximate ETA. ETA is null until at least three candidates complete. Progress publishes at most once per 100 ms and never carries layouts, populations, or workspace samples. Checkpoints and final results may carry the completed retained population; they are not published for unfinished generations. The worker checks for cancellation through the optimizer's existing abort signal and pose-batch yields.
+
+Startup errors and startup timeouts terminate the worker, display the failure, and enable **Run on main thread**. The fallback starts only after the user selects it and uses the same normalized requirements, seed, bounds, options, budgets, and yielding core. Runtime errors terminate the worker and display any last completed population as partial. A later Run creates a fresh worker.
+
+`npm test` checks deterministic worker/headless equivalence, run IDs, overlap, throttling, checkpoints, cancellation, failure, timeout, fallback, and restart. `npm run test:browser` checks real module-worker completion, cancellation/restart, result export, and blocked-worker fallback in the development server.
