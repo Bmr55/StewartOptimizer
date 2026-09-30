@@ -4,6 +4,8 @@ import { validateConditionLimit } from '../model/conditioning.js';
 import { createWorkspaceStatistics } from './statistics.js';
 import { createRandom } from '../optimization/random.js';
 import { estimateWorkspaceSize, normalizeSampling, workspacePoses } from './sampling.js';
+import { createPayloadSupportStatistics } from './payload-support.js';
+import { dynamicsAtPose, staticState } from '../model/cycle.js';
 
 export { MAX_WORKSPACE_POSES, estimateWorkspaceSize } from './sampling.js';
 
@@ -26,6 +28,7 @@ export async function computeWorkspace(layout, ranges = {}, options = {}) {
     random,
     onProgress,
     signal,
+    payloadSupport = null,
   } = options;
 
   signal?.throwIfAborted();
@@ -37,24 +40,31 @@ export async function computeWorkspace(layout, ranges = {}, options = {}) {
   const statistics = createWorkspaceStatistics({ totalPoses, sampleLimit, violationSampleLimit,
     random: random ?? (effectiveSampling.strategy === 'halton' ? createRandom(effectiveSampling.sequenceStart) : Math.random) });
 
-  let completed = 0;
-  onProgress?.({ completed, total: totalPoses });
+  // Optional static holding check at every strictly feasible pose; each check is one extra work unit.
+  const support = payloadSupport ? createPayloadSupportStatistics(payloadSupport) : null;
+  let completed = 0, checks = 0;
+  const totalWork = support ? 2 * totalPoses : totalPoses;
+  onProgress?.({ completed, total: totalWork });
   await yieldToEventLoop();
   signal?.throwIfAborted();
   for (const pose of workspacePoses(ranges, effectiveSampling)) {
     const result = evaluatePose(layout, pose, {
       ballJointLimitDeg, lowerBallJointLimitDeg, upperBallJointLimitDeg, ballJointClamp,
-      conditionLimit, mounting, servoRangeRad: layout.servoRangeRad, recordLegData: false,
+      conditionLimit, mounting, servoRangeRad: layout.servoRangeRad, recordLegData: Boolean(support),
     });
     statistics.add(pose, result);
+    if (support && result.reachable) {
+      support.add(pose, dynamicsAtPose(layout, result, staticState(pose), payloadSupport.massProperties));
+      checks++;
+    }
     completed++;
     if (completed % 256 === 0) {
-      onProgress?.({ completed, total: totalPoses });
+      onProgress?.({ completed: completed + checks, total: totalWork });
       await yieldToEventLoop();
       signal?.throwIfAborted();
     }
   }
-  onProgress?.({ completed, total: totalPoses });
+  onProgress?.({ completed: completed + checks, total: totalWork });
 
   return {
     ...statistics.finish(),
@@ -63,5 +73,7 @@ export async function computeWorkspace(layout, ranges = {}, options = {}) {
       numericalReciprocalCutoff: 1e-10 },
     sampling: effectiveSampling,
     payload, stroke, frequency,
+    workUnits: completed + checks,
+    payloadSupport: support ? support.finish(totalPoses) : null,
   };
 }

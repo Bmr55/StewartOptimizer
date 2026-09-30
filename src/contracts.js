@@ -12,6 +12,7 @@ export const DEFAULT_TOPOLOGY = 'c3_paired';
 export const METRICS = Object.freeze({
   coverage: { json: 'coverage', direction: 'max', unit: 'percent' },
   relaxedCoverage: { json: 'relaxed_coverage', direction: 'max', unit: 'percent' },
+  payloadCoverage: { json: 'payload_coverage', direction: 'max', unit: 'percent' },
   conditioningQuality: { json: 'conditioning_quality', direction: 'max', unit: 'ratio' },
   dexterity: { json: 'dexterity', direction: 'max', unit: 'ratio' },
   stiffness: { json: 'stiffness', direction: 'max', unit: 'proxy' },
@@ -27,4 +28,5 @@ export const METRICS = Object.freeze({
 
 export const FAILURE_CATEGORIES = Object.freeze([
   'geometry', 'home', 'workspace', 'cycle', 'cycle_convergence', 'joint', 'conditioning', 'servo_capacity',
+  'payload_support',
 ]);
