@@ -62,6 +62,8 @@ try {
   assert.deepEqual(pageErrors, []);
   await page.locator('#optimizeTab').click();
   await page.locator('#referenceLayoutInput').fill('');
+  // Parameters live in a collapsed details panel.
+  await page.locator('#optimizationParameters summary').click();
   await page.locator('#optPopulation').fill('4');
   await page.locator('#optGenerations').fill('1');
   await page.locator('#optSampling').selectOption('256');
