@@ -361,6 +361,7 @@
         let activeInfoButton = null;
         let currentOptimizer = null;
         let lastWorkspaceDefaults = null;
+        let lastJointDefault = null;
 
         function hideInfoPopup() {
             if (!infoPopup.classList.contains('visible')) return;
@@ -423,7 +424,7 @@
             statusEl.classList.toggle('error', isError);
         }
 
-        function populateWorkspaceInputs(workspace) {
+        function populateWorkspaceInputs(workspace, preserveEdits = false) {
             const mappings = [
                 ['X', workspace.x],
                 ['Y', workspace.y],
@@ -433,11 +434,25 @@
                 ['Rz', workspace.rz],
             ];
             for (const [prefix, range] of mappings) {
-                document.getElementById(`opt${prefix}Min`).value = range.min;
-                document.getElementById(`opt${prefix}Max`).value = range.max;
-                document.getElementById(`opt${prefix}Step`).value = Number(range.step.toFixed(4));
+                const previous = lastWorkspaceDefaults?.[prefix.toLowerCase()];
+                for (const [suffix, key] of [['Min', 'min'], ['Max', 'max'], ['Step', 'step']]) {
+                    const input = document.getElementById(`opt${prefix}${suffix}`);
+                    if (!preserveEdits || !previous || input.value === '' || Number(input.value) === previous[key]) {
+                        input.value = range[key];
+                    }
+                }
             }
             lastWorkspaceDefaults = workspace;
+        }
+
+        function populateRequirementsDefaults(parsed, preserveEdits = false) {
+            populateWorkspaceInputs(parsed.workspace, preserveEdits);
+            const jointDefault = parsed.normalized.ball_joint_max_deg;
+            if (!preserveEdits || lastJointDefault === null || ballJointLimitInput.value === ''
+                || Number(ballJointLimitInput.value) === lastJointDefault) {
+                ballJointLimitInput.value = jointDefault;
+            }
+            lastJointDefault = jointDefault;
         }
 
         function readWorkspaceRanges() {
@@ -501,9 +516,7 @@
             try {
                 const json = await loadDefaultRequirements();
                 requirementsInput.value = json;
-                const { workspace, normalized } = parseRequirements(json);
-                populateWorkspaceInputs(workspace);
-                ballJointLimitInput.value = normalized.ball_joint_max_deg ?? 52;
+                populateRequirementsDefaults(parseRequirements(json));
                 showStatus('Sample requirements loaded.');
             } catch (error) {
                 console.error(error);
@@ -524,8 +537,7 @@
                     throw new Error('Provide requirements JSON before running the optimizer.');
                 }
                 const { normalized, workspace } = parseRequirements(text);
-                populateWorkspaceInputs(workspace);
-                ballJointLimitInput.value = normalized.ball_joint_max_deg ?? ballJointLimitInput.value;
+                populateRequirementsDefaults({ normalized, workspace }, true);
 
                 const generations = Math.max(1, parseInt(document.getElementById('optGenerations').value, 10) || 1);
                 const populationSize = Math.max(4, parseInt(document.getElementById('optPopulation').value, 10) || 4);
@@ -535,7 +547,7 @@
                     generations,
                     populationSize,
                     ranges,
-                    ballJointLimitDeg: Number(ballJointLimitInput.value) || 52,
+                    ballJointLimitDeg: Number(ballJointLimitInput.value),
                     ballJointClamp: ballJointClampCheckbox.checked,
                 });
 
@@ -571,9 +583,7 @@
         loadDefaultRequirements()
             .then((json) => {
                 requirementsInput.value = json;
-                const { workspace, normalized } = parseRequirements(json);
-                populateWorkspaceInputs(workspace);
-                ballJointLimitInput.value = normalized.ball_joint_max_deg ?? 52;
+                populateRequirementsDefaults(parseRequirements(json));
                 showStatus('Sample requirements loaded. Adjust parameters and run the optimizer.');
             })
             .catch((error) => {
