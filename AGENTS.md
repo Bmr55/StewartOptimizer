@@ -37,6 +37,20 @@ Run `npm test` after any change. Run `npm run smoke` when touching the optimizer
 - No new dependencies in the active app. Dev dependencies are only for tests, browser checks and vendoring.
 - The Dockerfile copies only `index.html`, `src/`, `styles/`, `assets/` and `examples/`. A new runtime directory must be added there too.
 - Docs are part of the change. Update [docs/FEATURES.md](docs/FEATURES.md) and the relevant model doc when adding a control, default, limit or exported field. Do not claim capabilities the code lacks: no collision detection, no ML surrogate, no PSO.
+- Prevent doc drift: a PR that changes behaviour, a message shape, an exported field, an accepted value, a default or a user-visible string is not done until every doc that describes it is updated in the same PR. Before opening the PR, grep `docs/` and `README.md` for each identifier, field name, option value and message phase the diff touched and fix every mention. Use this map, and add to it when a new doc appears:
+
+| Code area | Docs to check |
+| --- | --- |
+| `src/contracts.js`, `src/io/results.js`, `src/optimization/objectives.js` | [docs/RESULTS.md](docs/RESULTS.md) (metadata table, downloaded fields, `effective_settings` values), [docs/FEATURES.md](docs/FEATURES.md) metrics table |
+| `src/model/requirements.js`, `src/model/servo-ratings.js`, `src/model/compliance.js`, `src/model/mass-properties.js` | [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md), [docs/COMPLIANCE_MODEL.md](docs/COMPLIANCE_MODEL.md), [docs/CYCLE_MODEL.md](docs/CYCLE_MODEL.md) |
+| `src/model/cycle.js`, `src/model/trajectory.js`, `src/model/cycle-sampling.js` | [docs/CYCLE_MODEL.md](docs/CYCLE_MODEL.md) |
+| `src/model/pose.js`, `src/model/mounting.js`, `src/model/conditioning.js` | [docs/JOINT_MODEL.md](docs/JOINT_MODEL.md), [docs/CONDITIONING_MODEL.md](docs/CONDITIONING_MODEL.md), [docs/IMPORT.md](docs/IMPORT.md) |
+| `src/optimization/` | [docs/TOPOLOGIES.md](docs/TOPOLOGIES.md), [docs/architecture.md](docs/architecture.md), [docs/FEATURES.md](docs/FEATURES.md) headless API section |
+| `src/ui/worker-*.js` | [docs/WORKER_PROTOCOL.md](docs/WORKER_PROTOCOL.md) |
+| `src/ui/app.js`, `src/ui/controls.js`, `src/ui/run-dashboard.js`, `index.html` | [docs/FEATURES.md](docs/FEATURES.md) control tables and dashboard section, [README.md](README.md) |
+| `src/simulator/` | [docs/SIMULATOR.md](docs/SIMULATOR.md), [docs/FEATURES.md](docs/FEATURES.md) simulator section |
+| `src/io/cad.js` | [docs/CAD.md](docs/CAD.md) |
+| `src/io/layout-import.js` | [docs/IMPORT.md](docs/IMPORT.md) |
 
 ## Git
 

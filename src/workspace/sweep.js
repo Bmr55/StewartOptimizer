@@ -1,6 +1,6 @@
 import { ensureLayout, evaluatePose } from '../model/pose.js';
 import { resolveMounting } from '../model/mounting.js';
-import { validateConditionLimit } from '../model/conditioning.js';
+import { NUMERICAL_RECIPROCAL_CUTOFF, validateConditionLimit } from '../model/conditioning.js';
 import { createWorkspaceStatistics } from './statistics.js';
 import { createRandom } from '../optimization/random.js';
 import { estimateWorkspaceSize, normalizeSampling, workspacePoses } from './sampling.js';
@@ -74,7 +74,7 @@ export async function computeWorkspace(layout, ranges = {}, options = {}) {
     ...statistics.finish(),
     constraintPolicy: { mode: ballJointClamp ? 'soft-ball-joint' : 'strict', ballJointLimitDeg,
       lowerBallJointLimitDeg, upperBallJointLimitDeg, conditionLimit,
-      numericalReciprocalCutoff: 1e-10 },
+      numericalReciprocalCutoff: NUMERICAL_RECIPROCAL_CUTOFF },
     sampling: effectiveSampling,
     payload, stroke, frequency,
     workUnits: completed + checks,

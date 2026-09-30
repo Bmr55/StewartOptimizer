@@ -1,5 +1,6 @@
 import { evaluatePose } from '../model/pose.js';
 import { resultFeasibility } from './results.js';
+import { DEFAULT_BALL_JOINT_LIMIT_DEG } from '../contracts.js';
 
 const HOME = { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 };
 const finitePoint = point => Array.isArray(point) && point.length === 3 && point.every(Number.isFinite);
@@ -21,7 +22,7 @@ function planeGuide(base, horn, platform) {
 
 function validHome(evaluation) {
   const result = evaluation.homePose || evaluatePose(evaluation.layout, HOME, {
-    ballJointLimitDeg: evaluation.workspace?.constraintPolicy?.ballJointLimitDeg ?? 45,
+    ballJointLimitDeg: evaluation.workspace?.constraintPolicy?.ballJointLimitDeg ?? DEFAULT_BALL_JOINT_LIMIT_DEG,
     recordLegData: true,
   });
   const layout = evaluation.layout;

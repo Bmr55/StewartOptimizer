@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Optimizer } from '../../src/optimization/optimizer.js';
 import { evaluatePose } from '../../src/model/pose.js';
-import { topologyGeometry, validateTopology } from '../../src/optimization/topology.js';
+import { topologyFields, topologyGeometry, validateTopology } from '../../src/optimization/topology.js';
 import { createSimulatorController } from '../../src/simulator/controller.js';
 import { createGeometryEditor, editGeometry, geometryMode,
   PARAMETER_FIELDS } from '../../src/simulator/geometry-editor.js';
@@ -11,6 +11,17 @@ import { asymmetricJointFixture } from '../fixtures/layout.js';
 import { resolveMounting } from '../../src/model/mounting.js';
 
 const make = topology => new Optimizer({}, { topology, seed: 37 }).createRandomLayout();
+
+test('editor parameter fields are the shared topology fields in display order', () => {
+  assert.deepEqual(Object.keys(PARAMETER_FIELDS), ['circular', 'c3_paired', 'rectangular_paired']);
+  for (const topology of Object.keys(PARAMETER_FIELDS)) {
+    assert.deepEqual([...PARAMETER_FIELDS[topology]].sort(), [...topologyFields(topology)].sort(), topology);
+  }
+  assert.deepEqual(PARAMETER_FIELDS.c3_paired, ['base_radius', 'platform_radius', 'base_pair_gap', 'platform_pair_gap',
+    'base_orientation', 'platform_orientation', 'beta_offset']);
+  assert.deepEqual(PARAMETER_FIELDS.rectangular_paired, ['base_radius', 'platform_radius', 'base_aspect', 'platform_aspect',
+    'base_orientation', 'platform_orientation', 'beta_offset', 'beta_pair_offset']);
+});
 
 test('every parametric geometry control regenerates the intended shared topology coordinates', () => {
   for (const topology of ['circular', 'c3_paired', 'rectangular_paired']) {

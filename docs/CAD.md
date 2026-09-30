@@ -10,8 +10,12 @@ flag, and failed categories.
 
 The CSV records six base anchors in the base frame, six solved horn tips and
 six platform anchors in world coordinates at the home pose, plus base and
-platform centroids. Coordinates and lengths are millimeters. The CSV also
-records the selected candidate ID and each point's frame. The home pose has
+platform centroids. When a leg's base anchor, horn tip and platform anchor are
+collinear, the CSV also carries a `Plane guide N` row (`kind` `plane_guide`,
+world frame) offset 10 mm from the base anchor perpendicular to the horn, so
+the Fusion script can still define that leg's sketch plane; it is not a
+mechanical point. Coordinates and lengths are millimeters. The CSV also
+records the selected candidate ID and each point's `kind` and frame. The home pose has
 zero requested translation/rotation; its world platform points include the
 layout's home-height offset.
 

@@ -6,6 +6,8 @@ import { importLayout } from '../../src/io/layout-import.js';
 import { layoutToJSON } from '../../src/io/results.js';
 import { resolveMounting } from '../../src/model/mounting.js';
 import { createGeometryEditor } from '../../src/simulator/geometry-editor.js';
+import { DEFAULT_BALL_JOINT_LIMIT_DEG } from '../../src/contracts.js';
+import { NUMERICAL_RECIPROCAL_CUTOFF } from '../../src/model/conditioning.js';
 
 const source = { ...asymmetricJointFixture(), id: 19, topology: 'free', topologyParameters: {} };
 // Evaluated candidates carry their resolved mounting, as evaluateLayout leaves it.
@@ -190,6 +192,20 @@ test('the Imported reference option reloads the import and the select is enabled
   await element('runOptimization').handlers.click();
   assert.doesNotMatch(element('simCandidateSelect').innerHTML, /Imported reference/);
   assert.equal(controller.getState().source.kind, 'candidate');
+});
+
+test('simulator defaults come from the shared contracts, not local literals', async () => {
+  class BareSettingsOptimizer extends FixtureOptimizer {
+    effectiveSettings() { return { requirements: {}, populationSize: 4, generations: 1 }; }
+  }
+  const element = await loadUI(BareSettingsOptimizer);
+  await element('runOptimization').handlers.click();
+  const options = element.app.simulatorController.getState().options;
+  assert.equal(options.ballJointLimitDeg, DEFAULT_BALL_JOINT_LIMIT_DEG);
+  assert.equal(options.lowerBallJointLimitDeg, DEFAULT_BALL_JOINT_LIMIT_DEG);
+  assert.equal(options.upperBallJointLimitDeg, DEFAULT_BALL_JOINT_LIMIT_DEG);
+  assert.match(element('simConditionPolicy').textContent, new RegExp(`mandatory reciprocal cutoff: ${NUMERICAL_RECIPROCAL_CUTOFF}\\.`));
+  assert.match(element('simConditionPolicy').textContent, new RegExp(`Joint limits ${DEFAULT_BALL_JOINT_LIMIT_DEG}° lower`));
 });
 
 test('reset, play, and speed controls surface controller errors instead of throwing', async () => {
