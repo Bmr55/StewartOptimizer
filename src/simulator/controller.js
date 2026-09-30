@@ -93,6 +93,19 @@ export function createSimulatorController({ onChange } = {}) {
     return requestPose(HOME_POSE, { source: 'load' });
   }
 
+  function clear() {
+    layout = null;
+    source = null;
+    options = {};
+    requested = { ...HOME_POSE };
+    accepted = null;
+    assessment = null;
+    acceptedAssessment = null;
+    trace = [];
+    animation = { ...animation, playing: false, seconds: 0, pauseReason: null };
+    return notify();
+  }
+
   function setOptions(patch) {
     options = { ...options, ...copy(patch) };
     if (!layout) return notify();
@@ -124,7 +137,7 @@ export function createSimulatorController({ onChange } = {}) {
   }
 
   return {
-    loadLayout, requestPose, setOptions, setAnimation, tick, getState,
+    loadLayout, clear, requestPose, setOptions, setAnimation, tick, getState,
     subscribe(listener) { listeners.add(listener); listener(getState()); return () => listeners.delete(listener); },
     getReferenceLayout() { return copy(layout); },
     setMarkers(enabled) { markers = Boolean(enabled); return notify(); },

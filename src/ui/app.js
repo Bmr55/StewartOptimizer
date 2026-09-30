@@ -1,4 +1,5 @@
-import { selectBest, displayResult } from '../io/results.js';
+import { selectBest, displayResult, layoutToJSON } from '../io/results.js';
+import { importLayout } from '../io/layout-import.js';
 import { download } from './download.js';
 import { parseRequirements } from '../model/requirements.js';
 import { loadDefaultRequirements as loadSample } from '../io/sample-requirements.js';
@@ -11,6 +12,19 @@ import { installTooltips } from './tooltips.js';
 import { createResultsView } from './results-view.js';
 import { buildConstructionSkeleton, canExportCad, skeletonToCSV, skeletonToFusionScript } from '../io/cad.js';
 import { createServoRatingControls } from './servo-ratings-controls.js';
+import { createSimulatorController } from '../simulator/controller.js';
+import { createSimulatorView } from '../simulator/view.js';
+
+function simulatorOptions(settings = {}, layout = {}) {
+    return {
+        ballJointLimitDeg: settings.ballJointLimitDeg ?? 45,
+        lowerBallJointLimitDeg: settings.lowerBallJointLimitDeg ?? settings.ballJointLimitDeg ?? 45,
+        upperBallJointLimitDeg: settings.upperBallJointLimitDeg ?? settings.ballJointLimitDeg ?? 45,
+        conditionLimit: settings.conditionLimit ?? null,
+        servoRangeRad: layout.servoRangeRad,
+        rodLengthTolerance: settings.rodLengthTolerance ?? 0.5,
+    };
+}
 
 export function createApp({ document, window, Optimizer = DefaultOptimizer, workerFactory,
     loadDefaultRequirements = loadSample, downloadFile = download,
@@ -23,6 +37,7 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
     const ballJointLimitInput = document.getElementById('ballJointLimit');
     let currentOptimizer = null;
     let lastOutcome = null;
+    let simulatorRun = null;
     let runSerial = 0;
     let runReferenceNote = '';
     const dashboard = createRunDashboard(document, { now });
@@ -32,6 +47,24 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
         fallbackButton.disabled = !available;
     }
     offerFallback(false);
+    let activeTab = 'optimize';
+    const simulatorController = createSimulatorController();
+    const simulatorView = createSimulatorView({ document, window, controller: simulatorController,
+        isActive: () => activeTab === 'simulate' });
+    function setTab(tab) {
+        activeTab = tab;
+        for (const [name, buttonId, panelId] of [['optimize', 'optimizeTab', 'optimizePanel'],
+            ['simulate', 'simulateTab', 'simulatePanel']]) {
+            const selected = name === tab;
+            const button = document.getElementById(buttonId);
+            button.classList.toggle('active', selected);
+            button.setAttribute('aria-selected', String(selected));
+            document.getElementById(panelId).hidden = !selected;
+        }
+        if (tab === 'simulate') simulatorView.render();
+    }
+    document.getElementById('optimizeTab').addEventListener('click', () => setTab('optimize'));
+    document.getElementById('simulateTab').addEventListener('click', () => setTab('simulate'));
     const { populateRequirementsDefaults, readWorkspaceRanges, readHomeHeightBounds,
         readSamplingSettings, randomizeSeed } = createControls(document);
     const ratingControls = createServoRatingControls(document);
@@ -40,10 +73,19 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
         ratingControls.populate(parsed.normalized, preserveEdits);
     }
     installTooltips(document, window);
+    function loadCandidate(candidate) {
+        simulatorRun = lastOutcome;
+        simulatorController.loadLayout(candidate.layout, {
+            source: { kind: 'candidate', candidateId: candidate.layout.id },
+            options: simulatorOptions(lastOutcome?.effective_settings ?? currentOptimizer?.effectiveSettings?.(), candidate.layout),
+        });
+        document.getElementById('simDownload').disabled = false;
+    }
     const resultsView = createResultsView(document, (candidate) => {
         if (!currentOptimizer || currentOptimizer.running) return;
         currentOptimizer.selectCandidate(candidate.layout.id);
         resultOutput.value = JSON.stringify({ run: lastOutcome, result: displayResult(candidate) }, null, 2);
+        loadCandidate(candidate);
         setRunning(false);
     });
     resultsView.clear();
@@ -71,6 +113,9 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
         currentOptimizer = null;
         lastOutcome = null;
         offerFallback(false);
+        simulatorRun = null;
+        simulatorController.clear();
+        document.getElementById('simDownload').disabled = true;
         resultsView.clear();
         dashboard.reset();
         setRunning(false);
@@ -140,6 +185,7 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
         resultOutput.value = best ? JSON.stringify({ run: lastOutcome, result: displayResult(best) }, null, 2) : '';
         dashboard.finish(thisRun, { status: outcome.status, partialResults: outcome.partialResults,
             snapshot: finalSnapshot() });
+        if (best) loadCandidate(best);
         if (outcome.status === 'cancelled') {
             showStatus(best ? 'Optimization cancelled. Showing partial results from the last completed population.' : 'Optimization cancelled before a population completed.');
         } else if (outcome.status === 'failed') {
@@ -228,6 +274,9 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
 
             resultOutput.value = '';
             lastOutcome = null;
+            simulatorRun = null;
+            simulatorController.clear();
+            document.getElementById('simDownload').disabled = true;
             resultsView.clear();
             const work = currentOptimizer.estimateWork();
             dashboard.start(thisRun, { candidates: work.evaluations,
@@ -274,6 +323,52 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
         }
     });
 
+    function simulatorJSON() {
+        const state = simulatorController.getState();
+        if (!state.layout) throw new Error('Load a layout before exporting simulator state.');
+        return JSON.stringify({ ...layoutToJSON(state.layout), run: simulatorRun,
+            simulator: { source: state.source, requested: state.requested, accepted: state.accepted,
+                options: state.options, animation: state.animation, markers: state.markers,
+                tracesEnabled: state.tracesEnabled, trace: state.trace,
+                camera: simulatorView.getCamera(), pointerMode: document.getElementById('simPointerMode').value } }, null, 2);
+    }
+    document.getElementById('simUseReference').addEventListener('click', () => {
+        try {
+            referenceLayoutInput.value = simulatorJSON();
+            setTab('optimize');
+            showStatus('Simulator geometry is ready as the optimizer reference.');
+        } catch (error) { showStatus(error.message, true); }
+    });
+    document.getElementById('simDownload').addEventListener('click', () => {
+        try { downloadFile(simulatorJSON(), 'stewart_simulator.json', 'application/json', document); }
+        catch (error) { showStatus(error.message, true); }
+    });
+    document.getElementById('simLoadReference').addEventListener('click', () => {
+        try {
+            const raw = referenceLayoutInput.value.trim();
+            if (!raw) throw new Error('Provide reference layout JSON in Optimize first.');
+            const parsed = JSON.parse(raw);
+            const { layout, sourceRun } = importLayout(parsed);
+            layout.id = parsed.id ?? parsed.layout?.id ?? parsed.result?.layout?.id ?? null;
+            simulatorRun = sourceRun;
+            const saved = parsed.simulator;
+            simulatorController.loadLayout(layout, { source: { kind: 'import', candidateId: layout.id ?? null },
+                options: saved?.options ?? simulatorOptions(sourceRun?.effective_settings, layout) });
+            if (saved?.accepted) simulatorController.requestPose(saved.accepted, { source: 'replay' });
+            if (saved?.requested) simulatorController.requestPose(saved.requested, { source: 'replay' });
+            if (saved?.camera) simulatorView.setCamera(saved.camera);
+            if (saved?.animation) {
+                document.getElementById('simPattern').value = saved.animation.pattern || 'wobble';
+                document.getElementById('simSpeed').value = String(saved.animation.speed || 1);
+            }
+            if (saved?.pointerMode) document.getElementById('simPointerMode').value = saved.pointerMode;
+            if (saved?.markers !== undefined) simulatorController.setMarkers(saved.markers);
+            if (saved?.tracesEnabled !== undefined) simulatorController.setTraces(saved.tracesEnabled);
+            document.getElementById('simDownload').disabled = false;
+            setTab('simulate');
+        } catch (error) { showStatus(error.message, true); setTab('optimize'); }
+    });
+
     function exportCad(format) {
         try {
             const selected = currentOptimizer?.getSelectedCandidate?.();
@@ -304,5 +399,5 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
             console.error(error);
             showStatus(error.message, true);
         });
-    return { ready };
+    return { ready, simulatorController, simulatorView, setTab };
 }
