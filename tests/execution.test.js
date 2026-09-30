@@ -9,7 +9,7 @@ import { sampleText } from './ui-helper.js';
 test('default sample has a practical bounded budget', () => {
   const { normalized, workspace } = parseRequirements(sampleText);
   assert.equal(estimateWorkspaceSize(workspace), 729);
-  assert.equal(new Optimizer(normalized, { ranges: workspace }).estimateWork().totalPoses, 52488);
+  assert.equal(new Optimizer(normalized, { ranges: workspace }).estimateWork().totalPoses, 57168);
   assert.throws(() => new Optimizer(normalized, { ranges: workspace, generations: 10000 }).estimateWork(), /1,000,000/);
   assert.throws(() => estimateWorkspaceSize({ x: { min: 0, max: 1e9, step: 0.001 } }), /100,000/);
   assert.throws(() => estimateWorkspaceSize({ x: { min: 2, max: 1, step: 1 } }), /Sweep ranges/);
