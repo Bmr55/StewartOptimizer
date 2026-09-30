@@ -14,6 +14,8 @@ try {
   await page.waitForFunction(() => document.querySelector('#requirementsInput').value.includes('mass_kg'));
   await page.locator('#optPopulation').fill('4');
   await page.locator('#optGenerations').fill('1');
+  await page.locator('#optObjectiveSet').selectOption('full');
+  await page.locator('#optMutationRate').fill('0');
   await page.locator('#servoTorqueRating').fill('0.000001');
   await page.locator('#servoSpeedRating').fill('180');
   await page.locator('#servoTorque1').fill('2');
@@ -38,6 +40,9 @@ try {
   assert.equal(downloaded.id, Number(selected));
   assert.equal(downloaded.schema_version, 2);
   assert.equal(downloaded.feasibility.passing, !downloaded.diagnostic);
+  assert.equal(downloaded.run.effective_settings.objectiveSet, 'full');
+  assert.equal(downloaded.run.effective_settings.objectiveDefinitions.length, 9);
+  assert.equal(downloaded.run.effective_settings.mutationRate, 0);
   assert.equal(downloaded.run.effective_settings.servoRatingPolicy, 'advisory');
   assert.equal(downloaded.run.effective_settings.effectiveServoRatings.perServo[0].torqueNm, 2);
   assert.equal(downloaded.run.effective_settings.effectiveServoRatings.perServo[1].torqueNm, 0.000001);
@@ -76,7 +81,7 @@ try {
   assert.equal(await fallbackPage.locator('#runMainThreadFallback').isEnabled(), true);
   await fallbackPage.locator('#runMainThreadFallback').click();
   await fallbackPage.waitForFunction(() => document.querySelector('#optStatus').textContent.includes('Optimization complete'), null, { timeout: 30000 });
-  console.log('Browser worker completion, cancellation/restart, startup fallback, servo ratings, reference import, selection and export passed.');
+  console.log('Browser worker completion, cancellation/restart, startup fallback, objectives, mutation, ratings, reference import, selection and export passed.');
 } finally {
   await browser?.close();
   await new Promise(resolve => server.close(resolve));

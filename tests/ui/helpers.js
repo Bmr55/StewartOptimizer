@@ -19,5 +19,7 @@ export async function loadUI(Optimizer, options = {}) {
   await app.ready;
   element('optPopulation').value = '4';
   element('optGenerations').value = '1';
+  element('optObjectiveSet').value = 'compact';
+  element('optMutationRate').value = '0.35';
   return element;
 }

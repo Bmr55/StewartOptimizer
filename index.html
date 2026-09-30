@@ -71,6 +71,14 @@
                     </div>
                     <input type="number" id="optPopulation" value="12" min="4">
                 </label>
+                <label class="field">
+                    <div class="field-header"><span>Objective set</span><button type="button" class="info-button" data-info="Compact balances feasible coverage, conditioning quality, cycle torque, and speed. Full adds five diagnostic proxy objectives.">ⓘ</button></div>
+                    <select id="optObjectiveSet"><option value="compact" selected>Compact (4 objectives)</option><option value="full">Full (9 objectives)</option></select>
+                </label>
+                <label class="field">
+                    <div class="field-header"><span>Mutation rate</span><button type="button" class="info-button" data-info="Probability from 0 to 1 that each offspring receives a mutation. Zero disables mutation.">ⓘ</button></div>
+                    <input type="number" id="optMutationRate" value="0.35" min="0" max="1" step="any">
+                </label>
             </div>
             <div class="grid">
                 <label class="field">

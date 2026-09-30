@@ -98,7 +98,8 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
     function setRunning(running) {
         ratingControls.setDisabled(running);
         for (const id of ['runOptimization', 'loadSampleRequirements', 'clearRequirements',
-            'optSampling', 'optSeed', 'randomizeSeed', 'clearReferenceLayout', 'referenceLayoutFile']) {
+            'optSampling', 'optSeed', 'randomizeSeed', 'optPopulation', 'optGenerations',
+            'optObjectiveSet', 'optMutationRate', 'clearReferenceLayout', 'referenceLayoutFile']) {
             document.getElementById(id).disabled = running;
         }
         document.getElementById('cancelOptimization').disabled = !running;
@@ -168,6 +169,10 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
 
             const generations = Number(document.getElementById('optGenerations').value);
             const populationSize = Number(document.getElementById('optPopulation').value);
+            const objectiveSet = document.getElementById('optObjectiveSet').value;
+            const mutationText = document.getElementById('optMutationRate').value.trim();
+            if (!mutationText) throw new RangeError('mutationRate must be a finite probability in [0, 1].');
+            const mutationRate = Number(mutationText);
             const ranges = readWorkspaceRanges();
             const { seed, sampling } = readSamplingSettings();
             const servoRatings = ratingControls.read();
@@ -176,6 +181,8 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
             const options = {
                 generations,
                 populationSize,
+                objectiveSet,
+                mutationRate,
                 ranges,
                 topology: document.getElementById('optTopology').value || 'c3_paired',
                 referenceLayout: referenceLayoutInput.value.trim() || null,

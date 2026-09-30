@@ -16,6 +16,8 @@ Supplied servo ratings add a separate capacity check to the feasibility flags. E
 
 ## Metric meanings
 
+The default Compact search maximizes feasible coverage and worst valid home/workspace reciprocal conditioning, and minimizes peak cycle torque and speed. Full adds home dexterity, geometric stiffness proxy, directional load-balance proxy, sampled joint-limit margin proxy, and fatigue heuristic. Metrics remain in diagnostic JSON even when they are not objectives. `run.effective_settings.objectiveSet` records `compact` or `full`; `objectiveDefinitions` records each selected key, direction, unit, and approximation label. Older ten-slot snapshots can still replay as `legacy-v2`.
+
 | Export metadata | Calculation / interpretation |
 | --- | --- |
 | coverage | Feasible sampled workspace percentage |
