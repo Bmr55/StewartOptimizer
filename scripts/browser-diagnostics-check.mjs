@@ -59,14 +59,19 @@ try {
       return count();
     };
     const all = toggle('simOverlayWorldAxes', true);
+    // The Z 100 request above is rejected, so its ghost is part of the scene.
+    const withoutGhost = toggle('simOverlayRequestedGhost', false);
+    const withGhost = toggle('simOverlayRequestedGhost', true);
     const narrowCones = upperLimit('20');
     const wideCones = upperLimit('120');
     const withoutCones = toggle('simOverlayJointCones', false);
     const withoutArcs = toggle('simOverlayServoArcs', false);
     const withoutAxes = toggle('simOverlayWorldAxes', false);
-    return { all, narrowCones, wideCones, withoutCones, withoutArcs, withoutAxes,
+    return { all, withoutGhost, withGhost, narrowCones, wideCones, withoutCones, withoutArcs, withoutAxes,
       withoutEither: toggle('simOverlayPlatformAxes', false), restored: toggle('simOverlayPlatformAxes', true) };
   });
+  assert.ok(overlayPixels.withoutGhost < overlayPixels.all, `the rejected request drew no ghost: ${JSON.stringify(overlayPixels)}`);
+  assert.equal(overlayPixels.withGhost, overlayPixels.all);
   assert.ok(overlayPixels.narrowCones < overlayPixels.all, `a narrower joint limit did not shrink the cones: ${JSON.stringify(overlayPixels)}`);
   assert.equal(overlayPixels.wideCones, overlayPixels.all);
   assert.ok(overlayPixels.all > overlayPixels.withoutCones, `joint cones toggle drew nothing: ${JSON.stringify(overlayPixels)}`);
@@ -83,7 +88,8 @@ try {
   assert.equal(exported.simulator.options.rodLengthTolerance, 0.01);
   assert.equal(exported.simulator.requested.z, 100);
   assert.equal(exported.simulator.accepted.z, 0);
-  assert.deepEqual(exported.simulator.overlays, { servoArcs: false, jointCones: false, platformAxes: true, worldAxes: false });
+  assert.deepEqual(exported.simulator.overlays, { servoArcs: false, jointCones: false, requestedGhost: true,
+    platformAxes: true, worldAxes: false });
   await page.locator('#optimizeTab').click();
   await page.locator('#referenceLayoutInput').fill(JSON.stringify(exported));
   await page.locator('#simulateTab').click();
@@ -91,6 +97,7 @@ try {
   assert.equal(await page.locator('#simRodTolerance').inputValue(), '0.01');
   assert.equal(await page.locator('#simOverlayServoArcs').isChecked(), false);
   assert.equal(await page.locator('#simOverlayJointCones').isChecked(), false);
+  assert.equal(await page.locator('#simOverlayRequestedGhost').isChecked(), true);
   assert.equal(await page.locator('#simOverlayWorldAxes').isChecked(), false);
   assert.equal(await page.locator('#simOverlayPlatformAxes').isChecked(), true);
   assert.match(await page.locator('#simRequestedDiagnostic').textContent(), /rejected/);
@@ -137,6 +144,93 @@ try {
     assert.equal(contextLoss.restored.isLost, false, 'the browser was not allowed to restore the context');
     assert.match(contextLoss.restored.status, /Accepted request/);
   } else console.warn('WEBGL_lose_context is unavailable; the context-loss check was skipped.');
+  // A request just past a joint limit leaves its ghost almost on top of the held
+  // pose. The failing legs are red on the ghost instead of the held legs, and the
+  // ghost's depth bias must keep them visible there (not hidden by the held legs).
+  const nearMiss = await page.evaluate(() => {
+    const canvas = document.querySelector('#simCanvas');
+    const gl = canvas.getContext('webgl2');
+    const red = () => {
+      const pixels = new Uint8Array(canvas.width * canvas.height * 4);
+      gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+      let count = 0;
+      for (let i = 0; i < pixels.length; i += 4) if (pixels[i] > 200 && pixels[i + 1] < 90 && pixels[i + 2] < 110) count++;
+      return count;
+    };
+    const check = (id, checked) => {
+      const input = document.getElementById(id);
+      input.checked = checked;
+      input.dispatchEvent(new Event('change'));
+      return red();
+    };
+    const change = (id, value) => {
+      const input = document.getElementById(id);
+      input.value = value;
+      input.dispatchEvent(new Event('change'));
+    };
+    for (const id of ['simMarkers', 'simOverlayServoArcs', 'simOverlayJointCones']) check(id, false);
+    check('simOverlayRequestedGhost', true);
+    document.getElementById('simResetPose').click();
+    change('simUpperJointLimit', '10');
+    // Coarse steps find the limit, then 0.05° steps from the last accepted pose
+    // leave the ghost within 0.05° of the held pose.
+    const firstRejected = (from, step) => {
+      for (let rx = from; rx <= 30; rx = Math.round((rx + step) * 100) / 100) {
+        change('simRXInput', String(rx));
+        const status = document.querySelector('#simPoseStatus').textContent;
+        if (status.startsWith('Rejected')) return { rx, status };
+      }
+      return null;
+    };
+    const coarse = firstRejected(0.5, 0.5);
+    if (!coarse) return null;
+    change('simRXInput', String(coarse.rx - 0.5));
+    const found = firstRejected(coarse.rx - 0.45, 0.05);
+    const ghostOn = red();
+    const result = { ...found, ghostOn, ghostOff: check('simOverlayRequestedGhost', false),
+      restored: check('simOverlayRequestedGhost', true) };
+    // The dimmed ghost rods must not replace the held light-grey rods where the
+    // two nearly coincide, from any camera angle (they flickered before).
+    const rodPixels = () => {
+      const pixels = new Uint8Array(canvas.width * canvas.height * 4);
+      gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+      let count = 0;
+      for (let i = 0; i < pixels.length; i += 4) {
+        if (Math.abs(pixels[i] - 224) + Math.abs(pixels[i + 1] - 227) + Math.abs(pixels[i + 2] - 240) < 18) count++;
+      }
+      return count;
+    };
+    const rect = canvas.getBoundingClientRect();
+    const orbit = dx => {
+      const x = rect.left + rect.width / 2, y = rect.top + rect.height / 2;
+      canvas.dispatchEvent(new PointerEvent('pointerdown', { clientX: x, clientY: y, button: 0, isPrimary: true, pointerId: 1, bubbles: true }));
+      canvas.dispatchEvent(new PointerEvent('pointermove', { clientX: x + dx, clientY: y, pointerId: 1, bubbles: true }));
+      canvas.dispatchEvent(new PointerEvent('pointerup', { clientX: x + dx, clientY: y, pointerId: 1, bubbles: true }));
+    };
+    document.getElementById('simPointerMode').value = 'orbit';
+    result.rods = [];
+    for (let turn = 0; turn < 4; turn++) {
+      if (turn) orbit(12);
+      check('simOverlayRequestedGhost', true);
+      const on = rodPixels();
+      check('simOverlayRequestedGhost', false);
+      result.rods.push({ on, off: rodPixels() });
+    }
+    check('simOverlayRequestedGhost', true);
+    orbit(-36);
+    return result;
+  });
+  assert.ok(nearMiss, 'no Rx up to 30° exceeded a 10° upper joint limit');
+  assert.match(nearMiss.status, /ballJoint/, nearMiss.status);
+  assert.ok(nearMiss.ghostOff > 0, `held failing legs drew no red: ${JSON.stringify(nearMiss)}`);
+  // Measured: 97 % of the red survives with the bias, 71 % without it.
+  assert.ok(nearMiss.ghostOn > nearMiss.ghostOff * 0.9,
+    `ghost failure legs were hidden behind the held pose: ${JSON.stringify(nearMiss)}`);
+  assert.equal(nearMiss.restored, nearMiss.ghostOn);
+  for (const { on, off } of nearMiss.rods) {
+    assert.ok(off > 0 && on >= off * 0.95, `the ghost replaced held rod pixels: ${JSON.stringify(nearMiss.rods)}`);
+  }
+  for (const id of ['#simMarkers', '#simOverlayServoArcs', '#simOverlayJointCones']) await page.locator(id).check();
   assert.deepEqual(pageErrors, []);
   await page.locator('#optimizeTab').click();
   await page.locator('#referenceLayoutInput').fill('');

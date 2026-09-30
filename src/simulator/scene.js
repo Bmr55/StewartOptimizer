@@ -1,4 +1,4 @@
-import { vectorAdd, vectorCross, vectorNormalize, vectorScale } from '../math.js';
+import { rotateVector, vectorAdd, vectorCross, vectorNormalize, vectorScale } from '../math.js';
 import { hornFrameAxes } from '../model/kinematics.js';
 import { effectiveServoRange, socketNormalsInWorld } from '../model/pose.js';
 
@@ -17,10 +17,20 @@ export const SCENE_COLORS = Object.freeze({
   limitRange: [0.5, 0.56, 0.66], nearLimit: [1, 0.88, 0.2],
 });
 const COLORS = SCENE_COLORS;
+// The canvas clear colour; the ghost dims toward it instead of blending.
+export const SCENE_BACKGROUND = Object.freeze([0.055, 0.075, 0.11]);
+const GHOST_BRIGHTNESS = 0.35;
+// A small overshoot puts the ghost almost on top of the held pose, where equal
+// depths would flicker between the two as the camera moves. Ghost failure lines
+// are drawn this far (mm) toward the camera and dimmed ghost lines this far away
+// from it, so there the held pose shows with any failure on top.
+export const GHOST_DEPTH_BIAS_MM = 10;
+const dim = color => color.map((value, k) => SCENE_BACKGROUND[k] + (value - SCENE_BACKGROUND[k]) * GHOST_BRIGHTNESS);
 
 // Toggleable overlays and whether each is drawn when a state or saved file
 // does not say. New overlays default off unless their issue says otherwise.
-export const OVERLAY_DEFAULTS = Object.freeze({ servoArcs: true, jointCones: true, platformAxes: true, worldAxes: true });
+export const OVERLAY_DEFAULTS = Object.freeze({ servoArcs: true, jointCones: true, requestedGhost: true,
+  platformAxes: true, worldAxes: true });
 export const OVERLAY_NAMES = Object.freeze(Object.keys(OVERLAY_DEFAULTS));
 // Limit overlays (servo travel, socket cones) tint a value this close to its
 // limit as a warning before the evaluator rejects it: 5°, in radians.
@@ -35,13 +45,27 @@ function polygon(lines, points, color) {
 
 const hasSolvedLegs = solved => solved?.platformPoints?.length === 6 && solved?.hornTips?.length === 6;
 
+// The rejected assessment the ghost overlay draws, or null when there is no
+// ghost: the request was accepted, or the overlay is off.
+function shownGhost(state) {
+  const requested = state.assessment;
+  if (!requested || requested.reachable !== false || !requested.translation || !requested.rotationMatrix) return null;
+  return { ...OVERLAY_DEFAULTS, ...state.overlays }.requestedGhost ? requested : null;
+}
+
 // Color reports failures in the requested pose, which may have been rejected by
-// the shared evaluator, while the geometry stays at the accepted pose.
+// the shared evaluator, while the geometry stays at the accepted pose. Each
+// failure is coloured once, on the geometry that failed: when the ghost draws a
+// failing leg (the solver reached its horn tip) or the whole-platform failure,
+// that colour is on the ghost and the held leg keeps its normal colour; a leg
+// the ghost cannot draw, or any failure while the ghost is off, colours the held leg.
 function failureColor(state) {
   const violations = state.assessment?.violations ?? [];
-  const affectedLegs = new Set(violations.filter(violation => Number.isInteger(violation.leg))
+  const ghost = shownGhost(state);
+  const ghostLegs = ghost?.hornTips ?? [];
+  const affectedLegs = new Set(violations.filter(violation => Number.isInteger(violation.leg) && !ghostLegs[violation.leg])
     .map(violation => violation.leg));
-  const globalFailure = violations.some(violation => !Number.isInteger(violation.leg));
+  const globalFailure = !ghost && violations.some(violation => !Number.isInteger(violation.leg));
   return index => affectedLegs.has(index) ? COLORS.failure : globalFailure ? COLORS.globalFailure : null;
 }
 
@@ -153,6 +177,43 @@ function jointCones(state, layout, solved) {
   return { lines, points: [] };
 }
 
+// The rejected request drawn faintly beside the accepted pose: the one layer
+// that shows geometry the evaluator did not accept. It uses only what the
+// rejected evaluation returned. The platform comes from its translation and
+// rotation, which are always set; legs are drawn only where the solver reached
+// a horn tip (it stops at the first structural failure). Everything is dimmed
+// toward the background and has no markers, except legs named in a violation,
+// which use the failure colour at full brightness, and the platform outline,
+// which turns the whole-platform failure colour on a conditioning failure.
+function requestedGhost(state, layout) {
+  const lines = [];
+  const requested = shownGhost({ ...state, overlays: { ...state.overlays, requestedGhost: true } });
+  if (!requested) return { lines, points: [] };
+  const violations = requested.violations ?? [];
+  const failedLegs = new Set(violations.filter(violation => Number.isInteger(violation.leg)).map(violation => violation.leg));
+  const platformFailure = violations.some(violation => !Number.isInteger(violation.leg));
+  const platformPoints = layout.platformAnchors.map(anchor =>
+    vectorAdd(requested.translation, rotateVector(requested.rotationMatrix, anchor)));
+  polygon(lines, platformPoints, platformFailure ? COLORS.globalFailure : dim(COLORS.platform));
+  const hornTips = requested.hornTips ?? [];
+  for (let i = 0; i < 6; i++) {
+    if (!hornTips[i]) continue;
+    const failed = failedLegs.has(i);
+    lines.push({ from: layout.baseAnchors[i], to: hornTips[i], color: failed ? COLORS.failure : dim(COLORS.horn) });
+    lines.push({ from: hornTips[i], to: platformPoints[i], color: failed ? COLORS.failure : dim(COLORS.rod) });
+  }
+  const axis = Math.max(18, layout.hornLength * 0.35);
+  const column = index => requested.rotationMatrix.map(row => row[index]);
+  for (const [index, color] of [[0, COLORS.x], [1, COLORS.y], [2, COLORS.z]]) {
+    lines.push({ from: requested.translation, to: vectorAdd(requested.translation, vectorScale(column(index), axis)), color: dim(color) });
+  }
+  for (const line of lines) {
+    const failure = line.color === COLORS.failure || line.color === COLORS.globalFailure;
+    line.depthBias = failure ? GHOST_DEPTH_BIAS_MM : -GHOST_DEPTH_BIAS_MM;
+  }
+  return { lines, points: [] };
+}
+
 function platformAxes(state, layout, solved) {
   const lines = [];
   if (!hasSolvedLegs(solved)) return { lines, points: [] };
@@ -184,6 +245,7 @@ export const SCENE_BUILDERS = Object.freeze([
   { name: 'legs', build: legs },
   { name: 'servoArcs', overlay: 'servoArcs', build: servoArcs },
   { name: 'jointCones', overlay: 'jointCones', build: jointCones },
+  { name: 'requestedGhost', overlay: 'requestedGhost', build: requestedGhost },
   { name: 'platformAxes', overlay: 'platformAxes', build: platformAxes },
   { name: 'worldAxes', overlay: 'worldAxes', build: worldAxes },
   { name: 'trace', build: trace },
@@ -194,7 +256,7 @@ export function buildSceneGeometry(state, builders = SCENE_BUILDERS) {
   const { layout, acceptedAssessment: solved } = state;
   if (!layout) return { lines, points };
   const overlays = { ...OVERLAY_DEFAULTS, ...state.overlays };
-  const scene = { ...state, markers: state.markers === undefined ? true : state.markers };
+  const scene = { ...state, overlays, markers: state.markers === undefined ? true : state.markers };
   for (const builder of builders) {
     if (builder.overlay && !overlays[builder.overlay]) continue;
     const part = builder.build(scene, layout, solved ?? null);

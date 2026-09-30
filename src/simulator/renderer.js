@@ -1,10 +1,13 @@
 import { vectorAdd, vectorCross, vectorDot, vectorNormalize, vectorSub } from '../math.js';
-import { buildSceneGeometry } from './scene.js';
+import { buildSceneGeometry, SCENE_BACKGROUND } from './scene.js';
 
 // The scene builders live in scene.js; re-exported for existing callers.
 export { buildSceneGeometry };
 
-export function projectPoint(point, camera, width, height) {
+// `depthBias` (mm) pulls only the depth value toward the camera, so a line can
+// win the depth test against geometry lying almost on top of it without moving
+// on screen.
+export function projectPoint(point, camera, width, height, depthBias = 0) {
   const target = camera.target ?? [0, 0, 100];
   const yaw = camera.yaw ?? 0.7;
   const pitch = camera.pitch ?? 0.4;
@@ -24,7 +27,7 @@ export function projectPoint(point, camera, width, height) {
   const far = Math.max(2001, 2 * distance + 1);
   return [vectorDot(offset, right) * scale * height / width,
     vectorDot(offset, up) * scale,
-    Math.min(0.999, Math.max(-0.999, (depth - 1) / (far - 1) * 2 - 1))];
+    Math.min(0.999, Math.max(-0.999, (depth - depthBias - 1) / (far - 1) * 2 - 1))];
 }
 
 const VERTEX_SOURCE = `#version 300 es
@@ -70,7 +73,7 @@ export function createWebGLRenderer(canvas, { window, onContextChange } = {}) {
     color = gl.getAttribLocation(program, 'aColor');
     pointSize = gl.getUniformLocation(program, 'uPointSize');
     gl.enable(gl.DEPTH_TEST);
-    gl.clearColor(0.055, 0.075, 0.11, 1);
+    gl.clearColor(...SCENE_BACKGROUND, 1);
   }
   setup();
 
@@ -117,8 +120,8 @@ export function createWebGLRenderer(canvas, { window, onContextChange } = {}) {
     const geometry = buildSceneGeometry(state);
     const lineData = [];
     for (const line of geometry.lines) {
-      const from = projectPoint(line.from, camera, width, height);
-      const to = projectPoint(line.to, camera, width, height);
+      const from = projectPoint(line.from, camera, width, height, line.depthBias);
+      const to = projectPoint(line.to, camera, width, height, line.depthBias);
       if (from && to) lineData.push(...from, ...line.color, ...to, ...line.color);
     }
     draw(lineData, gl.LINES, 1);

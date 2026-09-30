@@ -4,9 +4,10 @@ import fs from 'node:fs';
 import { asymmetricJointFixture } from '../fixtures/layout.js';
 import { createSimulatorController } from '../../src/simulator/controller.js';
 import { buildSceneGeometry, createWebGLRenderer, projectPoint } from '../../src/simulator/renderer.js';
-import { NEAR_LIMIT_MARGIN_RAD, OVERLAY_DEFAULTS, OVERLAY_NAMES, SCENE_BUILDERS, SCENE_COLORS } from '../../src/simulator/scene.js';
+import { GHOST_DEPTH_BIAS_MM, NEAR_LIMIT_MARGIN_RAD, OVERLAY_DEFAULTS, OVERLAY_NAMES, SCENE_BACKGROUND, SCENE_BUILDERS,
+  SCENE_COLORS } from '../../src/simulator/scene.js';
 import { computeHornTip, hornLocalToWorld } from '../../src/model/kinematics.js';
-import { rotateVector } from '../../src/math.js';
+import { rotateVector, vectorAdd } from '../../src/math.js';
 import { resolveMounting } from '../../src/model/mounting.js';
 import { mountSimulatorDiagnostics } from '../../src/simulator/diagnostics.js';
 import { createSimulatorView } from '../../src/simulator/view.js';
@@ -31,8 +32,8 @@ test('scene uses solved asymmetric anchor, horn, rod and platform frames', () =>
   const rejected = controller.loadLayout(asymmetricJointFixture(),
     { options: { ballJointLimitDeg: 180, conditionLimit: 1 } });
   assert.equal(rejected.accepted, null);
-  // Base, servo directions and world axes; servo arcs have no accepted angle to mark.
-  assert.equal(buildSceneGeometry({ ...rejected, overlays: { ...rejected.overlays, servoArcs: false } }).lines.length, 15);
+  // Base, servo directions and world axes; the arcs and the ghost of the rejected home are switched off.
+  assert.equal(buildSceneGeometry({ ...rejected, overlays: { ...rejected.overlays, servoArcs: false, requestedGhost: false } }).lines.length, 15);
 });
 
 test('unavailable WebGL2 leaves renderer inactive with actionable error', () => {
@@ -146,29 +147,30 @@ test('overlay builders reproduce the frozen single-function scene exactly', () =
 });
 
 test('each overlay toggle removes only its own builder output', () => {
-  const { accepted } = frozenSceneStates();
-  const full = buildSceneGeometry(accepted);
+  // A rejected request so the ghost has output; the accepted pose is still drawn.
+  const { legFailure: state } = frozenSceneStates();
+  const full = buildSceneGeometry(state);
   const parts = Object.fromEntries(SCENE_BUILDERS.map(builder =>
-    [builder.name, builder.build(accepted, accepted.layout, accepted.acceptedAssessment)]));
+    [builder.name, builder.build(state, state.layout, state.acceptedAssessment)]));
   assert.deepEqual(SCENE_BUILDERS.map(builder => builder.name),
-    ['base', 'platform', 'legs', 'servoArcs', 'jointCones', 'platformAxes', 'worldAxes', 'trace']);
+    ['base', 'platform', 'legs', 'servoArcs', 'jointCones', 'requestedGhost', 'platformAxes', 'worldAxes', 'trace']);
   assert.deepEqual(SCENE_BUILDERS.filter(builder => builder.overlay).map(builder => builder.overlay), OVERLAY_NAMES);
   assert.equal(parts.platformAxes.lines.length, 3);
   assert.equal(parts.worldAxes.lines.length, 3);
-  assert.equal(parts.trace.lines.length, accepted.trace.length - 1);
+  assert.equal(parts.trace.lines.length, state.trace.length - 1);
   for (const name of OVERLAY_NAMES) {
     assert.ok(parts[name].lines.length > 0, name);
-    const scene = buildSceneGeometry({ ...accepted, overlays: { ...accepted.overlays, [name]: false } });
+    const scene = buildSceneGeometry({ ...state, overlays: { ...state.overlays, [name]: false } });
     const removed = new Set(parts[name].lines.map(line => JSON.stringify(line)));
     const expected = full.lines.filter(line => !removed.has(JSON.stringify(line)));
     assert.equal(scene.lines.length, full.lines.length - parts[name].lines.length, name);
     assert.deepEqual(plain(scene.lines), plain(expected), name);
     assert.deepEqual(plain(scene.points), plain(full.points), name);
   }
-  const bare = buildSceneGeometry({ ...accepted, overlays: Object.fromEntries(OVERLAY_NAMES.map(name => [name, false])) });
+  const bare = buildSceneGeometry({ ...state, overlays: Object.fromEntries(OVERLAY_NAMES.map(name => [name, false])) });
   assert.equal(bare.lines.length, full.lines.length - OVERLAY_NAMES.reduce((sum, name) => sum + parts[name].lines.length, 0));
   // Unknown names in a hand-built state are ignored rather than drawn.
-  assert.deepEqual(plain(buildSceneGeometry({ ...accepted, overlays: { ...accepted.overlays, ghost: true } })), plain(full));
+  assert.deepEqual(plain(buildSceneGeometry({ ...state, overlays: { ...state.overlays, ghost: true } })), plain(full));
 });
 
 test('a custom builder list is drawn in order and overlay-gated', () => {
@@ -340,4 +342,144 @@ test('a joint-limit edit in the diagnostics panel redraws the cones in the same 
   field.dispatch('change');
   assert.ok(rendered.length > before, 'the edit did not redraw');
   assert.ok(Math.abs(upperHalfAngle(rendered.at(-1)) - 20 * Math.PI / 180) < 1e-9);
+});
+
+const ghostOf = state => SCENE_BUILDERS.find(builder => builder.name === 'requestedGhost')
+  .build(state, state.layout, state.acceptedAssessment).lines;
+const positions = lines => plain(lines.map(line => [line.from, line.to]));
+const FULL_COLORS = new Set(Object.values(SCENE_COLORS));
+const isDimmed = color => !FULL_COLORS.has(color) && color.every((value, k) => value > SCENE_BACKGROUND[k] - 1e-12);
+
+test('a rejected request adds a ghost while the accepted geometry stays put; an accepted one adds none', () => {
+  const controller = createSimulatorController();
+  controller.loadLayout(asymmetricJointFixture(), { options: { ballJointLimitDeg: 180 } });
+  const before = controller.requestPose({ x: 3, rx: 0.05 });
+  assert.equal(before.rejected, false);
+  assert.deepEqual(ghostOf(before), [], 'an accepted request drew a ghost');
+  const withoutGhost = state => buildSceneGeometry({ ...state, overlays: { ...state.overlays, requestedGhost: false } });
+  const rejected = controller.requestPose({ z: 200 }); // Beyond the workspace: leg 1 cannot close.
+  assert.equal(rejected.rejected, true);
+  assert.deepEqual(rejected.accepted, before.accepted);
+  assert.deepEqual(positions(withoutGhost(rejected).lines), positions(withoutGhost(before).lines),
+    'the accepted geometry moved');
+  const ghost = ghostOf(rejected);
+  assert.equal(ghost.length, 6 + 3, 'platform outline and axes only: the solver reached no horn tip');
+  assert.equal(buildSceneGeometry(rejected).lines.length, withoutGhost(rejected).lines.length + ghost.length);
+  assert.deepEqual(buildSceneGeometry(rejected).points, withoutGhost(rejected).points, 'the ghost drew markers');
+  // The ghost platform is the requested translation and rotation applied to the anchors.
+  const { translation, rotationMatrix } = rejected.assessment;
+  assert.deepEqual(translation, [0, 0, rejected.layout.homeHeight + 200]);
+  rejected.layout.platformAnchors.forEach((anchor, i) =>
+    assert.deepEqual(ghost[i].from, vectorAdd(translation, rotateVector(rotationMatrix, anchor))));
+  assert.ok(ghost.every(line => isDimmed(line.color)), 'an unsolved ghost used a full-brightness colour');
+  const back = controller.requestPose({});
+  assert.deepEqual(ghostOf(back), [], 'the ghost outlived an accepted request');
+});
+
+test('ghost legs follow the solver and failing legs use the full failure colour', () => {
+  const controller = createSimulatorController();
+  controller.loadLayout(asymmetricJointFixture(), { options: { ballJointLimitDeg: 180,
+    lowerBallJointLimitDeg: 180, upperBallJointLimitDeg: 3 } });
+  const state = controller.requestPose({ x: 3, y: -2, z: 5, rx: 0.05, ry: -0.03, rz: 0.04 });
+  const requested = state.assessment;
+  const failed = new Set(requested.violations.map(violation => violation.leg));
+  assert.ok(requested.violations.length > 0 && requested.violations.every(violation => violation.type === 'ballJoint'));
+  assert.ok(failed.size > 0 && failed.size < 6, `fixture should fail some legs, not all: ${[...failed]}`);
+  assert.equal(requested.hornTips.length, 6, 'a joint failure still records every horn tip');
+  const ghost = ghostOf(state);
+  assert.equal(ghost.length, 6 + 12 + 3);
+  const legs = ghost.slice(6, 18);
+  for (let leg = 0; leg < 6; leg++) {
+    const [horn, rod] = legs.slice(2 * leg, 2 * leg + 2);
+    assert.deepEqual(horn.from, state.layout.baseAnchors[leg]);
+    assert.deepEqual(horn.to, requested.hornTips[leg]);
+    assert.deepEqual(rod.to, requested.platformPoints[leg]);
+    for (const line of [horn, rod]) {
+      if (failed.has(leg)) assert.equal(line.color, SCENE_COLORS.failure, `leg ${leg + 1}`);
+      else assert.ok(isDimmed(line.color), `leg ${leg + 1}`);
+    }
+  }
+  assert.deepEqual(plain(ghost.slice(0, 6).map(line => line.from)), plain(requested.platformPoints));
+  // A whole-platform failure outlines the ghost platform in its own colour.
+  const global = { ...state, assessment: { ...requested, violations: [{ type: 'conditionLimit' }] } };
+  const outline = ghostOf(global).slice(0, 6);
+  assert.ok(outline.every(line => line.color === SCENE_COLORS.globalFailure));
+  assert.ok(ghostOf(global).slice(6).every(line => isDimmed(line.color)));
+  // The ghost is gated like any overlay.
+  assert.equal(buildSceneGeometry({ ...state, overlays: { ...state.overlays, requestedGhost: false } }).lines.length,
+    buildSceneGeometry(state).lines.length - ghost.length);
+});
+
+// Colours of the held (accepted) pose's leg geometry: servo stub, horn, rod and markers.
+function heldLegColors(state) {
+  const scene = buildSceneGeometry(state);
+  const { layout, acceptedAssessment: solved } = state;
+  const line = (from, to) => scene.lines.find(item => item.from === from && item.to === to).color;
+  return [0, 1, 2, 3, 4, 5].map(leg => {
+    const base = layout.baseAnchors[leg];
+    const stub = scene.lines.find(item => item.from === base && item.to !== solved.hornTips[leg]
+      && !layout.baseAnchors.includes(item.to));
+    return { stub: stub.color,
+      horn: line(base, solved.hornTips[leg]), rod: line(solved.hornTips[leg], solved.platformPoints[leg]),
+      markers: scene.points.filter(point => point.at === base || point.at === solved.hornTips[leg]
+        || point.at === solved.platformPoints[leg]).map(point => point.color) };
+  });
+}
+const NORMAL_LEG = { stub: SCENE_COLORS.servo, horn: SCENE_COLORS.horn, rod: SCENE_COLORS.rod,
+  markers: [SCENE_COLORS.servo, SCENE_COLORS.horn, SCENE_COLORS.platform] };
+const paintedLeg = color => ({ stub: color, horn: color, rod: color, markers: [color, color, color] });
+const withGhost = (state, on) => ({ ...state, overlays: { ...state.overlays, requestedGhost: on } });
+
+test('a failure is coloured once: on the ghost when it can draw it, otherwise on the held pose', () => {
+  const controller = createSimulatorController();
+  controller.loadLayout(asymmetricJointFixture(), { options: { ballJointLimitDeg: 180,
+    lowerBallJointLimitDeg: 180, upperBallJointLimitDeg: 3 } });
+  const jointFailure = controller.requestPose({ x: 3, y: -2, z: 5, rx: 0.05, ry: -0.03, rz: 0.04 });
+  const failed = new Set(jointFailure.assessment.violations.map(violation => violation.leg));
+  assert.ok(failed.size > 0 && failed.size < 6);
+  // Ghost on: the joint failures are red on the ghost legs, so the held legs keep their colours.
+  assert.deepEqual(heldLegColors(withGhost(jointFailure, true)), Array(6).fill(NORMAL_LEG));
+  assert.ok(ghostOf(jointFailure).some(line => line.color === SCENE_COLORS.failure));
+  // Ghost off: the held legs carry the failure colour, as before the ghost existed.
+  assert.deepEqual(heldLegColors(withGhost(jointFailure, false)),
+    [0, 1, 2, 3, 4, 5].map(leg => failed.has(leg) ? paintedLeg(SCENE_COLORS.failure) : NORMAL_LEG));
+  // A structural failure leaves no ghost leg to colour, so the held leg stays red with the ghost on.
+  const structural = controller.requestPose({ z: 200 });
+  assert.deepEqual(structural.assessment.violations.map(violation => violation.leg), [0]);
+  assert.deepEqual(heldLegColors(withGhost(structural, true)),
+    [paintedLeg(SCENE_COLORS.failure), ...Array(5).fill(NORMAL_LEG)]);
+  // A whole-platform failure outlines the ghost; the held legs turn magenta only without it.
+  const global = { ...jointFailure, assessment: { ...jointFailure.assessment, violations: [{ type: 'conditionLimit' }] } };
+  assert.deepEqual(heldLegColors(withGhost(global, true)), Array(6).fill(NORMAL_LEG));
+  assert.ok(ghostOf(global).slice(0, 6).every(line => line.color === SCENE_COLORS.globalFailure));
+  assert.deepEqual(heldLegColors(withGhost(global, false)), Array(6).fill(paintedLeg(SCENE_COLORS.globalFailure)));
+  // An accepted request has nothing to colour.
+  assert.deepEqual(heldLegColors(controller.requestPose({})), Array(6).fill(NORMAL_LEG));
+});
+
+test('ghost failure lines win depth ties with the held pose and dimmed ghost lines lose them', () => {
+  const controller = createSimulatorController();
+  controller.loadLayout(asymmetricJointFixture(), { options: { ballJointLimitDeg: 180,
+    lowerBallJointLimitDeg: 180, upperBallJointLimitDeg: 3 } });
+  const state = controller.requestPose({ x: 3, y: -2, z: 5, rx: 0.05, ry: -0.03, rz: 0.04 });
+  const ghost = ghostOf(state);
+  assert.ok(ghost.some(line => line.color === SCENE_COLORS.failure) && ghost.some(line => isDimmed(line.color)));
+  for (const line of ghost) {
+    assert.equal(line.depthBias, line.color === SCENE_COLORS.failure ? GHOST_DEPTH_BIAS_MM : -GHOST_DEPTH_BIAS_MM);
+  }
+  const global = { ...state, assessment: { ...state.assessment, violations: [{ type: 'conditionLimit' }] } };
+  assert.ok(ghostOf(global).slice(0, 6).every(line => line.depthBias === GHOST_DEPTH_BIAS_MM));
+  assert.ok(ghostOf(global).slice(6).every(line => line.depthBias === -GHOST_DEPTH_BIAS_MM));
+  // No other builder biases its lines.
+  assert.ok(buildSceneGeometry({ ...state, overlays: { ...state.overlays, requestedGhost: false } })
+    .lines.every(line => line.depthBias === undefined));
+  // The bias shifts depth by exactly its length in the depth mapping, either
+  // way, and leaves x and y alone.
+  const camera = { target: [0, 0, 100], yaw: 0.7, pitch: 0.4, distance: 600 };
+  const plainPoint = projectPoint([10, -20, 150], camera, 800, 500);
+  for (const bias of [GHOST_DEPTH_BIAS_MM, -GHOST_DEPTH_BIAS_MM]) {
+    const biased = projectPoint([10, -20, 150], camera, 800, 500, bias);
+    assert.deepEqual(biased.slice(0, 2), plainPoint.slice(0, 2));
+    assert.ok(Math.abs((plainPoint[2] - biased[2]) - bias * 2 / 2000) < 1e-12);
+  }
 });
