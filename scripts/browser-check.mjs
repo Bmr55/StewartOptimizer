@@ -27,7 +27,20 @@ try {
   assert.equal(await requirementsGuide.locator('tbody tr').count(), 16);
   assert.equal(await page.locator('a[href="./docs/REQUIREMENTS.md"]').count(), 0);
   await requirementsGuide.locator('summary').click();
+  const optimizationPanel = page.locator('#optimizationParameters');
+  assert.equal(await optimizationPanel.getAttribute('open'), null);
+  assert.equal(await page.locator('#optPopulation').isVisible(), false);
+  await page.locator('.optimization-info').click();
+  assert.equal(await optimizationPanel.getAttribute('open'), null);
+  assert.match(await page.locator('.info-popup.visible').innerText(), /genetic algorithm/i);
+  await page.locator('.optimization-info').click();
+  await optimizationPanel.locator('summary').click();
+  assert.equal(await page.locator('#optPopulation').isVisible(), true);
   await page.locator('#optPopulation').fill('4');
+  await optimizationPanel.locator('summary').click();
+  assert.equal(await page.locator('#optPopulation').isVisible(), false);
+  await optimizationPanel.locator('summary').click();
+  assert.equal(await page.locator('#optPopulation').inputValue(), '4');
   await page.locator('#optGenerations').fill('1');
   await page.locator('#optObjectiveSet').selectOption('full');
   await page.locator('#optMutationRate').fill('0');
@@ -99,6 +112,7 @@ try {
   await fallbackPage.route('**/src/ui/optimizer-worker.js', route => route.abort());
   await fallbackPage.goto(`http://127.0.0.1:${server.address().port}/`);
   await fallbackPage.waitForFunction(() => document.querySelector('#requirementsInput').value.includes('mass_kg'));
+  await fallbackPage.locator('#optimizationParameters summary').click();
   await fallbackPage.locator('#optPopulation').fill('4');
   await fallbackPage.locator('#optGenerations').fill('1');
   await fallbackPage.locator('#optSampling').selectOption('256');
@@ -126,6 +140,7 @@ try {
   }));
   await errorPage.goto(`http://127.0.0.1:${server.address().port}/`);
   await errorPage.waitForFunction(() => document.querySelector('#requirementsInput').value.includes('mass_kg'));
+  await errorPage.locator('#optimizationParameters summary').click();
   await errorPage.locator('#optPopulation').fill('4');
   await errorPage.locator('#optGenerations').fill('1');
   await errorPage.locator('#optSampling').selectOption('256');
@@ -161,6 +176,7 @@ try {
   }));
   await stalePage.goto(`http://127.0.0.1:${server.address().port}/`);
   await stalePage.waitForFunction(() => document.querySelector('#requirementsInput').value.includes('mass_kg'));
+  await stalePage.locator('#optimizationParameters summary').click();
   await stalePage.locator('#optPopulation').fill('4');
   await stalePage.locator('#optGenerations').fill('1');
   await stalePage.locator('#optSampling').selectOption('256');
