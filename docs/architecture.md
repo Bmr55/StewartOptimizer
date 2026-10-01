@@ -23,6 +23,7 @@ The p5/quaternion/Stewart scripts belong only to the [archived simulator](../arc
 | `src/ui/tooltips.js`, `download.js` | Browser-only interactions |
 | `src/simulator/controller.js` | Copied active layout, requested/accepted poses, animation and trace state |
 | `src/simulator/scene.js` | Ordered scene builders (lines and points from accepted geometry) and overlay toggles |
+| `src/simulator/reachability.js` | Reachability cloud settings and the chunked, abortable translation sweep through the shared pose evaluator |
 | `src/simulator/renderer.js`, `view.js` | Native WebGL2 drawing and camera/input handling |
 | `src/simulator/geometry-editor.js`, `geometry-controls.js` | Explicit or parametric editable layout copies |
 | `src/simulator/diagnostics.js` | Evaluator-driven per-leg joint/rod diagnostics and effective limits |

@@ -305,6 +305,44 @@ test('overlay toggles round-trip through the optimizer reference, simulator JSON
   assert.equal(restored('simOverlayWorldAxes').checked, true);
 });
 
+test('reachability cloud settings round-trip through simulator JSON without the samples', async () => {
+  const downloads = [];
+  const element = await loadUI(FixtureOptimizer, { downloadFile: (data, name) => downloads.push({ data, name }) });
+  await element('runOptimization').handlers.click();
+  const controller = element.app.simulatorController;
+  controller.setReachabilityCloud({ enabled: true, sampleCount: 256, mode: 'slice', sliceZ: 4 });
+  element('simDownload').handlers.click();
+  const file = downloads.at(-1).data;
+  const saved = JSON.parse(file).simulator;
+  assert.deepEqual(saved.reachability, { sampleCount: 256, mode: 'slice', sliceZ: 4 });
+  assert.equal(saved.overlays.reachabilityCloud, true);
+  assert.equal(saved.reachabilityCloud, undefined, 'samples are not saved');
+  controller.setReachabilityCloud({ enabled: false, sampleCount: 4096, mode: 'cloud', sliceZ: 0 });
+  element('referenceLayoutInput').value = file;
+  element('simLoadReference').handlers.click();
+  assert.deepEqual(controller.getState().reachability, { sampleCount: 256, mode: 'slice', sliceZ: 4 });
+  assert.equal(controller.getState().overlays.reachabilityCloud, true);
+  assert.equal(controller.getState().reachabilityCloud.total, 256, 'the load starts a fresh sweep');
+  assert.equal(element('simOverlayReachabilityCloud').checked, true);
+  assert.equal(element('simReachabilitySamples').value, '256');
+  assert.equal(element('simReachabilitySlice').checked, true);
+  assert.equal(element('simReachabilitySliceZ').value, '4');
+  // A bad setting rejects the file by name; a file without the block keeps the current settings.
+  const bad = JSON.parse(file);
+  bad.simulator.reachability.sampleCount = 999;
+  element('referenceLayoutInput').value = JSON.stringify(bad);
+  element('simLoadReference').handlers.click();
+  assert.match(element('optStatus').textContent, /simulator\.reachability\.sampleCount must be one of 256, 1024, 4096/);
+  const legacy = JSON.parse(file);
+  delete legacy.simulator.reachability;
+  delete legacy.simulator.overlays;
+  controller.setReachabilityCloud({ enabled: false, sampleCount: 1024 });
+  element('referenceLayoutInput').value = JSON.stringify(legacy);
+  element('simLoadReference').handlers.click();
+  assert.deepEqual(controller.getState().reachability, { sampleCount: 1024, mode: 'slice', sliceZ: 4 });
+  assert.equal(controller.getState().reachabilityCloud, null);
+});
+
 // The run's workspace ranges as `effective_settings.bounds` carries them: mm and degrees.
 const SAMPLE_BOUNDS = { x: { min: -40, max: 40, step: 40 }, y: { min: -40, max: 40, step: 40 },
   z: { min: -20, max: 40, step: 30 }, rx: { min: -12, max: 12, step: 12 }, ry: { min: -12, max: 12, step: 12 },

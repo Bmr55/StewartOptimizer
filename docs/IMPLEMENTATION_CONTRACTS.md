@@ -96,4 +96,6 @@ names need a coordinated migration. Issue #35 remains outside this plan.
   animation. Camera orbit is the default mouse mode; platform manipulation is
   explicit. Geometry controls (#33) and diagnostics (#34) consume this boundary
   in separate modules. Unsupported WebGL2 reports an actionable error while
-  optimization remains available.
+  optimization remains available. The optional reachability cloud sweeps
+  sampled translations at the requested rotation through the same evaluator
+  in yielding, abortable chunks and reports evaluated samples only.

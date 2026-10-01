@@ -105,8 +105,8 @@ try {
   assert.equal(exported.simulator.options.rodLengthTolerance, 0.01);
   assert.equal(exported.simulator.requested.z, 100);
   assert.equal(exported.simulator.accepted.z, 0);
-  assert.deepEqual(exported.simulator.overlays, { groundGrid: true, servoArcs: false, jointCones: false, workspaceBox: true, requestedGhost: true,
-    platformAxes: true, worldAxes: false });
+  assert.deepEqual(exported.simulator.overlays, { groundGrid: true, servoArcs: false, jointCones: false, workspaceBox: true, reachabilityCloud: false,
+    requestedGhost: true, platformAxes: true, worldAxes: false });
   await page.locator('#optimizeTab').click();
   await page.locator('#referenceLayoutInput').fill(JSON.stringify(exported));
   await page.locator('#simulateTab').click();
@@ -262,7 +262,38 @@ try {
   await page.locator('#simulateTab').click();
   assert.equal(await page.locator('#simLowerJointLimit').inputValue(), '60');
   assert.equal(await page.locator('#simUpperJointLimit').inputValue(), '60');
-  console.log('Browser evaluator diagnostics, rejected/accepted pose, settings, overlay toggles, animation replay, JSON round trip and optimizer transfer passed.');
+
+  // The reachability cloud on the sample candidate sweeps to full progress in
+  // chunks between frames and draws its points.
+  assert.equal(await page.locator('#simReachabilityStatus').textContent(), 'Reachability cloud off.');
+  await page.locator('#simReachabilitySamples').selectOption('256');
+  await page.locator('#simOverlayReachabilityCloud').check();
+  assert.match(await page.locator('#simReachabilityStatus').textContent(), /^Sweeping \d+ of 256 samples/);
+  await page.waitForFunction(() => document.querySelector('#simReachabilityStatus').textContent.startsWith('Swept 256 of 256'),
+    null, { timeout: 30000 });
+  const cloudStatus = await page.locator('#simReachabilityStatus').textContent();
+  assert.match(cloudStatus, /: [1-9]\d* reachable\. Evaluated samples only, not a continuous envelope\.$/, cloudStatus);
+  const cloudPixels = await page.evaluate(() => {
+    const canvas = document.querySelector('#simCanvas');
+    const gl = canvas.getContext('webgl2');
+    const toggle = checked => {
+      const input = document.getElementById('simOverlayReachabilityCloud');
+      input.checked = checked;
+      input.dispatchEvent(new Event('change'));
+      const pixels = new Uint8Array(canvas.width * canvas.height * 4);
+      gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+      // The reachable sample colour, SCENE_COLORS.reachable.
+      let green = 0;
+      for (let i = 0; i < pixels.length; i += 4) if (Math.abs(pixels[i] - 92) + Math.abs(pixels[i + 1] - 230) + Math.abs(pixels[i + 2] - 128) < 30) green++;
+      return green;
+    };
+    // Checking the box again redraws the finished cloud without restarting it.
+    return { on: toggle(true), off: toggle(false) };
+  });
+  assert.ok(cloudPixels.on > cloudPixels.off, `the reachability cloud drew no points: ${JSON.stringify(cloudPixels)}`);
+  assert.equal(await page.locator('#simReachabilityStatus').textContent(), 'Reachability cloud off.');
+  assert.deepEqual(pageErrors, []);
+  console.log('Browser evaluator diagnostics, rejected/accepted pose, settings, overlay toggles, reachability cloud, animation replay, JSON round trip and optimizer transfer passed.');
 } finally {
   await browser?.close();
   await new Promise(resolve => server.close(resolve));

@@ -90,7 +90,9 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
     offerFallback(false);
     let activeTab = 'optimize';
     const simCandidateSelect = document.getElementById('simCandidateSelect');
-    const simulatorController = createSimulatorController();
+    // The reachability sweep yields to the page's animation frames between chunks.
+    const simulatorController = createSimulatorController({ schedule: callback => typeof window.requestAnimationFrame === 'function'
+        ? window.requestAnimationFrame(callback) : setTimeout(callback, 0) });
     const simulatorView = createSimulatorView({ document, window, controller: simulatorController,
         isActive: () => activeTab === 'simulate' });
     const geometryContainer = document.getElementById('simGeometryControls');
@@ -419,7 +421,7 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
         return JSON.stringify({ ...layoutToJSON(state.layout), run: simulatorRun,
             simulator: { source: state.source, requested: state.requested, accepted: state.accepted,
                 options: state.options, animation: state.animation, markers: state.markers,
-                tracesEnabled: state.tracesEnabled, overlays: state.overlays,
+                tracesEnabled: state.tracesEnabled, overlays: state.overlays, reachability: state.reachability,
                 workspaceRanges: workspaceRangesToJSON(state.workspaceRanges), trace: state.trace,
                 camera: simulatorView.getCamera(), pointerMode: document.getElementById('simPointerMode').value } }, null, 2);
     }
@@ -465,6 +467,7 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
         if (saved.pointerMode) document.getElementById('simPointerMode').value = saved.pointerMode;
         if (saved.markers !== null) simulatorController.setMarkers(saved.markers);
         if (saved.tracesEnabled !== null) simulatorController.setTraces(saved.tracesEnabled);
+        if (saved.reachability) simulatorController.setReachabilityCloud(saved.reachability);
         if (saved.overlays) simulatorController.setOverlays(saved.overlays);
         document.getElementById('simDownload').disabled = false;
         if (activate) setTab('simulate');
