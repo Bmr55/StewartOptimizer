@@ -5,6 +5,7 @@ import { parseReachability } from './reachability.js';
 import { loadModelFromSettings, parseLoadModel } from './loads.js';
 import { parseOverlays } from './scene.js';
 import { parseCamera } from './view.js';
+import { RENDER_MODES } from './renderer.js';
 
 export const POINTER_MODES = Object.freeze(['orbit', 'platform']);
 // Everything the simulator JSON `simulator.options` block may carry; other keys are dropped.
@@ -64,7 +65,8 @@ export function parseSimulatorSnapshot(saved, layout, fallbackOptions, fallbackR
 
   const result = { options, requested: pose(block.requested, 'simulator.requested'),
     accepted: pose(block.accepted, 'simulator.accepted'), camera: null, animation: null,
-    markers: null, tracesEnabled: null, overlays: null, reachability: null, pointerMode: null, workspaceRanges: null,
+    markers: null, tracesEnabled: null, overlays: null, reachability: null, pointerMode: null, renderMode: null,
+    workspaceRanges: null,
     loadModel: null };
   if (block.loadModel != null) {
     result.loadModel = parseLoadModel(block.loadModel, 'simulator.loadModel')?.input ?? null;
@@ -104,6 +106,13 @@ export function parseSimulatorSnapshot(saved, layout, fallbackOptions, fallbackR
       throw new RangeError(`simulator.pointerMode must be one of ${POINTER_MODES.join(', ')}.`);
     }
     result.pointerMode = block.pointerMode;
+  }
+  // Likewise for the render mode; a file without one keeps the current mode.
+  if (block.renderMode != null && block.renderMode !== '') {
+    if (!RENDER_MODES.includes(block.renderMode)) {
+      throw new RangeError(`simulator.renderMode must be one of ${RENDER_MODES.join(', ')}.`);
+    }
+    result.renderMode = block.renderMode;
   }
   return result;
 }

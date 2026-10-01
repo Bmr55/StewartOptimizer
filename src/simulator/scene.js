@@ -19,6 +19,8 @@ export const SCENE_COLORS = Object.freeze({
   grid: [0.16, 0.2, 0.27], workspace: [0.32, 0.7, 0.76],
   reachable: [0.36, 0.9, 0.5], unreachable: [0.5, 0.2, 0.25],
   wellConditioned: [0.42, 0.85, 1],
+  // Solid servo boxes: a neutral slate, so red on a servo always means failure.
+  servoBody: [0.45, 0.5, 0.6],
   compression: [0.3, 0.55, 1], tension: [0.95, 0.4, 0.2], torqueLow: [0.36, 0.9, 0.5],
 });
 const COLORS = SCENE_COLORS;
@@ -69,7 +71,7 @@ function polygon(lines, points, color) {
   points.forEach((point, i) => lines.push({ from: point, to: points[(i + 1) % points.length], color }));
 }
 
-const hasSolvedLegs = solved => solved?.platformPoints?.length === 6 && solved?.hornTips?.length === 6;
+export const hasSolvedLegs = solved => solved?.platformPoints?.length === 6 && solved?.hornTips?.length === 6;
 // Length (mm) of the platform axes, which the conditioning ellipsoid also uses
 // for its largest semi-axis.
 export const platformAxisLength = layout => Math.max(18, layout.hornLength * 0.35);
@@ -88,7 +90,7 @@ function shownGhost(state) {
 // failing leg (the solver reached its horn tip) or the whole-platform failure,
 // that colour is on the ghost and the held leg keeps its normal colour; a leg
 // the ghost cannot draw, or any failure while the ghost is off, colours the held leg.
-function failureColor(state) {
+export function failureColor(state) {
   const violations = state.assessment?.violations ?? [];
   const ghost = shownGhost(state);
   const ghostLegs = ghost?.hornTips ?? [];
@@ -308,6 +310,11 @@ export function rodForceColor(forceN, referenceN) {
   return mix(COLORS.rod, forceN >= 0 ? COLORS.compression : COLORS.tension, t);
 }
 
+// The force that reaches the full rod colour: the static payload weight plus
+// external force, or with neither the largest rod force of the frame.
+export const rodForceReference = loads => loads.staticForceN > 0 ? loads.staticForceN
+  : Math.max(...loads.rodForceN.map(Math.abs));
+
 // Torque gauge colour: torqueLow at zero graded to nearLimit at the peak
 // torque rating, and the failure colour above it.
 export function torqueUtilizationColor(utilization) {
@@ -326,7 +333,7 @@ function loads(state, layout, solved) {
   const result = state.loads;
   if (!result?.valid || !hasSolvedLegs(solved)) return { lines, points: [] };
   const legColor = failureColor(state);
-  const reference = result.staticForceN > 0 ? result.staticForceN : Math.max(...result.rodForceN.map(Math.abs));
+  const reference = rodForceReference(result);
   for (let i = 0; i < 6; i++) {
     if (legColor(i)) continue;
     lines.push({ from: solved.hornTips[i], to: solved.platformPoints[i],

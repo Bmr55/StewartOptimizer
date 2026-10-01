@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { asymmetricJointFixture } from '../fixtures/layout.js';
 import { orbitCamera, pinhole } from '../fixtures/independent-geometry.js';
 import { createSimulatorController } from '../../src/simulator/controller.js';
-import { cameraFrame, createWebGLRenderer, projectPoint, projectSegment } from '../../src/simulator/renderer.js';
+import { cameraFrame, createWebGLRenderer, projectPoint, projectSegment, viewProjection } from '../../src/simulator/renderer.js';
+import { createFakeGL } from './helpers.js';
 import { SCENE_COLORS } from '../../src/simulator/scene.js';
 
 // The renderer's projection checked against a pinhole camera written from its
@@ -94,19 +95,38 @@ test('perspective keeps a drawn segment straight: its 3D midpoint projects onto 
   assert.ok(t > 0 && t < 1, `midpoint outside the segment: ${t}`);
 });
 
+// The vertex shaders' project(): the column-major matrix times the point, then
+// clip z filled from w by the linear depth mapping. Returns NDC like projectPoint.
+function shaderProject(matrix, [near, far], point, depthBias = 0) {
+  const clip = [0, 1, 2, 3].map(row => [0, 1, 2].reduce((sum, col) => sum + matrix[col * 4 + row] * point[col], matrix[12 + row]));
+  const depth = Math.min(0.999, Math.max(-0.999, (clip[3] - depthBias - near) / (far - near) * 2 - 1));
+  return [clip[0] / clip[3], clip[1] / clip[3], depth];
+}
+
+test('the shader matrix path projects points to the same coordinates as projectPoint', () => {
+  let seed = 11;
+  const random = () => (seed = (seed * 48271) % 2147483647) / 2147483647;
+  for (const camera of CAMERAS) {
+    for (const [width, height] of [[800, 500], [375, 640]]) {
+      const projection = viewProjection(camera, width, height);
+      for (let k = 0; k < 40; k++) {
+        const point = camera.target.map(value => value + (random() * 2 - 1) * camera.distance * 0.3);
+        const bias = [0, 10, -2][k % 3];
+        const expected = projectPoint(point, camera, width, height, bias);
+        if (!expected) continue;
+        closeVector(shaderProject(projection.matrix, [projection.near, projection.far], point, bias), expected, 1e-12,
+          `${JSON.stringify(camera)} ${width}x${height} ${point}`);
+        // As the GPU receives it, in 32-bit floats.
+        closeVector(shaderProject(Float32Array.from(projection.matrix), [projection.near, projection.far], point, bias),
+          expected, 1e-5, `float32 ${JSON.stringify(camera)} ${point}`);
+      }
+    }
+  }
+});
+
 test('the vertex buffer sent to the GPU puts every horn and rod at the pinhole projection of the solved points', () => {
-  const uploads = [];
+  const gl = createFakeGL();
   const noop = () => {};
-  const gl = {
-    ARRAY_BUFFER: 1, LINES: 2, POINTS: 3, COMPILE_STATUS: 4, LINK_STATUS: 5,
-    createShader: () => ({}), shaderSource: noop, compileShader: noop, getShaderParameter: () => true,
-    createProgram: () => ({}), attachShader: noop, linkProgram: noop, getProgramParameter: () => true,
-    createBuffer: () => ({}), getAttribLocation: () => 0, getUniformLocation: () => ({}), enable: noop,
-    clearColor: noop, viewport: noop, clear: noop, useProgram: noop, bindBuffer: noop,
-    vertexAttribPointer: noop, enableVertexAttribArray: noop, uniform1f: noop,
-    bufferData(target, data) { uploads.push(Array.from(data)); },
-    drawArrays(primitive) { uploads.at(-1).primitive = primitive; },
-  };
   const canvas = { width: 640, height: 480, getContext: () => gl, addEventListener: noop, removeEventListener: noop };
   const controller = createSimulatorController();
   controller.loadLayout(asymmetricJointFixture(), { options: { ballJointLimitDeg: 180 } });
@@ -115,15 +135,17 @@ test('the vertex buffer sent to the GPU puts every horn and rod at the pinhole p
   const camera = { yaw: 1.1, pitch: 0.45, distance: 650, target: [0, 0, 180] };
   createWebGLRenderer(canvas).render(state, camera);
 
-  const lines = uploads.find(upload => upload.primitive === gl.LINES);
+  // Vertices go up in world millimetres; the uploaded matrix and depth range project them.
+  const { uViewProjection: matrix, uDepthRange: range } = gl.calls.uniforms;
+  const lines = gl.calls.draws.find(draw => draw.primitive === gl.LINES).data;
   const segments = [];
-  for (let k = 0; k < lines.length; k += 12) segments.push({ from: lines.slice(k, k + 2), to: lines.slice(k + 6, k + 8),
-    color: lines.slice(k + 3, k + 6) });
+  for (let k = 0; k < lines.length; k += 14) segments.push({ from: shaderProject(matrix, range, lines.slice(k, k + 3)),
+    to: shaderProject(matrix, range, lines.slice(k + 7, k + 10)), color: lines.slice(k + 3, k + 6) });
   const sameColor = (a, b) => a.every((value, k) => Math.abs(value - b[k]) < 1e-6);
   const { layout } = state;
   const { hornTips, platformPoints } = state.acceptedAssessment;
-  // Vertices travel as 32-bit floats.
-  const near = (a, b) => Math.abs(a[0] - b[0]) < 1e-6 && Math.abs(a[1] - b[1]) < 1e-6;
+  // Vertices and the matrix travel as 32-bit floats.
+  const near = (a, b) => Math.abs(a[0] - b[0]) < 1e-5 && Math.abs(a[1] - b[1]) < 1e-5;
   for (let leg = 0; leg < 6; leg++) {
     const [base, tip, top] = [layout.baseAnchors[leg], hornTips[leg], platformPoints[leg]]
       .map(point => pinhole(point, camera, canvas.width, canvas.height).ndc);

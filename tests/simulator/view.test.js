@@ -100,3 +100,21 @@ test('setCamera takes only known finite fields and rejects anything else by name
   assert.deepEqual(view.getCamera(), { ...before, yaw: 1.25 });
   assert.equal('junk' in view.getCamera(), false);
 });
+
+test('the render mode select chooses wireframe or solid for every draw and redraws on change', () => {
+  const modes = [];
+  const renderer = { available: true, contextLost: false, render(state, camera, options) { modes.push(options?.mode); }, dispose() {} };
+  const { input, controller } = mount({ renderer });
+  const select = input('simRenderMode');
+  assert.equal(modes.at(-1), 'wireframe', 'an unset select draws wireframe');
+  select.value = 'solid';
+  const before = modes.length;
+  select.dispatch('change');
+  assert.equal(modes.length, before + 1);
+  assert.equal(modes.at(-1), 'solid');
+  controller.requestPose({ z: 5 });
+  assert.equal(modes.at(-1), 'solid');
+  select.value = 'shaded';
+  select.dispatch('change');
+  assert.equal(modes.at(-1), 'wireframe', 'an unknown value draws wireframe');
+});

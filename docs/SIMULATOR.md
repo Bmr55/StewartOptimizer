@@ -182,7 +182,8 @@ centred on the layout (half the home height above the origin) when a layout
 loads and again whenever a newly loaded layout has a different home height;
 pose requests, animation and display changes leave a zoomed or panned view
 alone. **Reset camera** restores the default orientation and distance and
-recentres the target on the layout. Lines that cross the renderer's 1 mm near
+recentres the target on the layout. The **Render** select beside the mouse mode
+chooses **Wireframe** (the default) or **Solid** (see Render modes). Lines that cross the renderer's 1 mm near
 plane are clipped there, so a close-up keeps the visible part of a line passing
 beside the camera instead of dropping it. The projected depth range follows the camera distance so a
 zoomed-out view keeps near/far line ordering instead of saturating the depth
@@ -217,7 +218,8 @@ toggles), `reachability` (`sampleCount` 256, 1024 or 4096, `mode` `cloud` or
 `slice`, finite `sliceZ` in mm; other keys are dropped, and a file without the
 block keeps the current settings; whether the cloud is on is
 `overlays.reachabilityCloud`, and the samples themselves are never saved, so a
-load sweeps afresh), `workspaceRanges` and `loadModel` (see below) and `pointerMode` (`orbit` or `platform`). A rejected
+load sweeps afresh), `workspaceRanges` and `loadModel` (see below), `pointerMode` (`orbit` or `platform`) and `renderMode` (`wireframe` or `solid`; an empty
+or missing value keeps the current mode). A rejected
 file or browser save reports the offending `simulator.` field and leaves the
 current layout, pose, camera, animation and, for a browser save, the optimizer
 inputs untouched. If WebGL2 is unavailable, the simulator names the missing capability
@@ -439,6 +441,52 @@ it appears: failure-coloured ghost lines are pulled toward the camera so they
 show on top, and dimmed ghost lines are pushed away so the held pose shows
 wherever the two overlap.
 
+## Render modes
+
+The **Render** select (`#simRenderMode`) picks one of `RENDER_MODES` in
+`src/simulator/renderer.js`; `renderer.render(state, camera, { mode })` takes
+it, and an unknown value draws wireframe. **Wireframe** (the default) draws the
+scene builders' lines and points only. **Solid** first draws lit solid bodies of
+the accepted pose from `buildSolidBodies` in `src/simulator/bodies.js`, then the
+full wireframe scene, every overlay included, over them with the same depth
+buffer, so overlays outside a body stay visible and lines inside one are
+hidden. The bodies are:
+
+- a base plate and a platform plate: the anchor polygon (ordered by angle about
+  its centroid) extruded `0.08 × hornLength`, `PLATE_GAP_MM` (0.5 mm) off the
+  anchor plane, below the base anchors and above the platform anchors in the
+  platform frame, so the wireframe outlines on that plane are not hidden on the
+  near side;
+- a cylinder per horn (radius `0.06 × hornLength`) and per rod
+  (`0.04 × hornLength`), from base anchor to horn tip and from horn tip to
+  platform point;
+- a box per servo (`0.5 × 0.3 × 0.35` horn lengths along the base direction,
+  the shaft and Z), centred on the shaft height and set beside the horn plane
+  along the shaft axis.
+
+Every size has a 1 mm floor (`BODY_DIMENSIONS`, `BODY_MIN_SIZE_MM`). Colours follow
+the wireframe: plates use the base and platform colours, horns and rods
+their own, servo boxes a neutral slate (`servoBody`, so red on a servo always
+means failure), a leg the held pose failure-colours keeps that colour on its horn,
+rod and servo, and with the **Loads** overlay on and solved the rods take their
+graded force colour. Without an accepted pose only the base plate and servos
+are drawn. The bodies are display volumes with no physical meaning: their sizes
+are display constants, not layout fields, so nothing changes in layout export
+or import; they never enter the evaluator; and the simulator still has no
+collision detection, so bodies may pass through each other.
+
+The solid program draws a unit cylinder (`CYLINDER_SEGMENTS`, 16, with caps)
+and a unit box with `drawArraysInstanced`, one instance per body; each
+instance carries a column-major transform (`cylinderTransform`,
+`boxTransform`) and a colour in an attribute buffer with `vertexAttribDivisor`
+1. The plates are world-space meshes (`plateMesh`) drawn as one identity
+instance each. Lighting is Lambert with one directional light set relative to
+the camera (above, behind and left of the viewer, `lightDirection`) and an
+ambient fraction `SOLID_AMBIENT` (0.35); normals use the inverse transpose of
+each transform. Blending stays off: the rejected-pose ghost dims its colours
+instead of using alpha. On a restored WebGL context both programs, every
+buffer and every vertex array are rebuilt.
+
 ## Rendering checks
 
 The camera is an orbit camera with +Z up. `yaw` is the eye's azimuth about the
@@ -448,8 +496,15 @@ is a pinhole projection with a 60° vertical field of view and square pixels, so
 the horizontal field follows the canvas aspect ratio. Screen right is the view
 direction crossed with +Z, so from any camera above the base plane the world
 X axis turns counterclockwise onto the Y axis on screen. `cameraFrame` and
-`projectPoint` in `src/simulator/renderer.js` implement this, and the CPU
-projection is the only one: the vertex shader passes positions through.
+`viewProjection` in `src/simulator/renderer.js` implement this. Every vertex
+goes to the GPU in world millimetres, and both shader programs project it with
+one matrix uniform from `viewProjection`: clip x and y give the perspective, clip
+w is the depth along the view direction, and clip z is filled from w by the same
+linear depth mapping as `depthNdc` (the depth bias in mm is subtracted from w
+first). `projectPoint` and `projectSegment` evaluate that same matrix and depth
+mapping on the CPU for wheel-zoom picking and tests, so the two cannot drift.
+Lines are clipped at the 1 mm near plane on the CPU (`clipSegment`) before they
+are uploaded, and points nearer than the near plane are dropped.
 
 Three layers of checks tie what is drawn to the evaluator's solved geometry:
 
@@ -458,15 +513,21 @@ Three layers of checks tie what is drawn to the evaluator's solved geometry:
 - `tests/simulator/projection-oracle.test.js` compares `cameraFrame` and
   `projectPoint` with an independently written pinhole camera
   (`tests/fixtures/independent-geometry.js`), checks screen handedness, the
-  field of view and square pixels, and checks that the vertex buffer the
-  renderer uploads puts every horn and rod at the pinhole projection of the
-  solved points.
+  field of view and square pixels, checks that the shaders' matrix path (the
+  matrix and depth mapping applied as the vertex shader does, in doubles and in
+  32-bit floats) gives the same coordinates as `projectPoint` for several
+  cameras, and checks that the world-space vertex buffer the renderer uploads,
+  projected with the uploaded matrix, puts every horn and rod at the pinhole
+  projection of the solved points.
 - `npm run test:browser:render` (`scripts/browser-render-check.mjs`) loads a
   tilted, translated pose with markers and overlays off in real WebGL, reads the
   canvas back and requires the rod and horn colours at the pinhole projection of
   points along every rod and horn, and the X, Y and Z axis colours along the
   world axes. The same samples mirrored left-right or top-bottom must mostly
   miss, so a flipped image fails.
+- `npm run test:browser:geometry` switches the app between Wireframe and Solid
+  in real WebGL and requires `gl.getError()` to stay 0, Solid to draw more
+  pixels, and switching back to restore the wireframe image exactly.
 
 The model side of the same chain is checked in
 `tests/model/inverse-kinematics-oracle.test.js` (hand-solved legs, and an

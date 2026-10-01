@@ -428,3 +428,24 @@ test('a candidate carries its run payload into the simulator, simulator JSON and
   assert.equal(element('simOverlayLoads').disabled, true);
   assert.equal(element('simLoadsHint').hidden, false);
 });
+
+test('the render mode round-trips through simulator JSON and an older file keeps the current mode', async () => {
+  const element = await loadUI(FixtureOptimizer);
+  await element('runOptimization').handlers.click();
+  element('simRenderMode').value = 'solid';
+  element('simUseReference').handlers.click();
+  const saved = JSON.parse(element('referenceLayoutInput').value);
+  assert.equal(saved.simulator.renderMode, 'solid');
+  element('simRenderMode').value = 'wireframe';
+  element('simLoadReference').handlers.click();
+  assert.equal(element('simRenderMode').value, 'solid');
+  delete saved.simulator.renderMode;
+  element('simRenderMode').value = 'wireframe';
+  element('referenceLayoutInput').value = JSON.stringify(saved);
+  element('simLoadReference').handlers.click();
+  assert.equal(element('simRenderMode').value, 'wireframe');
+  saved.simulator.renderMode = 'shaded';
+  element('referenceLayoutInput').value = JSON.stringify(saved);
+  element('simLoadReference').handlers.click();
+  assert.match(element('optStatus').textContent, /simulator.renderMode must be one of wireframe, solid/);
+});

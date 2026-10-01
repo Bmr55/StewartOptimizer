@@ -104,3 +104,6 @@ names need a coordinated migration. Issue #35 remains outside this plan.
   optional loads overlay draws rod forces and servo torque utilisation that
   the controller solves for the accepted pose with the cycle model's
   `dynamicsAtPose`, statically or from the animation's analytic derivatives.
+  The optional Solid render mode draws lit display volumes of the accepted
+  pose with WebGL2 instancing under the same lines; they carry no physical
+  meaning, are not layout fields and imply no collision detection.
