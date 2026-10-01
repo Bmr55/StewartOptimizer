@@ -278,8 +278,9 @@ default; today these are **Ground grid** (`groundGrid`), **Servo arcs**
 (`workspaceBox`), **Reachability cloud** (`reachabilityCloud`),
 **Conditioning ellipsoid** (`conditioningEllipsoid`), **Loads** (`loads`),
 **Rejected pose ghost** (`requestedGhost`), **Platform axes** (`platformAxes`)
-and **World axes** (`worldAxes`), all on except the reachability cloud, the
-conditioning ellipsoid and the loads. With only the two
+and **World axes** (`worldAxes`). The ground grid, rejected pose ghost and both
+axis overlays are on by default; servo arcs, joint cones, the workspace box,
+the reachability cloud, the conditioning ellipsoid and the loads are off. With only the two
 axis overlays on, the scene matches the original single-function renderer line
 for line (a frozen fixture in `tests/fixtures/scene-geometry.json` checks this). The Simulate tab shows one checkbox per overlay in the
 **Overlays** group, with the id `simOverlay` plus the capitalised name (for
@@ -297,7 +298,7 @@ shares its plane with the base polygon, servo stubs and world axes, so its
 lines carry a depth bias of `GROUND_DEPTH_BIAS_MM` (2 mm) away from the camera
 and lose every depth tie with them.
 
-**Workspace box** (on by default) draws the twelve edges of the requirement
+**Workspace box** (off by default) draws the twelve edges of the requirement
 X/Y/Z ranges as a box about home: X and Y from their `min` to `max`, Z from
 `homeHeight + min` to `homeHeight + max`, from the controller's
 `workspaceRanges`. It is the region the platform origin must reach, not the
@@ -355,7 +356,7 @@ the ellipsoid, still drawn at the held accepted pose, turns the whole-platform
 failure magenta. Without an accepted pose or usable Jacobian rows nothing is
 drawn.
 
-**Servo arcs** (on by default) draw each servo's allowed travel as an arc of
+**Servo arcs** (off by default) draw each servo's allowed travel as an arc of
 horn-length radius about its base anchor, from the effective minimum to the
 effective maximum servo angle (the simulator's `servoRangeRad` option, else the
 layout's range, else ±90°, as `effectiveServoRange` in `src/model/pose.js`
@@ -369,7 +370,7 @@ that servo's range (`servoLimit`). Other failures leave the arc colours alone;
 the leg itself is still coloured as described under Live diagnostics. The margin
 constant lives in `src/simulator/scene.js` for all limit overlays.
 
-**Joint cones** (on by default) draw each ball-joint socket's allowed cone at
+**Joint cones** (off by default) draw each ball-joint socket's allowed cone at
 the accepted pose: 12 cones, a lower one with its apex at the horn tip and an
 upper one with its apex at the platform point. The axis is the socket normal
 in world coordinates from `socketNormalsInWorld` in `src/model/pose.js`, the

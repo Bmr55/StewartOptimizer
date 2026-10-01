@@ -26,6 +26,13 @@ try {
   assert.equal(await page.locator('#simLoadsHint').isVisible(), true);
   assert.match(await page.locator('#simLoadDiagnostic').textContent(), /no payload or servo ratings loaded/);
 
+  // Servo arcs, joint cones and the workspace box start off; the overlay checks
+  // below switch each off in turn, so turn them on first.
+  assert.equal(await page.locator('#simOverlayServoArcs').isChecked(), false);
+  assert.equal(await page.locator('#simOverlayJointCones').isChecked(), false);
+  assert.equal(await page.locator('#simOverlayWorkspaceBox').isChecked(), false);
+  for (const id of ['#simOverlayServoArcs', '#simOverlayJointCones', '#simOverlayWorkspaceBox']) await page.locator(id).check();
+
   // The Overlays info button opens an inline panel explaining every toggle.
   const overlayInfo = page.locator('#simOverlaysInfo');
   assert.equal(await overlayInfo.isVisible(), false);

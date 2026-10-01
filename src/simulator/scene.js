@@ -34,8 +34,8 @@ const dim = color => color.map((value, k) => SCENE_BACKGROUND[k] + (value - SCEN
 
 // Toggleable overlays and whether each is drawn when a state or saved file
 // does not say. New overlays default off unless their issue says otherwise.
-export const OVERLAY_DEFAULTS = Object.freeze({ groundGrid: true, servoArcs: true, jointCones: true,
-  workspaceBox: true, reachabilityCloud: false, conditioningEllipsoid: false, loads: false, requestedGhost: true,
+export const OVERLAY_DEFAULTS = Object.freeze({ groundGrid: true, servoArcs: false, jointCones: false,
+  workspaceBox: false, reachabilityCloud: false, conditioningEllipsoid: false, loads: false, requestedGhost: true,
   platformAxes: true, worldAxes: true });
 export const OVERLAY_NAMES = Object.freeze(Object.keys(OVERLAY_DEFAULTS));
 // Limit overlays (servo travel, socket cones) tint a value this close to its
