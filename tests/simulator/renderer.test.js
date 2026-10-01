@@ -176,12 +176,11 @@ test('overlay builders reproduce the frozen single-function scene exactly', () =
 
 test('each overlay toggle removes only its own builder output', () => {
   // A rejected request so the ghost has output; the accepted pose is still drawn.
-  // Two published cloud samples give the default-off reachability cloud output,
-  // and the default-off conditioning ellipsoid is switched on, as are the
-  // default-off loads with a published solution.
+  // Every default-off overlay is switched on: two published cloud samples give
+  // the reachability cloud output and a published solution the loads output.
   const { legFailure: rejected } = frozenSceneStates();
   const state = { ...rejected,
-    overlays: { ...rejected.overlays, reachabilityCloud: true, conditioningEllipsoid: true, loads: true },
+    overlays: Object.fromEntries(OVERLAY_NAMES.map(name => [name, true])),
     loads: { valid: true, motion: 'static', reason: null, rodForceN: [3, -2, 4, -1, 2, 0.5],
       servoTorqueNm: [0.2, -0.1, 0.3, -0.05, 0.1, 0], servoSpeedRadPerSec: new Array(6).fill(0),
       ratedTorqueNm: new Array(6).fill(0.4), utilization: [0.5, 0.25, 0.75, 0.125, 0.25, 0], staticForceN: 10 },
@@ -592,8 +591,11 @@ test('the workspace box is the twelve edges of the sample x/y/z ranges about hom
   assert.deepEqual(buildOf('workspaceBox')({ ...state, workspaceRanges: null }, state.layout, null).lines, []);
   assert.deepEqual(buildOf('workspaceBox')({ ...state, workspaceRanges: { x: translations.x, y: translations.y } },
     state.layout, null).lines, []);
-  assert.equal(buildSceneGeometry(controller.setWorkspaceRanges(null)).lines.length,
-    buildSceneGeometry(moved).lines.length - 12);
+  // The box is off by default, so it is switched on to compare.
+  assert.equal(OVERLAY_DEFAULTS.workspaceBox, false);
+  const boxOn = scene => ({ ...scene, overlays: { ...scene.overlays, workspaceBox: true } });
+  assert.equal(buildSceneGeometry(boxOn(controller.setWorkspaceRanges(null))).lines.length,
+    buildSceneGeometry(boxOn(moved)).lines.length - 12);
 });
 
 test('the ground grid spans the base on z = 0 at the fixed pitch, behind anything it touches', () => {

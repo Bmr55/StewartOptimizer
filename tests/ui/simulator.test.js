@@ -266,21 +266,22 @@ test('overlay toggles round-trip through the optimizer reference, simulator JSON
   await element('runOptimization').handlers.click();
   const controller = element.app.simulatorController;
   const toggle = (ui, id, checked) => { ui(id).checked = checked; ui(id).handlers.change({ target: ui(id) }); };
-  for (const id of ['simOverlayServoArcs', 'simOverlayPlatformAxes', 'simOverlayWorldAxes']) assert.equal(element(id).checked, true, id);
-  const saved = { ...OVERLAY_DEFAULTS, servoArcs: false, worldAxes: false };
-  toggle(element, 'simOverlayServoArcs', false);
+  for (const id of ['simOverlayPlatformAxes', 'simOverlayWorldAxes']) assert.equal(element(id).checked, true, id);
+  for (const id of ['simOverlayServoArcs', 'simOverlayJointCones', 'simOverlayWorkspaceBox']) assert.equal(element(id).checked, false, id);
+  const saved = { ...OVERLAY_DEFAULTS, servoArcs: true, worldAxes: false };
+  toggle(element, 'simOverlayServoArcs', true);
   toggle(element, 'simOverlayWorldAxes', false);
   element('simUseReference').handlers.click();
   assert.deepEqual(JSON.parse(element('referenceLayoutInput').value).simulator.overlays, saved);
   element('simDownload').handlers.click();
   assert.equal(downloads.at(-1).name, 'stewart_simulator.json');
   assert.deepEqual(JSON.parse(downloads.at(-1).data).simulator.overlays, saved);
-  toggle(element, 'simOverlayServoArcs', true);
+  toggle(element, 'simOverlayServoArcs', false);
   toggle(element, 'simOverlayWorldAxes', true);
   toggle(element, 'simOverlayPlatformAxes', false);
   element('simLoadReference').handlers.click();
   assert.deepEqual(controller.getState().overlays, saved);
-  assert.equal(element('simOverlayServoArcs').checked, false);
+  assert.equal(element('simOverlayServoArcs').checked, true);
   assert.equal(element('simOverlayWorldAxes').checked, false);
   assert.equal(element('simOverlayPlatformAxes').checked, true);
   // A file saved before overlays existed keeps the current toggles.
@@ -350,7 +351,9 @@ const SAMPLE_BOUNDS = { x: { min: -40, max: 40, step: 40 }, y: { min: -40, max: 
 class RangedOptimizer extends FixtureOptimizer {
   effectiveSettings() { return { ...super.effectiveSettings(), bounds: SAMPLE_BOUNDS }; }
 }
-const boxEdges = state => buildSceneGeometry(state).lines.filter(line => line.color === SCENE_COLORS.workspace);
+// The workspace box overlay is off by default; these tests switch it on to read the box.
+const boxEdges = state => buildSceneGeometry({ ...state, overlays: { ...state.overlays, workspaceBox: true } }).lines
+  .filter(line => line.color === SCENE_COLORS.workspace);
 
 test('a candidate draws its run workspace box, which simulator JSON carries; JSON without ranges draws none', async () => {
   const element = await loadUI(RangedOptimizer);
