@@ -33,7 +33,44 @@ platform-origin positions) are controlled by `setMarkers`, `setTraces`, and
 `clearTrace`. `setOverlays(patch)` switches named scene overlays on or off;
 names left out of the patch keep their state, and an unknown name or a
 non-boolean value throws without changing anything. Animation patterns advance at most 0.1 s of simulated time per
-frame, scaled by the speed multiplier (0.1 to 5 in the UI).
+frame, scaled by the speed multiplier (0.1 to 5 in the UI). Each pattern is a
+sum of sine and cosine terms in the frame time, so `animationState(pattern,
+seconds, settings, rate)` returns its pose together with exact velocity and
+acceleration in the cycle model's trajectory-state form (m/s, m/s², and the
+angular velocity and acceleration from the Euler-angle rates, rad/s and
+rad/s²). `rate` is the speed multiplier: derivatives are taken against real
+time, so velocity scales with it and acceleration with its square.
+
+The payload and servo ratings behind the **Loads** overlay are controller state
+too, `loadModel` in `getState()`: an object of requirement JSON keys in their
+units, the mass fields `mass_kg`, `center_of_mass_mm`, `inertia_kg_m2`,
+`external_force_n` and `external_moment_nm` and the servo rating keys
+(`servo_torque_rating_nm`, `per_servo_ratings`, `servo_actuator` and the rest
+listed in [REQUIREMENTS.md](./REQUIREMENTS.md)), or `null` for none.
+`parseLoadModel` in `src/simulator/loads.js` keeps only those keys and checks
+them with the optimizer's `normalizeMassProperties` and `normalizeServoRatings`.
+`loadLayout(layout, { loadModel })` replaces it in the same validated load
+(`null` removes it, an invalid model throws before anything changes); a load
+that leaves it out keeps it, so a geometry edit keeps the loads, and `clear()`
+removes it. After every request the controller solves `loads` in `getState()`
+for the accepted pose with `dynamicsAtPose` from `src/model/cycle.js`, the
+function the cycle demand uses: on an animation frame with that frame's
+`animationState`, and for every other request (manual, keyboard, pointer,
+gamepad, settings, load, replay) statically, with zero velocity and
+acceleration. A rejected request keeps the accepted pose and its loads.
+`loads` is `null` without a load model or an accepted pose; otherwise it is
+`{ valid, motion, reason, rodForceN, servoTorqueNm, servoSpeedRadPerSec,
+ratedTorqueNm, utilization, staticForceN }`, with `motion` `'static'` or
+`'animation'`. `rodForceN` is positive in compression (the rod pushes the
+platform from horn tip toward platform point) and negative in tension.
+`servoTorqueNm` is the signed output-shaft torque in the +horn-angle direction,
+the load torque plus any reduced actuator model (`servo_actuator`), as the
+cycle's capacity check uses it. `ratedTorqueNm` is each servo's peak torque
+rating (`servo_torque_rating_nm` or its `per_servo_ratings` `torque_nm`), and
+`utilization` is |`servoTorqueNm`| over it, `null` for an unrated servo; speed,
+torque-speed curve, continuous and duration ratings are not checked per frame.
+`staticForceN` is the magnitude of the payload weight plus the external force.
+A singular pose gives `{ valid: false, reason }` with the cycle model's message.
 
 The requirement workspace ranges drawn by the **Workspace box** overlay are
 controller state, `workspaceRanges` in `getState()`: one `{ min, max }` per
@@ -167,7 +204,7 @@ snapshot to the optimizer's reference JSON field. **Load optimizer reference**
 can restore that layout and saved requested/accepted poses. **Download simulator
 JSON** saves the same geometry plus run settings, simulator options, pose,
 camera, animation, markers, traces, overlay toggles, reachability cloud
-settings, workspace ranges and input mode. The shared importer validates
+settings, workspace ranges, load model and input mode. The shared importer validates
 the layout and ignores old scores; every pose is checked again by the current
 evaluator. The `simulator` block is validated as a whole before anything is
 applied: `options` (only the known keys are kept; limits, servo bounds,
@@ -180,7 +217,7 @@ toggles), `reachability` (`sampleCount` 256, 1024 or 4096, `mode` `cloud` or
 `slice`, finite `sliceZ` in mm; other keys are dropped, and a file without the
 block keeps the current settings; whether the cloud is on is
 `overlays.reachabilityCloud`, and the samples themselves are never saved, so a
-load sweeps afresh), `workspaceRanges` (see below) and `pointerMode` (`orbit` or `platform`). A rejected
+load sweeps afresh), `workspaceRanges` and `loadModel` (see below) and `pointerMode` (`orbit` or `platform`). A rejected
 file or browser save reports the offending `simulator.` field and leaves the
 current layout, pose, camera, animation and, for a browser save, the optimizer
 inputs untouched. If WebGL2 is unavailable, the simulator names the missing capability
@@ -206,6 +243,17 @@ else from the file's `run.effective_settings.bounds`, else there are none and no
 box is drawn; a malformed saved block rejects the file naming the axis, while
 malformed run bounds only mean no box.
 
+`simulator.loadModel` holds the payload and servo ratings the **Loads** overlay
+solves against, in requirement JSON keys and units (see Controller boundary),
+or `null` for none. Selecting an optimizer candidate takes them from the
+current run's `effective_settings`: the mass fields of
+`effective_settings.requirements` and the rating input
+`effective_settings.servoRatings`, which carries any rating overrides typed in
+the Optimize tab. Loading simulator JSON takes them from the block, else from
+the file's `run.effective_settings` the same way, else there are none and the
+overlay is unavailable; a malformed saved block rejects the file naming
+`simulator.loadModel`, while a run whose load does not parse only means no loads.
+
 ## Scene builders and overlays
 
 `buildSceneGeometry(state)` in `src/simulator/scene.js` (re-exported by the
@@ -216,7 +264,7 @@ the evaluator already produced. The list order is the draw order: `groundGrid`,
 `base` (base polygon, servo direction stubs and base markers), `platform`
 (platform polygon), `legs` (horns, rods and their markers), `servoArcs`,
 `jointCones`, `workspaceBox`, `reachabilityCloud`, `conditioningEllipsoid`,
-`requestedGhost`, `platformAxes`, `worldAxes` and `trace`. Markers and traces keep their own
+`loads`, `requestedGhost`, `platformAxes`, `worldAxes` and `trace`. Markers and traces keep their own
 controls. Each point carries a pixel `size` (markers 6 or 7, reachability
 samples 3); the renderer draws each size in its own call, and a point without
 one at 7.
@@ -226,10 +274,10 @@ A builder with an `overlay` key is drawn only when that key is on in
 default; today these are **Ground grid** (`groundGrid`), **Servo arcs**
 (`servoArcs`), **Joint cones** (`jointCones`), **Workspace box**
 (`workspaceBox`), **Reachability cloud** (`reachabilityCloud`),
-**Conditioning ellipsoid** (`conditioningEllipsoid`), **Rejected pose
-ghost** (`requestedGhost`), **Platform axes** (`platformAxes`) and **World
-axes** (`worldAxes`), all on except the reachability cloud and the
-conditioning ellipsoid. With only the two
+**Conditioning ellipsoid** (`conditioningEllipsoid`), **Loads** (`loads`),
+**Rejected pose ghost** (`requestedGhost`), **Platform axes** (`platformAxes`)
+and **World axes** (`worldAxes`), all on except the reachability cloud, the
+conditioning ellipsoid and the loads. With only the two
 axis overlays on, the scene matches the original single-function renderer line
 for line (a frozen fixture in `tests/fixtures/scene-geometry.json` checks this). The Simulate tab shows one checkbox per overlay in the
 **Overlays** group, with the id `simOverlay` plus the capitalised name (for
@@ -338,6 +386,35 @@ joint). The rod drawn by `legs` shows the current direction against the cone.
 The cones visualise the joint limit only; they are not a collision check, and
 the simulator still has no collision detection.
 
+**Loads** (off by default) draws the rod forces and servo torques the
+controller solved for the accepted pose (`state.loads`, see Controller
+boundary); the builder solves nothing. Its checkbox is disabled, with the hint
+`#simLoadsHint` below the reachability status, until the load model loads the
+platform at all: a positive `mass_kg` or a nonzero external force or moment
+(`hasLoad` in `src/simulator/loads.js`). Each rod is redrawn from horn tip to
+platform point in a colour graded by its force by `rodForceColor`: the plain
+rod colour at zero, toward compression blue (`compression`) when the rod
+pushes and toward tension orange-red (`tension`) when it pulls, reaching the
+full colour when one rod carries `staticForceN`, the whole static payload
+weight plus external force (or, with neither, the largest rod force of the
+frame). These rods carry a `LOAD_DEPTH_BIAS_MM` (2 mm) depth bias toward the
+camera so they win the depth tie with the plain rods beneath them. A leg the
+held pose already failure-colours (see Live diagnostics) is not redrawn, so the
+failure stays visible. Each servo with a peak torque rating gets a torque
+gauge in its horn plane: WebGL lines are one pixel wide, so the gauge is a band
+of six concentric arcs at `TORQUE_BAND_RADII` (1.3 to 1.45 horn lengths, just
+outside the servo arc and its angle marker). It starts at mid-travel and sweeps
+toward the maximum stop for positive torque or the minimum stop for negative,
+reaching the stop at 100 % utilisation and capped there above it.
+`torqueUtilizationColor` grades it from green (`torqueLow`) at zero to the
+near-limit yellow at 100 %, and above 100 % it turns the failure red. Unrated
+servos get no gauge; their torque is still listed in the diagnostics. Loads
+are static (zero velocity and acceleration) for a manual pose and dynamic,
+from the pattern's analytic velocity and acceleration at the playback speed,
+while an animation plays, so the gauges show which servo saturates during the
+motion. The model is the cycle model's rigid-body Newton-Euler balance with
+ideal massless rods and horns (see [CYCLE_MODEL.md](./CYCLE_MODEL.md)).
+
 **Rejected pose ghost** (on by default) draws the latest request faintly when
 the evaluator rejected it (`assessment.reachable` is false), so the pose that
 was asked for, or the animation frame that paused playback, is visible next to
@@ -401,4 +478,4 @@ None of these checks replace validation against a physical mechanism.
 
 The diagnostics panel subscribes to the same controller as the renderer. It reports the six-axis **requested** pose and last valid **rendered accepted** pose separately. A rejected request remains visible with its evaluator failures while the renderer holds the last accepted geometry. Red leg rows mark failures in the requested pose, and a whole-platform conditioning failure has a separate message; the table always lists every failure. In the scene each failure is coloured once, on the geometry that failed. When the **Rejected pose ghost** overlay is on and the solver reached that leg's horn tip (a joint-limit failure), the ghost leg is red and the held accepted leg keeps its normal colours; a whole-platform failure likewise outlines the ghost platform in magenta instead of tinting the held legs. When the ghost is off, or for a structural failure where the solver stopped before that leg's horn tip, the held accepted leg is coloured red (magenta for a whole-platform failure). A red held leg therefore marks a failure in the request, not in the rendered pose, which the evaluator accepted; the rejected pose itself appears only as the dimmed ghost overlay. The servo arcs and joint cones keep their own failure colours either way.
 
-Each leg shows lower and upper socket deflection against their effective limits, maximum deflection, rod-length deviation against the editable tolerance, and servo angle. Unavailable measurements show a dash because the evaluator may stop at the first structural failure. Lower and upper joint limits and rod tolerance can be edited in the panel; changes reevaluate the current request and last accepted pose, a focused field keeps text the user has typed while an animation plays, an untouched focused field still follows loads and settings changes, and a rejected value is restored. The mandatory reciprocal conditioning cutoff and optional engineering condition limit are displayed. Simulator JSON saves these effective options with the requested and accepted poses, and loading that JSON restores them.
+Each leg shows lower and upper socket deflection against their effective limits, maximum deflection, rod-length deviation against the editable tolerance, servo angle, rod force and servo torque. The force and torque columns come from the controller's `loads` at the **accepted** pose, not the request: rod force in newtons, positive in compression; servo torque as signed output-shaft N m against the peak rating with the utilisation percentage, or `unrated`, and the torque cell is red above 100 %. A line above the table (`#simLoadDiagnostic`) says whether the loads are static or from the animation, that no payload or ratings are loaded, that there is no accepted pose, or why the cycle model could not solve the pose. Unavailable measurements show a dash because the evaluator may stop at the first structural failure. Lower and upper joint limits and rod tolerance can be edited in the panel; changes reevaluate the current request and last accepted pose, a focused field keeps text the user has typed while an animation plays, an untouched focused field still follows loads and settings changes, and a rejected value is restored. The mandatory reciprocal conditioning cutoff and optional engineering condition limit are displayed. Simulator JSON saves these effective options with the requested and accepted poses, and loading that JSON restores them.

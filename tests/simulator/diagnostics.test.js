@@ -158,3 +158,42 @@ test('a committed limit written with different formatting still follows a candid
   controller.loadLayout(asymmetricJointFixture(), { source: { kind: 'candidate', candidateId: 2 }, options });
   assert.equal(lower.value, '120', 'focused committed field kept the previous limit after a load');
 });
+
+test('diagnostics list rod force and servo torque at the accepted pose with the load status', () => {
+  const controller = createSimulatorController();
+  const document = createFakeDocument();
+  mountSimulatorDiagnostics({ document, controller });
+  const text = id => document.getElementById(id).textContent;
+  controller.loadLayout(asymmetricJointFixture(), { options: { ballJointLimitDeg: 180 } });
+  let diagnostics = buildPoseDiagnostics(controller.getState());
+  assert.equal(diagnostics.loadStatus, 'none');
+  assert.ok(diagnostics.legs.every(leg => leg.rodForceN === null && leg.servoTorqueNm === null));
+  assert.match(text('simLoadDiagnostic'), /no payload or servo ratings loaded/);
+  assert.match(document.getElementById('simDiagnosticRows').innerHTML, /<td>—<\/td>/);
+
+  let state = controller.loadLayout(asymmetricJointFixture(), { options: { ballJointLimitDeg: 180 },
+    loadModel: { mass_kg: 2.5, servo_torque_rating_nm: 0.4, per_servo_ratings: [{ torque_nm: 1e-4 }, null, null, null, null, null] } });
+  diagnostics = buildPoseDiagnostics(state);
+  assert.equal(diagnostics.loadStatus, 'static');
+  diagnostics.legs.forEach((leg, i) => {
+    assert.equal(leg.rodForceN, state.loads.rodForceN[i]);
+    assert.equal(leg.servoTorqueNm, state.loads.servoTorqueNm[i]);
+    assert.equal(leg.ratedTorqueNm, i === 0 ? 1e-4 : 0.4);
+    assert.equal(leg.torqueUtilization, state.loads.utilization[i]);
+  });
+  assert.match(text('simLoadDiagnostic'), /static/);
+  const rows = document.getElementById('simDiagnosticRows').innerHTML;
+  assert.match(rows, / N<\/td>/);
+  assert.match(rows, /N m \/ 0\.4 N m \(\d+%\)/);
+  // Servo 1 is over its rating, so its torque cell is marked.
+  assert.match(rows.split('<tr')[1], /class="sim-joint-failure">-?[\d.]+ N m \/ 0 N m/);
+  // A rejected request keeps the accepted pose's loads.
+  state = controller.requestPose({ z: 500 });
+  assert.equal(buildPoseDiagnostics(state).legs[2].rodForceN, state.loads.rodForceN[2]);
+  controller.setAnimation('wobble', true);
+  assert.equal(buildPoseDiagnostics(controller.tick(0.05)).loadStatus, 'animation');
+  assert.match(text('simLoadDiagnostic'), /dynamic/);
+  assert.equal(buildPoseDiagnostics({ ...state, loads: { valid: false, motion: 'static', reason: 'Singular.' } }).loadReason,
+    'Singular.');
+  assert.equal(buildPoseDiagnostics({ ...state, loads: null }).loadStatus, 'noPose');
+});

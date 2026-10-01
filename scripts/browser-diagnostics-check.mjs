@@ -21,6 +21,10 @@ try {
   assert.equal(await page.locator('#simDiagnosticRows tr').count(), 6);
   assert.match(await page.locator('#simRequestedDiagnostic').textContent(), /accepted/);
   assert.match(await page.locator('#simAcceptedDiagnostic').textContent(), /X 0 Y 0 Z 0/);
+  // A bare layout has no payload, so the loads toggle is disabled with a hint.
+  assert.equal(await page.locator('#simOverlayLoads').isDisabled(), true);
+  assert.equal(await page.locator('#simLoadsHint').isVisible(), true);
+  assert.match(await page.locator('#simLoadDiagnostic').textContent(), /no payload or servo ratings loaded/);
 
   // The Overlays info button opens an inline panel explaining every toggle.
   const overlayInfo = page.locator('#simOverlaysInfo');
@@ -109,7 +113,7 @@ try {
   assert.equal(exported.simulator.requested.z, 100);
   assert.equal(exported.simulator.accepted.z, 0);
   assert.deepEqual(exported.simulator.overlays, { groundGrid: true, servoArcs: false, jointCones: false, workspaceBox: true, reachabilityCloud: false,
-    conditioningEllipsoid: false, requestedGhost: true, platformAxes: true, worldAxes: false });
+    conditioningEllipsoid: false, loads: false, requestedGhost: true, platformAxes: true, worldAxes: false });
   await page.locator('#optimizeTab').click();
   await page.locator('#referenceLayoutInput').fill(JSON.stringify(exported));
   await page.locator('#simulateTab').click();
@@ -295,8 +299,34 @@ try {
   });
   assert.ok(cloudPixels.on > cloudPixels.off, `the reachability cloud drew no points: ${JSON.stringify(cloudPixels)}`);
   assert.equal(await page.locator('#simReachabilityStatus').textContent(), 'Reachability cloud off.');
+
+  // The sample candidate carries the 2.5 kg payload: the loads toggle works,
+  // the diagnostics list forces, and the overlay recolours the rods.
+  assert.equal(await page.locator('#simOverlayLoads').isDisabled(), false);
+  assert.equal(await page.locator('#simLoadsHint').isVisible(), false);
+  assert.match(await page.locator('#simLoadDiagnostic').textContent(), /Loads at the accepted pose: static/);
+  const firstRow = await page.locator('#simDiagnosticRows tr').first().innerText();
+  assert.match(firstRow, /-?\d+(\.\d+)? N\s+-?[\d.]+ N m \/ unrated/, firstRow);
+  const loadPixels = await page.evaluate(() => {
+    const canvas = document.querySelector('#simCanvas');
+    const gl = canvas.getContext('webgl2');
+    const toggle = checked => {
+      const input = document.getElementById('simOverlayLoads');
+      input.checked = checked;
+      input.dispatchEvent(new Event('change'));
+      const pixels = new Uint8Array(canvas.width * canvas.height * 4);
+      gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+      // The plain rod colour, SCENE_COLORS.rod.
+      let rod = 0;
+      for (let i = 0; i < pixels.length; i += 4) if (Math.abs(pixels[i] - 224) + Math.abs(pixels[i + 1] - 227) + Math.abs(pixels[i + 2] - 240) < 20) rod++;
+      return rod;
+    };
+    return { off: toggle(false), on: toggle(true), restored: toggle(false) };
+  });
+  assert.ok(loadPixels.on < loadPixels.off, `the loads overlay did not recolour the rods: ${JSON.stringify(loadPixels)}`);
+  assert.equal(loadPixels.restored, loadPixels.off);
   assert.deepEqual(pageErrors, []);
-  console.log('Browser evaluator diagnostics, rejected/accepted pose, settings, overlay toggles, reachability cloud, animation replay, JSON round trip and optimizer transfer passed.');
+  console.log('Browser evaluator diagnostics, rejected/accepted pose, settings, overlay toggles, reachability cloud, loads overlay, animation replay, JSON round trip and optimizer transfer passed.');
 } finally {
   await browser?.close();
   await new Promise(resolve => server.close(resolve));

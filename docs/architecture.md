@@ -21,12 +21,13 @@ The p5/quaternion/Stewart scripts belong only to the [archived simulator](../arc
 | `src/ui/servo-ratings-controls.js` | Shared and per-servo rating fields with override preservation |
 | `src/ui/local-workspace.js` | Capture, validation and restore of the browser-local workspace save |
 | `src/ui/tooltips.js`, `download.js` | Browser-only interactions |
-| `src/simulator/controller.js` | Copied active layout, requested/accepted poses, animation and trace state |
+| `src/simulator/controller.js` | Copied active layout, requested/accepted poses, animation (with analytic derivatives), trace state and accepted-pose loads |
 | `src/simulator/scene.js` | Ordered scene builders (lines and points from accepted geometry) and overlay toggles |
 | `src/simulator/reachability.js` | Reachability cloud settings and the chunked, abortable translation sweep through the shared pose evaluator |
 | `src/simulator/renderer.js`, `view.js` | Native WebGL2 drawing and camera/input handling |
 | `src/simulator/geometry-editor.js`, `geometry-controls.js` | Explicit or parametric editable layout copies |
-| `src/simulator/diagnostics.js` | Evaluator-driven per-leg joint/rod diagnostics and effective limits |
+| `src/simulator/loads.js` | Simulator load model (payload and servo ratings in requirement keys) and rod force / servo torque at a solved pose through the cycle model |
+| `src/simulator/diagnostics.js` | Evaluator-driven per-leg joint/rod diagnostics, rod force, servo torque and effective limits |
 | `src/contracts.js` | Schema/model versions, topology names, metric keys with JSON names, units and directions, failure categories |
 | `src/model/requirements.js` | Parsing, normalization and physical input validation |
 | `src/model/trajectory.js`, `mass-properties.js` | Legacy and supplied sinusoidal trajectories with Euler-rate conversion; rigid-body mass, inertia and external wrench |
@@ -56,7 +57,7 @@ The p5/quaternion/Stewart scripts belong only to the [archived simulator](../arc
 | `src/io/cad.js` | Home-pose construction skeleton, Fusion script and coordinate CSV |
 | `src/math.js` | Shared numerical primitives |
 
-The UI depends on the optimizer; the optimizer composes search and evaluation functions. The simulator controller, cycle and workspace evaluation all depend on the same pose evaluator. The renderer draws accepted pose geometry, plus a dimmed ghost built from a rejected request's own evaluator result, and never solves constraints. Numerical modules never import the UI or manipulate the DOM. Abort signals and progress callbacks cross these boundaries explicitly. NSGA-II intentionally updates evaluation rank/crowding fields; layout mutation and crossover clone their inputs. See the [active simulator guide](./SIMULATOR.md).
+The UI depends on the optimizer; the optimizer composes search and evaluation functions. The simulator controller, cycle and workspace evaluation all depend on the same pose evaluator, and the simulator's loads reuse the cycle model's `dynamicsAtPose`. The renderer draws accepted pose geometry, plus a dimmed ghost built from a rejected request's own evaluator result, and never solves constraints. Numerical modules never import the UI or manipulate the DOM. Abort signals and progress callbacks cross these boundaries explicitly. NSGA-II intentionally updates evaluation rank/crowding fields; layout mutation and crossover clone their inputs. See the [active simulator guide](./SIMULATOR.md).
 
 ## API compatibility
 

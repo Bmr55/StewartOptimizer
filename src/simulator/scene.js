@@ -19,6 +19,7 @@ export const SCENE_COLORS = Object.freeze({
   grid: [0.16, 0.2, 0.27], workspace: [0.32, 0.7, 0.76],
   reachable: [0.36, 0.9, 0.5], unreachable: [0.5, 0.2, 0.25],
   wellConditioned: [0.42, 0.85, 1],
+  compression: [0.3, 0.55, 1], tension: [0.95, 0.4, 0.2], torqueLow: [0.36, 0.9, 0.5],
 });
 const COLORS = SCENE_COLORS;
 // The canvas clear colour; the ghost dims toward it instead of blending.
@@ -34,7 +35,7 @@ const dim = color => color.map((value, k) => SCENE_BACKGROUND[k] + (value - SCEN
 // Toggleable overlays and whether each is drawn when a state or saved file
 // does not say. New overlays default off unless their issue says otherwise.
 export const OVERLAY_DEFAULTS = Object.freeze({ groundGrid: true, servoArcs: true, jointCones: true,
-  workspaceBox: true, reachabilityCloud: false, conditioningEllipsoid: false, requestedGhost: true,
+  workspaceBox: true, reachabilityCloud: false, conditioningEllipsoid: false, loads: false, requestedGhost: true,
   platformAxes: true, worldAxes: true });
 export const OVERLAY_NAMES = Object.freeze(Object.keys(OVERLAY_DEFAULTS));
 // Limit overlays (servo travel, socket cones) tint a value this close to its
@@ -53,6 +54,12 @@ export const REACHABILITY_POINT_SIZE = 3;
 // condition 1 to nearLimit at this floor, on a log scale. With a condition
 // limit set, the floor is 1 / limit instead, so full yellow means at the limit.
 export const CONDITIONING_GRADE_FLOOR = 0.01;
+// The load overlay redraws each rod this far (mm) toward the camera so its
+// graded colour wins the depth tie with the plain rod beneath it. Each servo's
+// torque gauge is a band of concentric arcs at these multiples of horn length,
+// outside the travel arc and its angle marker; WebGL lines are one pixel wide.
+export const LOAD_DEPTH_BIAS_MM = 2;
+export const TORQUE_BAND_RADII = Object.freeze([1.3, 1.33, 1.36, 1.39, 1.42, 1.45]);
 const ELLIPSOID_SEGMENTS = 32;
 const SERVO_ARC_SEGMENTS = 24;
 const JOINT_CONE_SEGMENTS = 24;
@@ -146,12 +153,15 @@ function legs(state, layout, solved) {
 // and a marker across the arc at the accepted horn angle. Failure colour when
 // the requested pose breaks this servo's range, a warning tint when the
 // accepted angle is within NEAR_LIMIT_MARGIN_RAD of a stop.
+// A point in servo i's horn plane at horn angle alpha, `scale` horn lengths from its base anchor.
+const hornPoint = (layout, i, alpha, scale) => vectorAdd(layout.baseAnchors[i],
+  vectorScale(hornFrameAxes(layout.betaAngles[i], alpha)[0], layout.hornLength * scale));
+
 function servoArcs(state, layout, solved) {
   const lines = [];
   const [min, max] = effectiveServoRange(layout, state.options ?? {});
   const violations = state.assessment?.violations ?? [];
-  const at = (i, alpha, scale) => vectorAdd(layout.baseAnchors[i],
-    vectorScale(hornFrameAxes(layout.betaAngles[i], alpha)[0], layout.hornLength * scale));
+  const at = (i, alpha, scale) => hornPoint(layout, i, alpha, scale);
   for (let i = 0; i < 6; i++) {
     const angle = solved?.servoAngles?.[i];
     const color = violations.some(violation => violation.type === 'servoLimit' && violation.leg === i) ? COLORS.failure
@@ -288,6 +298,58 @@ function conditioningEllipsoid(state, layout, solved) {
   return { lines, points: [] };
 }
 
+const mix = (from, to, t) => from.map((value, k) => value + (to[k] - value) * t);
+
+// Rod colour by solved force: the plain rod colour at zero, graded toward
+// compression blue (positive, the rod pushes) or tension red (negative), fully
+// reached at `referenceN`.
+export function rodForceColor(forceN, referenceN) {
+  const t = referenceN > 0 ? Math.min(1, Math.abs(forceN) / referenceN) : 0;
+  return mix(COLORS.rod, forceN >= 0 ? COLORS.compression : COLORS.tension, t);
+}
+
+// Torque gauge colour: torqueLow at zero graded to nearLimit at the peak
+// torque rating, and the failure colour above it.
+export function torqueUtilizationColor(utilization) {
+  if (utilization > 1) return COLORS.failure;
+  return mix(COLORS.torqueLow, COLORS.nearLimit, Math.max(0, utilization));
+}
+
+// Rod forces and servo torques at the accepted pose, as the controller solved
+// them with the cycle model (it publishes `state.loads`; nothing is solved here).
+// Each rod is redrawn graded by its force, except a rod the held pose already
+// failure-colours. Each rated servo gets a torque gauge: a band from mid-travel
+// toward the max stop for positive torque or the min stop for negative,
+// reaching the stop at the peak torque rating and capped there above it.
+function loads(state, layout, solved) {
+  const lines = [];
+  const result = state.loads;
+  if (!result?.valid || !hasSolvedLegs(solved)) return { lines, points: [] };
+  const legColor = failureColor(state);
+  const reference = result.staticForceN > 0 ? result.staticForceN : Math.max(...result.rodForceN.map(Math.abs));
+  for (let i = 0; i < 6; i++) {
+    if (legColor(i)) continue;
+    lines.push({ from: solved.hornTips[i], to: solved.platformPoints[i],
+      color: rodForceColor(result.rodForceN[i], reference), depthBias: LOAD_DEPTH_BIAS_MM });
+  }
+  const [min, max] = effectiveServoRange(layout, state.options ?? {});
+  const middle = (min + max) / 2;
+  for (let i = 0; i < 6; i++) {
+    const utilization = result.utilization?.[i];
+    if (!Number.isFinite(utilization) || utilization <= 0) continue;
+    const sweep = Math.sign(result.servoTorqueNm[i]) * Math.min(utilization, 1) * (max - middle);
+    const steps = Math.max(1, Math.ceil(SERVO_ARC_SEGMENTS * Math.abs(sweep) / (max - min)));
+    const color = torqueUtilizationColor(utilization);
+    for (const radius of TORQUE_BAND_RADII) {
+      for (let step = 0; step < steps; step++) {
+        lines.push({ from: hornPoint(layout, i, middle + sweep * step / steps, radius),
+          to: hornPoint(layout, i, middle + sweep * (step + 1) / steps, radius), color });
+      }
+    }
+  }
+  return { lines, points: [] };
+}
+
 // The rejected request drawn faintly beside the accepted pose: the one layer
 // that shows geometry the evaluator did not accept. It uses only what the
 // rejected evaluation returned. The platform comes from its translation and
@@ -360,6 +422,7 @@ export const SCENE_BUILDERS = Object.freeze([
   { name: 'workspaceBox', overlay: 'workspaceBox', build: workspaceBox },
   { name: 'reachabilityCloud', overlay: 'reachabilityCloud', build: reachabilityCloud },
   { name: 'conditioningEllipsoid', overlay: 'conditioningEllipsoid', build: conditioningEllipsoid },
+  { name: 'loads', overlay: 'loads', build: loads },
   { name: 'requestedGhost', overlay: 'requestedGhost', build: requestedGhost },
   { name: 'platformAxes', overlay: 'platformAxes', build: platformAxes },
   { name: 'worldAxes', overlay: 'worldAxes', build: worldAxes },
