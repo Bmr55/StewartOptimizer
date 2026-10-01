@@ -49,6 +49,54 @@ export function singularValuesOneSided(matrix) {
   return columns.map(col => Math.hypot(...col) * scale).sort((a, b) => b - a);
 }
 
+// Singular values and right singular vectors of the translation block (the
+// first three columns) of a 6x6 actuator Jacobian, for the simulator's
+// conditioning ellipsoid. The same one-sided Jacobi rotations as above, applied
+// to the 6x3 block while accumulating them into V, so each vector is a world
+// translation direction and its value is how strongly the servos couple to
+// motion along it. Values are sorted largest first, with their vectors; the
+// pose condition number still comes from singularValuesOneSided on all six columns.
+export function translationSingularSystem(rows) {
+  if (!Array.isArray(rows) || rows.length !== 6 || rows.some(row => !Array.isArray(row) || row.length !== 6
+      || row.some(value => !Number.isFinite(value)))) return null;
+  const columns = [0, 1, 2].map(col => rows.map(row => row[col]));
+  const scale = Math.max(...columns.flat().map(Math.abs));
+  if (scale === 0 || !Number.isFinite(scale)) return null;
+  for (const column of columns) column.forEach((value, row) => { column[row] = value / scale; });
+  const vectors = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+  const dot = (a, b) => a.reduce((sum, value, i) => sum + value * b[i], 0);
+  const rotate = (left, right, cosine, sine) => {
+    for (let k = 0; k < left.length; k++) {
+      const lp = left[k], rq = right[k];
+      left[k] = cosine * lp - sine * rq;
+      right[k] = sine * lp + cosine * rq;
+    }
+  };
+  let converged = false;
+  for (let sweep = 0; sweep < 80; sweep++) {
+    let rotated = false;
+    for (let p = 0; p < 2; p++) {
+      for (let q = p + 1; q < 3; q++) {
+        const a = dot(columns[p], columns[p]);
+        const b = dot(columns[q], columns[q]);
+        const c = dot(columns[p], columns[q]);
+        if (a === 0 || b === 0 || Math.abs(c) <= 4 * Number.EPSILON * Math.sqrt(a * b)) continue;
+        rotated = true;
+        const tau = (b - a) / (2 * c);
+        const t = (tau >= 0 ? 1 : -1) / (Math.abs(tau) + Math.hypot(1, tau));
+        const cosine = 1 / Math.hypot(1, t);
+        const sine = t * cosine;
+        rotate(columns[p], columns[q], cosine, sine);
+        rotate(vectors[p], vectors[q], cosine, sine);
+      }
+    }
+    if (!rotated) { converged = true; break; }
+  }
+  if (!converged) return null;
+  return columns.map((column, k) => ({ value: Math.hypot(...column) * scale, vector: vectors[k] }))
+    .sort((a, b) => b.value - a.value);
+}
+
 export function assessJacobian(rows, conditionLimit = null) {
   validateConditionLimit(conditionLimit);
   const singularValues = singularValuesOneSided(rows);

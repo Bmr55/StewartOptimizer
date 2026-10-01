@@ -98,4 +98,6 @@ names need a coordinated migration. Issue #35 remains outside this plan.
   in separate modules. Unsupported WebGL2 reports an actionable error while
   optimization remains available. The optional reachability cloud sweeps
   sampled translations at the requested rotation through the same evaluator
-  in yielding, abortable chunks and reports evaluated samples only.
+  in yielding, abortable chunks and reports evaluated samples only. The
+  optional conditioning ellipsoid draws the singular vectors of the accepted
+  pose's Jacobian translation block and evaluates no pose of its own.
