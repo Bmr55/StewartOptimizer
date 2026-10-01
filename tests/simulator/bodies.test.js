@@ -38,7 +38,7 @@ test('solid bodies are the plates, horn and rod cylinders and servo boxes of the
   for (let i = 0; i < 6; i++) {
     assert.deepEqual(bodies.cylinders[2 * i], { from: layout.baseAnchors[i], to: solved.hornTips[i], radius: horn, color: SCENE_COLORS.horn });
     assert.deepEqual(bodies.cylinders[2 * i + 1], { from: solved.hornTips[i], to: solved.platformPoints[i], radius: rod, color: SCENE_COLORS.rod });
-    assert.equal(bodies.boxes[i].color, SCENE_COLORS.servo);
+    assert.equal(bodies.boxes[i].color, SCENE_COLORS.servoBody);
     // The servo box sits beside the horn plane, off the shaft axis.
     const offset = vectorSub(bodies.boxes[i].center, layout.baseAnchors[i]);
     assert.ok(Math.abs(vectorDot(offset, bodies.boxes[i].axes[1])) > bodies.boxes[i].size[1] / 2);
