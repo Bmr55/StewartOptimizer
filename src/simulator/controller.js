@@ -1,11 +1,15 @@
 import { evaluatePose, ensureLayout } from '../model/pose.js';
 import { OVERLAY_DEFAULTS, OVERLAY_NAMES, parseOverlays } from './scene.js';
+import { parseReachability, REACHABILITY_DEFAULTS, sweepReachability } from './reachability.js';
 
 export const POSE_AXES = Object.freeze(['x', 'y', 'z', 'rx', 'ry', 'rz']);
 export const HOME_POSE = Object.freeze({ x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 });
 export const ANIMATION_PATTERNS = Object.freeze(['none', 'wobble', 'pingpong', 'rotate', 'tilt', 'helical']);
 
 const copy = value => value == null ? value : structuredClone(value);
+// The reachability sweep yields once per animation frame in a browser, else to a timer.
+const nextFrame = callback => typeof globalThis.requestAnimationFrame === 'function'
+  ? globalThis.requestAnimationFrame(callback) : setTimeout(callback, 0);
 
 // Options come from the UI, saved JSON and headless callers; a string or array
 // would otherwise be spread into the option map character by character.
@@ -62,7 +66,10 @@ export function animationPose(pattern, seconds, { amplitudeMm = 12, rotationRad 
   }
 }
 
-export function createSimulatorController({ onChange } = {}) {
+// `schedule(callback)` runs a callback later; the reachability sweep awaits it
+// between chunks. `evaluateReachability` replaces `evaluatePose` for that sweep
+// in tests only; the cloud otherwise uses the shared evaluator like everything else.
+export function createSimulatorController({ onChange, schedule = nextFrame, evaluateReachability } = {}) {
   const listeners = new Set(onChange ? [onChange] : []);
   let layout = null;
   let source = null;
@@ -78,11 +85,58 @@ export function createSimulatorController({ onChange } = {}) {
   let overlays = { ...OVERLAY_DEFAULTS };
   let workspaceRanges = null;
   let trace = [];
+  let reachability = { ...REACHABILITY_DEFAULTS };
+  // The published cloud is frozen and shared by every snapshot instead of
+  // copied, since it can hold thousands of points and notifies every chunk.
+  let reachabilityCloud = null;
+  let sweep = null;
 
   function getState() {
-    return copy({ layout, source, options, requested, accepted, assessment, acceptedAssessment,
+    return { ...copy({ layout, source, options, requested, accepted, assessment, acceptedAssessment,
       requestSource, rejected: Boolean(assessment && !assessment.reachable), animation,
-      markers, tracesEnabled, overlays, workspaceRanges, trace });
+      markers, tracesEnabled, overlays, workspaceRanges, trace, reachability }), reachabilityCloud };
+  }
+
+  function stopSweep() {
+    sweep?.abort.abort();
+    sweep = null;
+  }
+
+  // Starts a sweep when the cloud is on and its inputs (requested orientation,
+  // settings) differ from the running one; layout, options and range changes
+  // call stopSweep first so they always restart it. Off or without a layout,
+  // there is no cloud. Points from an older sweep are never mixed in.
+  function refreshReachability() {
+    if (!layout || !overlays.reachabilityCloud) {
+      stopSweep();
+      reachabilityCloud = null;
+      return;
+    }
+    const orientation = Object.freeze({ rx: requested.rx, ry: requested.ry, rz: requested.rz });
+    const key = JSON.stringify([orientation, reachability]);
+    if (sweep?.key === key) return;
+    stopSweep();
+    const abort = new AbortController();
+    sweep = { key, abort };
+    const total = reachability.sampleCount;
+    const points = [];
+    const publish = (error = null) => {
+      reachabilityCloud = Object.freeze({ points: Object.freeze(points.slice()), progress: points.length / total,
+        total, orientation, error });
+    };
+    publish();
+    sweepReachability({ layout, options, workspaceRanges, orientation, settings: { ...reachability },
+      signal: abort.signal, yieldControl: () => new Promise(resolve => schedule(resolve)),
+      evaluate: evaluateReachability,
+      onChunk(chunk) {
+        for (const point of chunk) points.push(Object.freeze({ at: Object.freeze(point.at), reachable: point.reachable }));
+        publish();
+        notify();
+      } }).catch(error => {
+      if (abort.signal.aborted) return;
+      publish(error.message);
+      notify();
+    });
   }
 
   function notify() {
@@ -112,6 +166,7 @@ export function createSimulatorController({ onChange } = {}) {
       animation.playing = false;
       animation.pauseReason = assessment.violations.map(violation => violation.type).join(', ') || 'Pose rejected';
     }
+    refreshReachability();
     return notify();
   }
 
@@ -137,6 +192,7 @@ export function createSimulatorController({ onChange } = {}) {
     acceptedAssessment = null;
     trace = [];
     animation = { ...animation, playing: false, seconds: 0, pauseReason: null };
+    stopSweep();
     return requestPose(HOME_POSE, { source: 'load' });
   }
 
@@ -151,6 +207,7 @@ export function createSimulatorController({ onChange } = {}) {
     acceptedAssessment = null;
     trace = [];
     animation = { ...animation, playing: false, seconds: 0, pauseReason: null };
+    refreshReachability();
     return notify();
   }
 
@@ -167,6 +224,7 @@ export function createSimulatorController({ onChange } = {}) {
         acceptedAssessment = null;
       } else acceptedAssessment = checked;
     }
+    stopSweep();
     return requestPose(requested, { source: 'settings' });
   }
 
@@ -198,11 +256,30 @@ export function createSimulatorController({ onChange } = {}) {
       const unknown = Object.keys(patch).filter(name => !OVERLAY_NAMES.includes(name));
       if (unknown.length) throw new RangeError(`Unknown overlay: ${unknown.join(', ')}.`);
       overlays = { ...overlays, ...known };
+      refreshReachability();
+      return notify();
+    },
+    // Patches the reachability cloud: `enabled` is the reachabilityCloud overlay
+    // toggle; sampleCount, mode and sliceZ (mm about home) are its settings.
+    // Everything is checked before anything changes.
+    setReachabilityCloud(patch) {
+      const settings = parseReachability(patch);
+      if (patch.enabled !== undefined && typeof patch.enabled !== 'boolean') {
+        throw new TypeError('reachability.enabled must be true or false.');
+      }
+      reachability = { ...reachability, ...settings };
+      if (patch.enabled !== undefined) overlays = { ...overlays, reachabilityCloud: patch.enabled };
+      refreshReachability();
       return notify();
     },
     // Replaces the drawn requirement ranges (mm and radians); null removes them.
-    setWorkspaceRanges(ranges) { workspaceRanges = normalizeWorkspaceRanges(ranges); return notify(); },
+    setWorkspaceRanges(ranges) {
+      workspaceRanges = normalizeWorkspaceRanges(ranges);
+      stopSweep();
+      refreshReachability();
+      return notify();
+    },
     clearTrace() { trace = []; return notify(); },
-    dispose() { listeners.clear(); },
+    dispose() { stopSweep(); listeners.clear(); },
   };
 }

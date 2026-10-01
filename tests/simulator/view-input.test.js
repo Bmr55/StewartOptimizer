@@ -233,7 +233,8 @@ test('Clear trace empties the recorded trace while traces stay enabled', () => {
 
 test('overlay checkboxes toggle the controller and follow its state', () => {
   const { controller, renderer, input } = mount();
-  for (const name of OVERLAY_NAMES) assert.equal(input(overlayInputId(name)).checked, true, name);
+  for (const name of OVERLAY_NAMES) assert.equal(input(overlayInputId(name)).checked, OVERLAY_DEFAULTS[name], name);
+  assert.equal(OVERLAY_DEFAULTS.reachabilityCloud, false, 'the cloud costs evaluator time and starts off');
   assert.equal(overlayInputId('worldAxes'), 'simOverlayWorldAxes');
   const renders = renderer.renders;
   input('simOverlayWorldAxes').checked = false;

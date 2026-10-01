@@ -12,6 +12,8 @@ export const VIEW_HALF_TANGENT = Math.tan(Math.PI / 6);
 // Geometry nearer the eye than this (mm along the view direction) is not drawn;
 // lines crossing it are clipped there rather than dropped.
 export const NEAR_PLANE_MM = 1;
+// Pixel size of a point whose builder gives none.
+export const DEFAULT_POINT_SIZE = 7;
 
 // Eye position and view basis of the orbit camera: it looks at `target` from
 // `distance` along the yaw/pitch direction, with +Z up.
@@ -163,12 +165,16 @@ export function createWebGLRenderer(canvas, { window, onContextChange } = {}) {
       if (segment) lineData.push(...segment[0], ...line.color, ...segment[1], ...line.color);
     }
     draw(lineData, gl.LINES, 1);
-    const pointData = [];
+    // One draw per point size, so reachability samples stay smaller than markers.
+    const pointData = new Map();
     for (const point of geometry.points) {
       const projected = projectInFrame(point.at, frame, width, height, 0);
-      if (projected) pointData.push(...projected, ...point.color);
+      if (!projected) continue;
+      const size = point.size ?? DEFAULT_POINT_SIZE;
+      if (!pointData.has(size)) pointData.set(size, []);
+      pointData.get(size).push(...projected, ...point.color);
     }
-    draw(pointData, gl.POINTS, 7);
+    for (const [size, vertices] of pointData) draw(vertices, gl.POINTS, size);
   }
 
   return { available: true, get contextLost() { return lost; }, render,

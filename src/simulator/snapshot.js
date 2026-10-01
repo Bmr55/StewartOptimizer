@@ -1,6 +1,7 @@
 import { degToRad, radToDeg } from '../math.js';
 import { evaluatePose } from '../model/pose.js';
 import { ANIMATION_PATTERNS, HOME_POSE, normalizePose, normalizeWorkspaceRanges } from './controller.js';
+import { parseReachability } from './reachability.js';
 import { parseOverlays } from './scene.js';
 import { parseCamera } from './view.js';
 
@@ -60,7 +61,7 @@ export function parseSimulatorSnapshot(saved, layout, fallbackOptions, fallbackR
 
   const result = { options, requested: pose(block.requested, 'simulator.requested'),
     accepted: pose(block.accepted, 'simulator.accepted'), camera: null, animation: null,
-    markers: null, tracesEnabled: null, overlays: null, pointerMode: null, workspaceRanges: null };
+    markers: null, tracesEnabled: null, overlays: null, reachability: null, pointerMode: null, workspaceRanges: null };
   if (block.workspaceRanges != null) {
     result.workspaceRanges = parseWorkspaceRanges(block.workspaceRanges, 'simulator.workspaceRanges');
   } else {
@@ -85,6 +86,8 @@ export function parseSimulatorSnapshot(saved, layout, fallbackOptions, fallbackR
     result[key] = block[key];
   }
   if (block.overlays != null) result.overlays = parseOverlays(block.overlays, 'simulator.overlays');
+  // Cloud settings only; whether it is on is the reachabilityCloud overlay.
+  if (block.reachability != null) result.reachability = parseReachability(block.reachability, 'simulator.reachability');
   // An empty mode (a select without a value) counts as not saved.
   if (block.pointerMode != null && block.pointerMode !== '') {
     if (!POINTER_MODES.includes(block.pointerMode)) {

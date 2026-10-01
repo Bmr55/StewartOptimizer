@@ -46,6 +46,33 @@ them. Axes may be left out; each given axis needs finite `min <= max`, `step`
 and other keys are dropped, and invalid ranges throw with the axis named
 before anything changes.
 
+`setReachabilityCloud({ enabled, sampleCount, mode, sliceZ })` patches the
+**Reachability cloud** (see Scene builders and overlays). `enabled` is the
+`reachabilityCloud` overlay toggle, so `setOverlays({ reachabilityCloud })`
+does the same; the other three keys are `reachability` in `getState()`, with
+defaults `REACHABILITY_DEFAULTS` in `src/simulator/reachability.js`:
+`sampleCount` 1,024 (one of the workspace `SAMPLE_PRESETS`, 256, 1,024 or
+4,096), `mode` `'cloud'` or `'slice'`, and `sliceZ` 0 (mm about home, a finite
+number). Every key is checked before anything changes. While the overlay is on
+and a layout is loaded, the controller sweeps samples through `evaluatePose`
+with the current simulator options on the main thread, `REACHABILITY_CHUNK`
+(200) poses at a time, yielding to the next animation frame before each chunk
+(a timer outside a browser; `createSimulatorController({ schedule })` replaces
+it). The result is `reachabilityCloud` in `getState()`: `{ points, progress,
+total, orientation, error }`, where each point is `{ at, reachable }` with
+`at` the evaluator's platform-origin `translation` in world millimetres,
+`progress` runs from 0 to 1, `orientation` is the `{ rx, ry, rz }` swept and
+`error` is the evaluator's message if a sample threw (the sweep then stops
+there), else `null`. The cloud is published after every chunk, frozen and
+shared by all snapshots rather than copied; it is `null` while the overlay is
+off or no layout is loaded. A change to the requested rotation, the settings,
+the layout, the options or the workspace ranges aborts the running sweep
+through its AbortSignal and starts again from no points, so points from two
+sweeps are never mixed. A request that changes only X/Y/Z keeps the cloud.
+`clear()` and `dispose()` abort the sweep. While an animation rotates the
+platform the sweep restarts every frame, so the cloud fills in once the
+rotation stops.
+
 ## Mechanical geometry controls
 
 `createGeometryControls({ document, container, controller })` mounts the active
@@ -139,7 +166,8 @@ a 0.15 dead zone. Pose requests do not change anchor coordinates.
 snapshot to the optimizer's reference JSON field. **Load optimizer reference**
 can restore that layout and saved requested/accepted poses. **Download simulator
 JSON** saves the same geometry plus run settings, simulator options, pose,
-camera, animation, markers, traces, overlay toggles, workspace ranges and input mode. The shared importer validates
+camera, animation, markers, traces, overlay toggles, reachability cloud
+settings, workspace ranges and input mode. The shared importer validates
 the layout and ignores old scores; every pose is checked again by the current
 evaluator. The `simulator` block is validated as a whole before anything is
 applied: `options` (only the known keys are kept; limits, servo bounds,
@@ -148,7 +176,11 @@ tolerance, condition limit and the clamp flag must have the right type),
 distance 10 to 2,500, three-coordinate target), `animation.speed` (positive),
 `markers`, `tracesEnabled`, `overlays` (each known overlay name true or false;
 unknown names are dropped, and a file without the block keeps the current
-toggles), `workspaceRanges` (see below) and `pointerMode` (`orbit` or `platform`). A rejected
+toggles), `reachability` (`sampleCount` 256, 1024 or 4096, `mode` `cloud` or
+`slice`, finite `sliceZ` in mm; other keys are dropped, and a file without the
+block keeps the current settings; whether the cloud is on is
+`overlays.reachabilityCloud`, and the samples themselves are never saved, so a
+load sweeps afresh), `workspaceRanges` (see below) and `pointerMode` (`orbit` or `platform`). A rejected
 file or browser save reports the offending `simulator.` field and leaves the
 current layout, pose, camera, animation and, for a browser save, the optimizer
 inputs untouched. If WebGL2 is unavailable, the simulator names the missing capability
@@ -183,15 +215,19 @@ where `solved` is the accepted assessment or `null`, so builders only draw data
 the evaluator already produced. The list order is the draw order: `groundGrid`,
 `base` (base polygon, servo direction stubs and base markers), `platform`
 (platform polygon), `legs` (horns, rods and their markers), `servoArcs`,
-`jointCones`, `workspaceBox`, `requestedGhost`, `platformAxes`, `worldAxes` and
-`trace`. Markers and traces keep their own controls.
+`jointCones`, `workspaceBox`, `reachabilityCloud`, `requestedGhost`,
+`platformAxes`, `worldAxes` and `trace`. Markers and traces keep their own
+controls. Each point carries a pixel `size` (markers 6 or 7, reachability
+samples 3); the renderer draws each size in its own call, and a point without
+one at 7.
 
 A builder with an `overlay` key is drawn only when that key is on in
 `state.overlays`. `OVERLAY_DEFAULTS` lists every toggleable overlay and its
 default; today these are **Ground grid** (`groundGrid`), **Servo arcs**
 (`servoArcs`), **Joint cones** (`jointCones`), **Workspace box**
-(`workspaceBox`), **Rejected pose ghost** (`requestedGhost`), **Platform axes**
-(`platformAxes`) and **World axes** (`worldAxes`), all on. With only the two
+(`workspaceBox`), **Reachability cloud** (`reachabilityCloud`), **Rejected pose
+ghost** (`requestedGhost`), **Platform axes** (`platformAxes`) and **World
+axes** (`worldAxes`), all on except the reachability cloud. With only the two
 axis overlays on, the scene matches the original single-function renderer line
 for line (a frozen fixture in `tests/fixtures/scene-geometry.json` checks this). The Simulate tab shows one checkbox per overlay in the
 **Overlays** group, with the id `simOverlay` plus the capitalised name (for
@@ -216,6 +252,29 @@ X/Y/Z ranges as a box about home: X and Y from their `min` to `max`, Z from
 platform's extent, and it stays put as the pose moves. Rotation ranges are not
 drawn. Without all three translation ranges (for example a layout imported
 without a run or saved ranges) there is no box.
+
+**Reachability cloud** (off by default, because every sample costs an
+evaluator call) shows where the platform origin can go at the current
+requested rotation. The controller's sweep (see Controller boundary) evaluates
+Halton translations, the optimizer's `halton-v1` sequence through
+`workspacePoses` in `src/workspace/sampling.js`, inside the requirement X, Y
+and Z ranges from `workspaceRanges`, or ±100 mm
+(`DEFAULT_REACHABILITY_HALF_RANGE_MM`) for any axis without a range, each at
+the requested Rx/Ry/Rz. Every sample is a 3 px point at its evaluated origin,
+green when `evaluatePose` accepts it and dim red when it does not; lines are
+never drawn between samples. **Z slice only** (`mode: 'slice'`) samples a
+single plane instead: Z is fixed at the **Slice Z** offset from home, so all
+samples share that plane and the full sample count covers X/Y. Below the
+toggles, **Cloud samples** picks 256, 1,024 or 4,096 samples, the slice
+checkbox and **Slice Z (mm)** field (enabled in slice mode; an empty or
+non-numeric entry is reported and restored, never read as 0) set the mode, and
+a status line reads, for example, `Swept 1024 of 1024 samples at Rx 0, Ry 0,
+Rz 0°: 812 reachable. Evaluated samples only, not a continuous envelope.`
+(`Sweeping` while in progress). The cloud shows evaluated samples only: a gap
+between green points is not shown to be reachable, an isolated red point does
+not bound the region, and nothing here claims a continuous envelope or
+boundary. It uses the same checks as every other pose (servo range, ball
+joints, rod length, conditioning) and still no collision detection.
 
 **Servo arcs** (on by default) draw each servo's allowed travel as an arc of
 horn-length radius about its base anchor, from the effective minimum to the

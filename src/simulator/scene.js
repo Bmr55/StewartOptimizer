@@ -16,6 +16,7 @@ export const SCENE_COLORS = Object.freeze({
   x: [1, 0.38, 0.38], y: [0.39, 0.92, 0.47], z: [0.42, 0.62, 1],
   limitRange: [0.5, 0.56, 0.66], nearLimit: [1, 0.88, 0.2],
   grid: [0.16, 0.2, 0.27], workspace: [0.32, 0.7, 0.76],
+  reachable: [0.36, 0.9, 0.5], unreachable: [0.5, 0.2, 0.25],
 });
 const COLORS = SCENE_COLORS;
 // The canvas clear colour; the ghost dims toward it instead of blending.
@@ -31,7 +32,7 @@ const dim = color => color.map((value, k) => SCENE_BACKGROUND[k] + (value - SCEN
 // Toggleable overlays and whether each is drawn when a state or saved file
 // does not say. New overlays default off unless their issue says otherwise.
 export const OVERLAY_DEFAULTS = Object.freeze({ groundGrid: true, servoArcs: true, jointCones: true,
-  workspaceBox: true, requestedGhost: true, platformAxes: true, worldAxes: true });
+  workspaceBox: true, reachabilityCloud: false, requestedGhost: true, platformAxes: true, worldAxes: true });
 export const OVERLAY_NAMES = Object.freeze(Object.keys(OVERLAY_DEFAULTS));
 // Limit overlays (servo travel, socket cones) tint a value this close to its
 // limit as a warning before the evaluator rejects it: 5°, in radians.
@@ -43,6 +44,8 @@ export const NEAR_LIMIT_MARGIN_RAD = 5 * Math.PI / 180;
 export const GROUND_GRID_PITCH_MM = 25;
 const GROUND_GRID_EXTENT = 1.5;
 export const GROUND_DEPTH_BIAS_MM = 2;
+// Reachability samples are drawn smaller than the 6 to 7 px markers.
+export const REACHABILITY_POINT_SIZE = 3;
 const SERVO_ARC_SEGMENTS = 24;
 const JOINT_CONE_SEGMENTS = 24;
 const JOINT_CONE_GENERATRICES = 4;
@@ -219,6 +222,15 @@ function workspaceBox(state, layout) {
   return { lines, points: [] };
 }
 
+// One point per evaluated reachability sample at its platform-origin position:
+// reachable samples green, unreachable ones a dim red so the reachable region
+// stands out. The controller sweeps and publishes them; this only draws them.
+function reachabilityCloud(state) {
+  const points = (state.reachabilityCloud?.points ?? []).map(point => ({ at: point.at,
+    color: point.reachable ? COLORS.reachable : COLORS.unreachable, size: REACHABILITY_POINT_SIZE }));
+  return { lines: [], points };
+}
+
 // The rejected request drawn faintly beside the accepted pose: the one layer
 // that shows geometry the evaluator did not accept. It uses only what the
 // rejected evaluation returned. The platform comes from its translation and
@@ -289,6 +301,7 @@ export const SCENE_BUILDERS = Object.freeze([
   { name: 'servoArcs', overlay: 'servoArcs', build: servoArcs },
   { name: 'jointCones', overlay: 'jointCones', build: jointCones },
   { name: 'workspaceBox', overlay: 'workspaceBox', build: workspaceBox },
+  { name: 'reachabilityCloud', overlay: 'reachabilityCloud', build: reachabilityCloud },
   { name: 'requestedGhost', overlay: 'requestedGhost', build: requestedGhost },
   { name: 'platformAxes', overlay: 'platformAxes', build: platformAxes },
   { name: 'worldAxes', overlay: 'worldAxes', build: worldAxes },

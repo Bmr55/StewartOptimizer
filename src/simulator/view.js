@@ -2,7 +2,8 @@ import { clamp, degToRad, radToDeg, vectorDot, vectorSub } from '../math.js';
 import { HOME_POSE, POSE_AXES } from './controller.js';
 import { cameraFrame, createWebGLRenderer, projectSegment, VIEW_HALF_TANGENT } from './renderer.js';
 import { buildSceneGeometry, OVERLAY_NAMES } from './scene.js';
-import { markCommitted, syncInput } from './geometry-controls.js';
+import { displayText, markCommitted, syncInput } from './geometry-controls.js';
+import { REACHABILITY_SAMPLE_COUNTS } from './reachability.js';
 
 const RADIAN_AXES = new Set(['rx', 'ry', 'rz']);
 const axisInput = (document, axis) => document.getElementById(`sim${axis.toUpperCase()}Input`);
@@ -57,6 +58,13 @@ export function createSimulatorView({ document, window, controller, isActive = (
   const markers = document.getElementById('simMarkers');
   const traces = document.getElementById('simTraces');
   const overlayInputs = OVERLAY_NAMES.map(name => [name, document.getElementById(overlayInputId(name))]);
+  const reachSamples = document.getElementById('simReachabilitySamples');
+  const reachSlice = document.getElementById('simReachabilitySlice');
+  const reachSliceZ = document.getElementById('simReachabilitySliceZ');
+  const reachStatus = document.getElementById('simReachabilityStatus');
+  // The sample-count choices are the shared workspace sampling presets.
+  reachSamples.innerHTML = REACHABILITY_SAMPLE_COUNTS
+    .map(count => `<option value="${count}">${count.toLocaleString('en-US')}</option>`).join('');
   const renderer = createRenderer(canvas, { window, onContextChange: () => show(controller.getState()) });
   const synced = new WeakMap();
   let camera = { yaw: 0.7, pitch: 0.38, distance: 600, target: [0, 0, 100] };
@@ -101,6 +109,7 @@ export function createSimulatorView({ document, window, controller, isActive = (
     markers.checked = state.markers;
     traces.checked = state.tracesEnabled;
     for (const [name, input] of overlayInputs) input.checked = state.overlays[name];
+    showReachability(state);
     if (renderer.available) renderer.render(state, camera);
   }
 
@@ -114,6 +123,33 @@ export function createSimulatorView({ document, window, controller, isActive = (
       syncInput(document, slider, String(clamp(value, Number(slider.min), Number(slider.max))), synced, force);
     }
   }
+
+  // The cloud settings follow the controller. The status counts evaluated
+  // samples only; it never describes a continuous envelope. A rejected entry
+  // stays reported until the next accepted cloud change.
+  function showReachability(state, force = false) {
+    const { sampleCount, mode, sliceZ } = state.reachability;
+    reachSamples.value = String(sampleCount);
+    reachSlice.checked = mode === 'slice';
+    reachSliceZ.disabled = mode !== 'slice';
+    syncInput(document, reachSliceZ, displayText(sliceZ), synced, force);
+    const cloud = state.reachabilityCloud;
+    let message;
+    if (!state.overlays.reachabilityCloud) message = 'Reachability cloud off.';
+    else if (!cloud) message = 'Load a layout to sweep reachability.';
+    else if (cloud.error) message = `Reachability sweep stopped after ${cloud.points.length} samples: ${cloud.error}`;
+    else {
+      const reachable = cloud.points.filter(point => point.reachable).length;
+      const { rx, ry, rz } = cloud.orientation;
+      message = `${cloud.points.length < cloud.total ? 'Sweeping' : 'Swept'} ${cloud.points.length} of ${cloud.total} samples`
+        + `${mode === 'slice' ? ` on the Z ${fmt(sliceZ)} mm plane` : ''} at Rx ${fmt(radToDeg(rx))}, Ry ${fmt(radToDeg(ry))},`
+        + ` Rz ${fmt(radToDeg(rz))}°: ${reachable} reachable. Evaluated samples only, not a continuous envelope.`;
+    }
+    if (reachabilityError) message = `${reachabilityError} ${message}`;
+    if (reachStatus.textContent !== message) reachStatus.textContent = message;
+    reachStatus.classList.toggle('error', Boolean(reachabilityError || cloud?.error));
+  }
+  let reachabilityError = null;
 
   const unsubscribe = controller.subscribe(show);
   if (!renderer.available) {
@@ -156,6 +192,20 @@ export function createSimulatorView({ document, window, controller, isActive = (
   for (const [name, input] of overlayInputs) {
     input.addEventListener('change', () => controller.setOverlays({ [name]: input.checked }));
   }
+  function changeReachability(patch) {
+    try {
+      controller.setReachabilityCloud(patch());
+      reachabilityError = null;
+    } catch (error) { reachabilityError = error.message; }
+    showReachability(controller.getState(), true);
+  }
+  reachSamples.addEventListener('change', () => changeReachability(() => ({ sampleCount: Number(reachSamples.value) })));
+  reachSlice.addEventListener('change', () => changeReachability(() => ({ mode: reachSlice.checked ? 'slice' : 'cloud' })));
+  // An empty field is an error, never 0.
+  reachSliceZ.addEventListener('change', () => changeReachability(() => {
+    const text = reachSliceZ.value.trim();
+    return { sliceZ: text === '' ? NaN : Number(text) };
+  }));
   document.getElementById('simClearTrace').addEventListener('click', () => controller.clearTrace());
   pattern.addEventListener('change', guarded(() => controller.setAnimation(pattern.value, false)));
   play.addEventListener('click', guarded(() => {

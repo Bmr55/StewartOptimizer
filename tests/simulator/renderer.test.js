@@ -6,7 +6,7 @@ import { createSimulatorController } from '../../src/simulator/controller.js';
 import { buildSceneGeometry, cameraFrame, createWebGLRenderer, NEAR_PLANE_MM, projectPoint,
   projectSegment } from '../../src/simulator/renderer.js';
 import { GHOST_DEPTH_BIAS_MM, GROUND_DEPTH_BIAS_MM, GROUND_GRID_PITCH_MM, NEAR_LIMIT_MARGIN_RAD, OVERLAY_DEFAULTS,
-  OVERLAY_NAMES, SCENE_BACKGROUND, SCENE_BUILDERS, SCENE_COLORS } from '../../src/simulator/scene.js';
+  OVERLAY_NAMES, REACHABILITY_POINT_SIZE, SCENE_BACKGROUND, SCENE_BUILDERS, SCENE_COLORS } from '../../src/simulator/scene.js';
 import { parseWorkspaceRanges } from '../../src/simulator/snapshot.js';
 import { parseRequirements } from '../../src/model/requirements.js';
 import { computeHornTip, hornLocalToWorld } from '../../src/model/kinematics.js';
@@ -70,8 +70,9 @@ test('projected depth keeps near/far ordering for a zoomed-out camera', () => {
 });
 
 function fakeGL() {
-  const calls = { createProgram: 0, drawArrays: 0, deleteProgram: 0 };
+  const calls = { createProgram: 0, drawArrays: 0, deleteProgram: 0, draws: [] };
   let lost = false;
+  let size = null;
   const noop = () => {};
   return {
     calls, setLost(value) { lost = value; },
@@ -82,7 +83,8 @@ function fakeGL() {
     getProgramParameter: () => true, createBuffer: () => ({}), getAttribLocation: () => 0,
     getUniformLocation: () => ({}), enable: noop, clearColor: noop, viewport: noop, clear: noop,
     useProgram: noop, bindBuffer: noop, bufferData: noop, vertexAttribPointer: noop,
-    enableVertexAttribArray: noop, uniform1f: noop, drawArrays() { calls.drawArrays++; },
+    enableVertexAttribArray: noop, uniform1f(location, value) { size = value; },
+    drawArrays(primitive, first, count) { calls.drawArrays++; calls.draws.push({ primitive, count, size }); },
     deleteBuffer: noop, deleteProgram() { calls.deleteProgram++; }, isContextLost: () => lost,
   };
 }
@@ -118,6 +120,38 @@ test('a lost context cancels the default, stops drawing, and restore rebuilds th
   renderer.dispose();
   assert.deepEqual(Object.keys(handlers), []);
   assert.equal(gl.calls.deleteProgram, 1);
+});
+
+test('the reachability cloud draws one small point per sample, coloured by its reachable flag', () => {
+  const controller = createSimulatorController();
+  const state = controller.loadLayout(asymmetricJointFixture(), { options: { ballJointLimitDeg: 180 } });
+  const at = k => [k, -k, state.layout.homeHeight + k];
+  const points = [...Array(7)].map((_, k) => ({ at: at(k), reachable: k % 3 !== 0 }));
+  const reachable = points.filter(point => point.reachable).length;
+  const cloudState = { ...state, overlays: { ...state.overlays, reachabilityCloud: true },
+    reachabilityCloud: { points, progress: 1, total: 7, orientation: { rx: 0, ry: 0, rz: 0 }, error: null } };
+  const cloud = SCENE_BUILDERS.find(builder => builder.name === 'reachabilityCloud').build(cloudState, state.layout, null);
+  assert.equal(cloud.lines.length, 0);
+  assert.equal(cloud.points.length, reachable + (points.length - reachable));
+  assert.equal(cloud.points.filter(point => point.color === SCENE_COLORS.reachable).length, reachable);
+  assert.equal(cloud.points.filter(point => point.color === SCENE_COLORS.unreachable).length, points.length - reachable);
+  assert.deepEqual(cloud.points.map(point => point.at), points.map(point => point.at));
+  const markers = buildSceneGeometry(state).points;
+  assert.ok(cloud.points.every(point => point.size === REACHABILITY_POINT_SIZE));
+  assert.ok(markers.every(marker => marker.size > REACHABILITY_POINT_SIZE), 'samples are smaller than markers');
+  // Off, or with no published cloud, nothing is drawn.
+  assert.deepEqual(buildSceneGeometry({ ...cloudState, overlays: state.overlays }).points, markers);
+  assert.deepEqual(buildSceneGeometry({ ...cloudState, reachabilityCloud: null }).points, markers);
+
+  // The renderer draws each point size in its own call at that size.
+  const gl = fakeGL();
+  const canvas = { width: 300, height: 200, getContext: () => gl, addEventListener() {}, removeEventListener() {} };
+  createWebGLRenderer(canvas).render(cloudState, {});
+  const pointDraws = gl.calls.draws.filter(draw => draw.primitive === gl.POINTS);
+  const drawnAt = size => pointDraws.filter(draw => draw.size === size).reduce((sum, draw) => sum + draw.count, 0);
+  assert.equal(drawnAt(REACHABILITY_POINT_SIZE), points.length);
+  assert.equal(pointDraws.reduce((sum, draw) => sum + draw.count, 0), points.length + markers.length);
+  assert.equal(new Set(pointDraws.map(draw => draw.size)).size, pointDraws.length, 'one draw per size');
 });
 
 // Scene states whose output was frozen from the single-function scene before it
@@ -158,25 +192,30 @@ test('overlay builders reproduce the frozen single-function scene exactly', () =
 
 test('each overlay toggle removes only its own builder output', () => {
   // A rejected request so the ghost has output; the accepted pose is still drawn.
-  const { legFailure: state } = frozenSceneStates();
+  // Two published cloud samples give the default-off reachability cloud output.
+  const { legFailure: rejected } = frozenSceneStates();
+  const state = { ...rejected, overlays: { ...rejected.overlays, reachabilityCloud: true },
+    reachabilityCloud: { points: [{ at: [0, 0, 100], reachable: true }, { at: [10, 0, 100], reachable: false }],
+      progress: 1, total: 2, orientation: { rx: 0, ry: 0, rz: 0 }, error: null } };
   const full = buildSceneGeometry(state);
   const parts = Object.fromEntries(SCENE_BUILDERS.map(builder =>
     [builder.name, builder.build(state, state.layout, state.acceptedAssessment)]));
   assert.deepEqual(SCENE_BUILDERS.map(builder => builder.name),
-    ['groundGrid', 'base', 'platform', 'legs', 'servoArcs', 'jointCones', 'workspaceBox', 'requestedGhost',
+    ['groundGrid', 'base', 'platform', 'legs', 'servoArcs', 'jointCones', 'workspaceBox', 'reachabilityCloud', 'requestedGhost',
       'platformAxes', 'worldAxes', 'trace']);
   assert.deepEqual(SCENE_BUILDERS.filter(builder => builder.overlay).map(builder => builder.overlay), OVERLAY_NAMES);
   assert.equal(parts.platformAxes.lines.length, 3);
   assert.equal(parts.worldAxes.lines.length, 3);
   assert.equal(parts.trace.lines.length, state.trace.length - 1);
   for (const name of OVERLAY_NAMES) {
-    assert.ok(parts[name].lines.length > 0, name);
+    assert.ok(parts[name].lines.length + parts[name].points.length > 0, name);
     const scene = buildSceneGeometry({ ...state, overlays: { ...state.overlays, [name]: false } });
-    const removed = new Set(parts[name].lines.map(line => JSON.stringify(line)));
-    const expected = full.lines.filter(line => !removed.has(JSON.stringify(line)));
-    assert.equal(scene.lines.length, full.lines.length - parts[name].lines.length, name);
-    assert.deepEqual(plain(scene.lines), plain(expected), name);
-    assert.deepEqual(plain(scene.points), plain(full.points), name);
+    for (const kind of ['lines', 'points']) {
+      const removed = new Set(parts[name][kind].map(item => JSON.stringify(item)));
+      const expected = full[kind].filter(item => !removed.has(JSON.stringify(item)));
+      assert.equal(scene[kind].length, full[kind].length - parts[name][kind].length, `${name} ${kind}`);
+      assert.deepEqual(plain(scene[kind]), plain(expected), `${name} ${kind}`);
+    }
   }
   const bare = buildSceneGeometry({ ...state, overlays: Object.fromEntries(OVERLAY_NAMES.map(name => [name, false])) });
   assert.equal(bare.lines.length, full.lines.length - OVERLAY_NAMES.reduce((sum, name) => sum + parts[name].lines.length, 0));
