@@ -19,7 +19,7 @@ assert.equal(solved.reachable, true, 'the check pose must be reachable');
 
 // Only the legs, base and platform outlines are drawn: no markers or overlays.
 const overlays = { groundGrid: false, servoArcs: false, jointCones: false, workspaceBox: false,
-  reachabilityCloud: false, requestedGhost: false, platformAxes: false, worldAxes: false };
+  reachabilityCloud: false, conditioningEllipsoid: false, requestedGhost: false, platformAxes: false, worldAxes: false };
 const file = { ...layoutToJSON(layout), simulator: { options, requested: pose, accepted: pose, camera, overlays, markers: false } };
 
 const lerp = (a, b, t) => a.map((value, k) => value + (b[k] - value) * t);
