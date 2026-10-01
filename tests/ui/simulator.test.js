@@ -266,21 +266,22 @@ test('overlay toggles round-trip through the optimizer reference, simulator JSON
   await element('runOptimization').handlers.click();
   const controller = element.app.simulatorController;
   const toggle = (ui, id, checked) => { ui(id).checked = checked; ui(id).handlers.change({ target: ui(id) }); };
-  for (const id of ['simOverlayServoArcs', 'simOverlayPlatformAxes', 'simOverlayWorldAxes']) assert.equal(element(id).checked, true, id);
-  const saved = { ...OVERLAY_DEFAULTS, servoArcs: false, worldAxes: false };
-  toggle(element, 'simOverlayServoArcs', false);
+  assert.equal(element('simOverlayServoArcs').checked, false, 'servo arcs start off');
+  for (const id of ['simOverlayPlatformAxes', 'simOverlayWorldAxes']) assert.equal(element(id).checked, true, id);
+  const saved = { ...OVERLAY_DEFAULTS, servoArcs: true, worldAxes: false };
+  toggle(element, 'simOverlayServoArcs', true);
   toggle(element, 'simOverlayWorldAxes', false);
   element('simUseReference').handlers.click();
   assert.deepEqual(JSON.parse(element('referenceLayoutInput').value).simulator.overlays, saved);
   element('simDownload').handlers.click();
   assert.equal(downloads.at(-1).name, 'stewart_simulator.json');
   assert.deepEqual(JSON.parse(downloads.at(-1).data).simulator.overlays, saved);
-  toggle(element, 'simOverlayServoArcs', true);
+  toggle(element, 'simOverlayServoArcs', false);
   toggle(element, 'simOverlayWorldAxes', true);
   toggle(element, 'simOverlayPlatformAxes', false);
   element('simLoadReference').handlers.click();
   assert.deepEqual(controller.getState().overlays, saved);
-  assert.equal(element('simOverlayServoArcs').checked, false);
+  assert.equal(element('simOverlayServoArcs').checked, true);
   assert.equal(element('simOverlayWorldAxes').checked, false);
   assert.equal(element('simOverlayPlatformAxes').checked, true);
   // A file saved before overlays existed keeps the current toggles.
@@ -356,7 +357,9 @@ test('a candidate draws its run workspace box, which simulator JSON carries; JSO
   const element = await loadUI(RangedOptimizer);
   await element('runOptimization').handlers.click();
   const controller = element.app.simulatorController;
-  let state = controller.getState();
+  // The box is off by default.
+  assert.deepEqual(boxEdges(controller.getState()), []);
+  let state = controller.setOverlays({ workspaceBox: true });
   assert.deepEqual(state.workspaceRanges.z, { min: -20, max: 40 });
   assert.ok(Math.abs(state.workspaceRanges.rx.max - 12 * Math.PI / 180) < 1e-15);
   const edges = boxEdges(state);

@@ -2,6 +2,7 @@ import { rotateVector, vectorAdd, vectorCross, vectorNormalize, vectorScale, vec
 import { hornFrameAxes } from '../model/kinematics.js';
 import { translationSingularSystem } from '../model/conditioning.js';
 import { effectiveServoRange, socketNormalsInWorld } from '../model/pose.js';
+import { violationLegs } from '../model/collision.js';
 
 // The scene is a list of builders, each `(state, layout, solved) => { lines, points }`.
 // `solved` is the accepted assessment (it may be null); nothing here evaluates a
@@ -34,8 +35,8 @@ const dim = color => color.map((value, k) => SCENE_BACKGROUND[k] + (value - SCEN
 
 // Toggleable overlays and whether each is drawn when a state or saved file
 // does not say. New overlays default off unless their issue says otherwise.
-export const OVERLAY_DEFAULTS = Object.freeze({ groundGrid: true, servoArcs: true, jointCones: true,
-  workspaceBox: true, reachabilityCloud: false, conditioningEllipsoid: false, loads: false, requestedGhost: true,
+export const OVERLAY_DEFAULTS = Object.freeze({ groundGrid: true, servoArcs: false, jointCones: false,
+  workspaceBox: false, reachabilityCloud: false, conditioningEllipsoid: false, loads: false, requestedGhost: true,
   platformAxes: true, worldAxes: true });
 export const OVERLAY_NAMES = Object.freeze(Object.keys(OVERLAY_DEFAULTS));
 // Limit overlays (servo travel, socket cones) tint a value this close to its
@@ -92,8 +93,7 @@ function failureColor(state) {
   const violations = state.assessment?.violations ?? [];
   const ghost = shownGhost(state);
   const ghostLegs = ghost?.hornTips ?? [];
-  const affectedLegs = new Set(violations.filter(violation => Number.isInteger(violation.leg) && !ghostLegs[violation.leg])
-    .map(violation => violation.leg));
+  const affectedLegs = new Set(violations.flatMap(violationLegs).filter(leg => !ghostLegs[leg]));
   const globalFailure = !ghost && violations.some(violation => !Number.isInteger(violation.leg));
   return index => affectedLegs.has(index) ? COLORS.failure : globalFailure ? COLORS.globalFailure : null;
 }
@@ -363,7 +363,7 @@ function requestedGhost(state, layout) {
   const requested = shownGhost({ ...state, overlays: { ...state.overlays, requestedGhost: true } });
   if (!requested) return { lines, points: [] };
   const violations = requested.violations ?? [];
-  const failedLegs = new Set(violations.filter(violation => Number.isInteger(violation.leg)).map(violation => violation.leg));
+  const failedLegs = new Set(violations.flatMap(violationLegs));
   const platformFailure = violations.some(violation => !Number.isInteger(violation.leg));
   const platformPoints = layout.platformAnchors.map(anchor =>
     vectorAdd(requested.translation, rotateVector(requested.rotationMatrix, anchor)));

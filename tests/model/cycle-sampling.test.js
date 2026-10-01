@@ -77,8 +77,8 @@ test('tightening tolerance improves agreement with an independent dense referenc
 });
 
 test('refinement detects a between-sample joint violation missed by the 64-phase schedule', () => {
-  // Dense maximum socket angle is ~60.29 deg; the 64-phase grid peaks near 60.12 deg.
-  const options = { mass: 2, trajectory: combined, ballJointLimitDeg: 60.2 };
+  // Dense maximum socket angle is ~54.43 deg; the 64-phase grid peaks near 54.32 deg.
+  const options = { mass: 2, trajectory: combined, ballJointLimitDeg: 54.38 };
   const legacy = computeCycleDemand(pairedFixture(), options);
   assert.equal(legacy.valid, true, 'coarse schedule misses the violation');
   const refined = computeCycleDemand(pairedFixture(), { ...options, sampling: { ...DEFAULT_CYCLE_SAMPLING, tolerance: 1e-4, maxSamples: 1024 } });

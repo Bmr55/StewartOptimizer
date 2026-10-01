@@ -95,7 +95,8 @@ export function createSimulatorView({ document, window, controller, isActive = (
       status.textContent = 'WebGL2 context lost. The scene redraws when the browser restores it; pose requests are still evaluated.';
       status.classList.toggle('error', true);
     } else if (state.assessment) {
-      const reason = state.assessment.violations.map(v => `${v.type}${v.leg === undefined ? '' : ` (leg ${v.leg + 1})`}`).join(', ');
+      const reason = state.assessment.violations.map(v => `${v.type}${v.leg === undefined ? ''
+        : Number.isInteger(v.otherLeg) ? ` (legs ${v.leg + 1} and ${v.otherLeg + 1})` : ` (leg ${v.leg + 1})`}`).join(', ');
       status.textContent = state.rejected
         ? `Rejected request: ${describePose(state.requested)}. ${reason || 'Pose failed the active evaluator.'} Accepted pose held.`
         : `Accepted request: ${describePose(state.accepted)}.`;

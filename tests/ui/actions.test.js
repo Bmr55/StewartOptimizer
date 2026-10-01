@@ -84,6 +84,8 @@ test('Copy JSON reports success through the clipboard API and a blocked copy oth
 test('the CSV and Fusion download formats export the construction skeleton of the selected candidate', async () => {
   const downloads = [];
   const element = await loadUI(HeadlessOptimizer, { downloadFile: (data, name, type) => downloads.push({ data, name, type }) });
+  // CAD formats need a home pose; seed 3's selected candidate has one.
+  element('optSeed').value = '3';
   await element('runOptimization').handlers.click();
   const selectedId = JSON.parse(element('resultOutput').value).result.layout.id;
   element('downloadFormat').value = 'csv';

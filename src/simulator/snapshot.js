@@ -9,7 +9,8 @@ import { parseCamera } from './view.js';
 export const POINTER_MODES = Object.freeze(['orbit', 'platform']);
 // Everything the simulator JSON `simulator.options` block may carry; other keys are dropped.
 export const SIMULATOR_OPTION_KEYS = Object.freeze(['ballJointLimitDeg', 'lowerBallJointLimitDeg',
-  'upperBallJointLimitDeg', 'ballJointClamp', 'conditionLimit', 'servoRangeRad', 'rodLengthTolerance']);
+  'upperBallJointLimitDeg', 'ballJointClamp', 'conditionLimit', 'servoRangeRad', 'rodLengthTolerance',
+  'linkClearanceMm']);
 
 function plainObject(value, field) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new TypeError(`${field} must be an object.`);

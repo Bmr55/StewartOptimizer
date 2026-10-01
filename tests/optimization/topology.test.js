@@ -192,8 +192,9 @@ test('legacy symmetric imports retain their exact horn directions and optional o
 
 function wideGapReference() {
   const parameters = { base_radius: 150, platform_radius: 100,
-    base_pair_gap: 250, platform_pair_gap: 150,
-    base_orientation: 0, platform_orientation: 0.6, beta_offset: 0 };
+    // Outside the pair-gap bounds, but narrow enough that no two legs collide.
+    base_pair_gap: 120, platform_pair_gap: 80,
+    base_orientation: 0, beta_offset: 0 };
   return { topology: 'c3_paired', topologyParameters: parameters,
     ...topologyGeometry('c3_paired', parameters), hornLength: 50,
     rodLength: 200, homeHeight: 180, servoRangeRad: [-2, 2] };
@@ -250,7 +251,7 @@ test('C3 pair gaps are capped at 1.2 times the plate radius by generation, mutat
   const space = { ...DEFAULT_DESIGN_SPACE, baseRadius: [100, 100], platformRadius: [20, 20] };
   const context = { designSpace: space, servoRangeRad: [-2, 2] };
   const source = parametricLayout('c3_paired', { base_radius: 100, platform_radius: 20,
-    base_pair_gap: 35, platform_pair_gap: 35, base_orientation: 0, platform_orientation: 0.3, beta_offset: 0 });
+    base_pair_gap: 35, platform_pair_gap: 35, base_orientation: 0, beta_offset: 0 });
   const finalized = finalizeLayout(structuredClone(source), context);
   assert.equal(finalized.topologyParameters.base_pair_gap, 35, 'inside [12, min(45, 1.2 * 100)]');
   assert.equal(finalized.topologyParameters.platform_pair_gap, 24, 'clamped to 1.2 * 20');
@@ -275,12 +276,12 @@ test('operators wrap topology orientation angles and free beta angles into (-pi,
   const context = { designSpace: DEFAULT_DESIGN_SPACE, servoRangeRad: [-2, 2] };
   const inRange = angle => angle > -Math.PI && angle <= Math.PI;
   const unwrapped = { base_radius: 110, platform_radius: 60, base_pair_gap: 20, platform_pair_gap: 20,
-    base_orientation: 0.3 + 2 * Math.PI, platform_orientation: -0.2 - 4 * Math.PI, beta_offset: 0.1 + 2 * Math.PI };
+    base_orientation: 0.3 + 2 * Math.PI, beta_offset: 0.1 + 2 * Math.PI };
   const source = parametricLayout('c3_paired', unwrapped);
   const finalized = finalizeLayout(structuredClone(source), context);
   close(finalized.topologyParameters.base_orientation, 0.3);
-  close(finalized.topologyParameters.platform_orientation, -0.2);
   close(finalized.topologyParameters.beta_offset, 0.1);
+  assert.equal('platform_orientation' in finalized.topologyParameters, false);
   finalized.baseAnchors.forEach((point, i) => point.forEach((value, k) => close(value, source.baseAnchors[i][k])));
   finalized.betaAngles.forEach((angle, i) => close(angle, source.betaAngles[i]));
   // Paired-horn families also wrap beta_pair_offset.
@@ -290,8 +291,9 @@ test('operators wrap topology orientation angles and free beta angles into (-pi,
   close(crossoverLayouts(circular, circular, { ...context, random: createRandom(1) }).topologyParameters.beta_pair_offset, 0.5);
   // Mutating an orientation at +pi or just above -pi lands back inside the range.
   for (let seed = 1; seed <= 12; seed++) {
-    const nearPi = parametricLayout('c3_paired', { ...unwrapped, base_orientation: Math.PI,
-      platform_orientation: -Math.PI + 1e-9, beta_offset: Math.PI });
+    const nearPi = parametricLayout('rectangular_paired', { base_radius: 110, platform_radius: 60,
+      base_aspect: 1, platform_aspect: 1, beta_pair_offset: 0,
+      base_orientation: Math.PI, platform_orientation: -Math.PI + 1e-9, beta_offset: Math.PI });
     const child = mutateLayout(nearPi, { ...context, random: createRandom(seed) });
     for (const field of ['base_orientation', 'platform_orientation', 'beta_offset']) {
       const value = child.topologyParameters[field];
@@ -311,5 +313,42 @@ test('operators wrap topology orientation angles and free beta angles into (-pi,
     const child = mutateLayout(layout, { ...context, random });
     assert.ok(child.betaAngles.every(inRange), `mutated ${child.betaAngles}`);
     child.betaAngles.forEach((angle, i) => assert.ok(Math.abs(wrapAngle(angle - layout.betaAngles[i])) < 0.5));
+  }
+});
+
+test('C3 legs part from each base pair to the neighbouring platform pairs, with mirrored servos', () => {
+  const azimuth = ([x, y]) => Math.atan2(y, x);
+  const parameters = { base_radius: 120, platform_radius: 70, base_pair_gap: 30, platform_pair_gap: 24,
+    base_orientation: 0.4, beta_offset: 0.3 };
+  const { baseAnchors, platformAnchors, betaAngles } = topologyGeometry('c3_paired', parameters);
+  for (let k = 0; k < 3; k++) {
+    const axis = parameters.base_orientation + k * 2 * Math.PI / 3;
+    const [low, high] = [2 * k, 2 * k + 1];
+    // The pair straddles its axis, and each leg leans 60 deg away from it, so
+    // the two legs of a pair reach different platform pairs.
+    close(wrapAngle(azimuth(baseAnchors[high]) - axis), -wrapAngle(azimuth(baseAnchors[low]) - axis));
+    const halfP = Math.asin(parameters.platform_pair_gap / (2 * parameters.platform_radius));
+    close(wrapAngle(azimuth(platformAnchors[high]) - axis), Math.PI / 3 - halfP);
+    close(wrapAngle(azimuth(platformAnchors[low]) - axis), -(Math.PI / 3 - halfP));
+    // Each platform pair joins legs from two neighbouring base pairs.
+    const next = (2 * k + 2) % 6;
+    close(Math.hypot(platformAnchors[high][0] - platformAnchors[next][0],
+      platformAnchors[high][1] - platformAnchors[next][1]), parameters.platform_pair_gap, 1e-9);
+    // Mirrored servos: reflecting one horn direction across the pair axis gives its partner's.
+    close(wrapAngle(betaAngles[high] - axis), -wrapAngle(betaAngles[low] - axis));
+    // Each horn points away from its partner.
+    for (const leg of [low, high]) {
+      const tangent = [-Math.sin(azimuth(baseAnchors[leg])), Math.cos(azimuth(baseAnchors[leg]))];
+      const away = leg === high ? 1 : -1;
+      assert.ok(away * (Math.cos(betaAngles[leg]) * tangent[0] + Math.sin(betaAngles[leg]) * tangent[1]) > 0, `leg ${leg}`);
+    }
+  }
+  assert.throws(() => topologyGeometry('c3_paired', { ...parameters, beta_offset: 2 }), /beta_offset.*90/);
+  const context = { designSpace: DEFAULT_DESIGN_SPACE, servoRangeRad: [-2, 2] };
+  const edge = parametricLayout('c3_paired', { ...parameters, beta_offset: Math.PI / 2 });
+  for (let seed = 1; seed <= 12; seed++) {
+    const child = mutateLayout(edge, { ...context, random: createRandom(seed) });
+    assert.ok(Math.abs(child.topologyParameters.beta_offset) <= Math.PI / 2, `seed ${seed}`);
+    assert.equal(validateTopology(child), 'c3_paired');
   }
 });

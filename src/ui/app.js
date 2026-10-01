@@ -20,7 +20,7 @@ import { mountSimulatorDiagnostics } from '../simulator/diagnostics.js';
 import { loadModelFromSettings } from '../simulator/loads.js';
 import { LOCAL_WORKSPACE_KEY, captureLocalWorkspace, parseLocalWorkspace,
     applyLocalWorkspace } from './local-workspace.js';
-import { DEFAULT_BALL_JOINT_LIMIT_DEG } from '../contracts.js';
+import { DEFAULT_BALL_JOINT_LIMIT_DEG, DEFAULT_LINK_CLEARANCE_MM } from '../contracts.js';
 
 function simulatorOptions(settings = {}, layout = {}) {
     return {
@@ -28,6 +28,7 @@ function simulatorOptions(settings = {}, layout = {}) {
         lowerBallJointLimitDeg: settings.lowerBallJointLimitDeg ?? settings.ballJointLimitDeg ?? DEFAULT_BALL_JOINT_LIMIT_DEG,
         upperBallJointLimitDeg: settings.upperBallJointLimitDeg ?? settings.ballJointLimitDeg ?? DEFAULT_BALL_JOINT_LIMIT_DEG,
         conditionLimit: settings.conditionLimit ?? null,
+        linkClearanceMm: settings.linkClearanceMm ?? DEFAULT_LINK_CLEARANCE_MM,
         servoRangeRad: layout.servoRangeRad,
         rodLengthTolerance: settings.rodLengthTolerance ?? 0.5,
     };
@@ -75,6 +76,7 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
     });
     const ballJointClampCheckbox = document.getElementById('ballJointClamp');
     const ballJointLimitInput = document.getElementById('ballJointLimit');
+    const linkClearanceInput = document.getElementById('linkClearance');
     let currentOptimizer = null;
     let lastOutcome = null;
     let simulatorRun = null;
@@ -354,6 +356,8 @@ export function createApp({ document, window, Optimizer = DefaultOptimizer, work
                 seed,
                 servoRatings,
                 ballJointLimitDeg: Number(ballJointLimitInput.value),
+                // An emptied field falls back to the requirements value.
+                linkClearanceMm: linkClearanceInput.value.trim() === '' ? undefined : Number(linkClearanceInput.value),
                 ballJointClamp: ballJointClampCheckbox.checked,
                 onProgress: progress => reportProgress(thisRun, progress),
             };

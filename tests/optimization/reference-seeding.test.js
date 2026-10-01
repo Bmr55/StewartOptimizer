@@ -168,7 +168,7 @@ test('a reference servo range below the lower travel bound is a conflict, like o
 test('C3 pair-gap conflicts are reported per plate from that plate\'s own parameter', () => {
   const build = (base_pair_gap, platform_pair_gap) => {
     const parameters = { base_radius: 120, platform_radius: 80, base_pair_gap, platform_pair_gap,
-      base_orientation: 0, platform_orientation: 0.5, beta_offset: 0 };
+      base_orientation: 0, beta_offset: 0 };
     return { topology: 'c3_paired', topologyParameters: parameters, ...topologyGeometry('c3_paired', parameters),
       hornLength: 50, rodLength: 200, homeHeight: 180, servoRangeRad: [-2, 2] };
   };

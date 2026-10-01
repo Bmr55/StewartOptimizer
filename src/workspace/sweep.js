@@ -6,7 +6,8 @@ import { createRandom } from '../optimization/random.js';
 import { estimateWorkspaceSize, normalizeSampling, workspacePoses } from './sampling.js';
 import { createPayloadSupportStatistics } from './payload-support.js';
 import { dynamicsAtPose, staticState } from '../model/cycle.js';
-import { DEFAULT_BALL_JOINT_LIMIT_DEG } from '../contracts.js';
+import { DEFAULT_BALL_JOINT_LIMIT_DEG, DEFAULT_LINK_CLEARANCE_MM } from '../contracts.js';
+import { validateLinkClearance } from '../model/collision.js';
 
 export { MAX_WORKSPACE_POSES, estimateWorkspaceSize } from './sampling.js';
 
@@ -19,6 +20,7 @@ export async function computeWorkspace(layout, ranges = {}, options = {}) {
     lowerBallJointLimitDeg = ballJointLimitDeg,
     upperBallJointLimitDeg = ballJointLimitDeg,
     conditionLimit = null,
+    linkClearanceMm = DEFAULT_LINK_CLEARANCE_MM,
     ballJointClamp = false,
     payload = 0,
     stroke = 0,
@@ -34,6 +36,7 @@ export async function computeWorkspace(layout, ranges = {}, options = {}) {
 
   signal?.throwIfAborted();
   validateConditionLimit(conditionLimit);
+  validateLinkClearance(linkClearanceMm);
   const mounting = options.mounting ?? resolveMounting(layout).mounting;
   const effectiveSampling = normalizeSampling(sampling);
   const totalPoses = estimateWorkspaceSize(ranges, effectiveSampling);
@@ -54,7 +57,7 @@ export async function computeWorkspace(layout, ranges = {}, options = {}) {
   for (const pose of workspacePoses(ranges, effectiveSampling)) {
     const result = evaluatePose(layout, pose, {
       ballJointLimitDeg, lowerBallJointLimitDeg, upperBallJointLimitDeg, ballJointClamp,
-      conditionLimit, mounting, servoRangeRad: layout.servoRangeRad, recordLegData: Boolean(support),
+      conditionLimit, linkClearanceMm, mounting, servoRangeRad: layout.servoRangeRad, recordLegData: Boolean(support),
     });
     statistics.add(pose, result);
     if (support && result.reachable) {
@@ -73,7 +76,7 @@ export async function computeWorkspace(layout, ranges = {}, options = {}) {
   return {
     ...statistics.finish(),
     constraintPolicy: { mode: ballJointClamp ? 'soft-ball-joint' : 'strict', ballJointLimitDeg,
-      lowerBallJointLimitDeg, upperBallJointLimitDeg, conditionLimit,
+      lowerBallJointLimitDeg, upperBallJointLimitDeg, conditionLimit, linkClearanceMm,
       numericalReciprocalCutoff: NUMERICAL_RECIPROCAL_CUTOFF },
     sampling: effectiveSampling,
     payload, stroke, frequency,

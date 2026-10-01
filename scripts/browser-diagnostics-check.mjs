@@ -76,6 +76,9 @@ try {
       input.dispatchEvent(new Event('change'));
       return count();
     };
+    // Servo arcs and joint cones start off; switch them on to measure each toggle.
+    toggle('simOverlayServoArcs', true);
+    toggle('simOverlayJointCones', true);
     const all = toggle('simOverlayWorldAxes', true);
     // The Z 100 request above is rejected, so its ghost is part of the scene.
     const withoutGhost = toggle('simOverlayRequestedGhost', false);
@@ -112,7 +115,7 @@ try {
   assert.equal(exported.simulator.options.rodLengthTolerance, 0.01);
   assert.equal(exported.simulator.requested.z, 100);
   assert.equal(exported.simulator.accepted.z, 0);
-  assert.deepEqual(exported.simulator.overlays, { groundGrid: true, servoArcs: false, jointCones: false, workspaceBox: true, reachabilityCloud: false,
+  assert.deepEqual(exported.simulator.overlays, { groundGrid: true, servoArcs: false, jointCones: false, workspaceBox: false, reachabilityCloud: false,
     conditioningEllipsoid: false, loads: false, requestedGhost: true, platformAxes: true, worldAxes: false });
   await page.locator('#optimizeTab').click();
   await page.locator('#referenceLayoutInput').fill(JSON.stringify(exported));
@@ -262,6 +265,8 @@ try {
   await page.locator('#optimizationParameters summary').click();
   await page.locator('#optPopulation').fill('4');
   await page.locator('#optGenerations').fill('1');
+  // Seed 3's selected candidate reaches poses, so the cloud below has points.
+  await page.locator('#optSeed').fill('3');
   await page.locator('#optSampling').selectOption('256');
   await page.locator('#ballJointLimit').fill('60');
   await page.locator('#runOptimization').click();

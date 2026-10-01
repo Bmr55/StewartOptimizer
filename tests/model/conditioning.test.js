@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { asymmetricJointFixture, jointFixture, pairedFixture } from '../fixtures/layout.js';
+import { asymmetricJointFixture, crossedPairedFixture, jointFixture, pairedFixture } from '../fixtures/layout.js';
 import { evaluatePose } from '../../src/model/pose.js';
+import { DEFAULT_LINK_CLEARANCE_MM } from '../../src/contracts.js';
 import { computeWorkspace } from '../../src/workspace/sweep.js';
 import { computeCycleDemand } from '../../src/model/cycle.js';
 import { Optimizer } from '../../src/optimization/optimizer.js';
@@ -58,7 +59,9 @@ test('Jacobian and condition are dimensionless under a uniform length scale', ()
     scaled.hornLength *= factor;
     scaled.rodLength *= factor;
     scaled.homeHeight *= factor;
-    const current = evaluatePose(scaled, { x: 3 * factor, z: 5 * factor, ry: 0.02 }, mechanical);
+    // The link clearance is a length too, so it scales with the layout.
+    const current = evaluatePose(scaled, { x: 3 * factor, z: 5 * factor, ry: 0.02 },
+      { ...mechanical, linkClearanceMm: DEFAULT_LINK_CLEARANCE_MM * factor });
     assert.equal(current.reachable, true);
     close(current.conditioning.reciprocal, baseline.conditioning.reciprocal, 1e-11);
     for (let row = 0; row < 6; row++) for (let col = 0; col < 6; col++) {
@@ -221,9 +224,10 @@ test('a symmetric layout at home gives equal horizontal axes about a vertical on
 
 test('the translation helper leaves pose conditioning and its condition number unchanged', () => {
   // Frozen from before the helper existed: the pose conditioning outputs, which
-  // feed optimizer results, must not move.
-  const layout = pairedFixture();
-  const home = evaluatePose(layout, {}, mechanical);
+  // feed optimizer results, must not move. They come from the earlier paired
+  // fixture; the link check is off because conditioning does not depend on it.
+  const layout = crossedPairedFixture();
+  const home = evaluatePose(layout, {}, { ...mechanical, linkClearanceMm: 0 });
   const rows = structuredClone(home.jacobianRows);
   translationSingularSystem(home.jacobianRows);
   assert.deepEqual(home.jacobianRows, rows, 'the rows are not modified');

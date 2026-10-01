@@ -1,5 +1,6 @@
 import { radToDeg } from '../math.js';
-import { topologyGeometry, PAIRED_HORN_TOPOLOGIES, DEFAULT_BETA_PAIR_OFFSET } from '../optimization/topology.js';
+import { topologyGeometry, PAIRED_HORN_TOPOLOGIES, DEFAULT_BETA_PAIR_OFFSET,
+  C3_BETA_OFFSET_LIMIT } from '../optimization/topology.js';
 import { createGeometryEditor, geometryMode, PARAMETER_FIELDS } from './geometry-editor.js';
 
 const ANGLE_FIELDS = new Set(['base_orientation', 'platform_orientation', 'beta_offset', 'beta_pair_offset']);
@@ -35,6 +36,7 @@ export function suggestedParameters(layout, topology) {
   };
   if (PAIRED_HORN_TOPOLOGIES.includes(topology)) parameters.beta_pair_offset = DEFAULT_BETA_PAIR_OFFSET;
   if (topology === 'c3_paired') {
+    delete parameters.platform_orientation;
     parameters.base_pair_gap = Math.min(30, base);
     parameters.platform_pair_gap = Math.min(30, platform);
   }
@@ -162,10 +164,12 @@ export function createGeometryControls({ document, container, controller }) {
     const storedValue = layout.topologyParameters[field] ?? 0;
     const value = angle ? radToDeg(storedValue) : storedValue;
     const isAspect = field.endsWith('aspect');
+    const angleLimit = layout.topology === 'c3_paired' && field === 'beta_offset'
+      ? radToDeg(C3_BETA_OFFSET_LIMIT) : 180;
     addPair(parent, {
       key: field.replaceAll('_', '-'), label: LABELS[field], value,
-      min: angle ? -180 : isAspect ? 0.2 : 1,
-      max: angle ? 180 : isAspect ? 3 : field.includes('gap') ? 200 : 500,
+      min: angle ? -angleLimit : isAspect ? 0.2 : 1,
+      max: angle ? angleLimit : isAspect ? 3 : field.includes('gap') ? 200 : 500,
       step: angle ? 0.1 : isAspect ? 0.01 : 0.1,
       edit: number => perform({ type: 'parameter', field,
         value: angle ? number * Math.PI / 180 : number }),

@@ -36,7 +36,7 @@ Run `npm test` after any change. Run `npm run smoke` when touching the optimizer
 - Root `math.js`, `cycle.js`, `requirements.js`, `workspace.js` and `optimizer.js` are compatibility shims. Import from `src/` and do not add new root modules.
 - No new dependencies in the active app. Dev dependencies are only for tests, browser checks and vendoring.
 - The Dockerfile copies only `index.html`, `src/`, `styles/`, `assets/` and `examples/`. A new runtime directory must be added there too.
-- Docs are part of the change. Update [docs/FEATURES.md](docs/FEATURES.md) and the relevant model doc when adding a control, default, limit or exported field. Do not claim capabilities the code lacks: no collision detection, no ML surrogate, no PSO.
+- Docs are part of the change. Update [docs/FEATURES.md](docs/FEATURES.md) and the relevant model doc when adding a control, default, limit or exported field. Do not claim capabilities the code lacks: collision detection covers only horn and rod centre lines between legs (no servo bodies, plates or payload), no ML surrogate, no PSO.
 - Prevent doc drift: a PR that changes behaviour, a message shape, an exported field, an accepted value, a default or a user-visible string is not done until every doc that describes it is updated in the same PR. Before opening the PR, grep `docs/` and `README.md` for each identifier, field name, option value and message phase the diff touched and fix every mention. Use this map, and add to it when a new doc appears:
 
 | Code area | Docs to check |

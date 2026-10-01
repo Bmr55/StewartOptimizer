@@ -10,6 +10,9 @@ export const TOPOLOGIES = Object.freeze(['circular', 'c3_paired', 'rectangular_p
 export const DEFAULT_TOPOLOGY = 'c3_paired';
 // Shared ball-joint limit used when neither an option nor the requirements supply one.
 export const DEFAULT_BALL_JOINT_LIMIT_DEG = 45;
+// Minimum distance (mm) between the centre lines of two legs' horns and rods,
+// standing for the sum of their half-widths: a 4 mm rod beside an 8 mm horn arm.
+export const DEFAULT_LINK_CLEARANCE_MM = 6;
 
 export const METRICS = Object.freeze({
   coverage: { json: 'coverage', direction: 'max', unit: 'percent' },
@@ -30,5 +33,5 @@ export const METRICS = Object.freeze({
 
 export const FAILURE_CATEGORIES = Object.freeze([
   'geometry', 'home', 'workspace', 'cycle', 'cycle_convergence', 'joint', 'conditioning', 'servo_capacity',
-  'payload_support',
+  'payload_support', 'collision',
 ]);

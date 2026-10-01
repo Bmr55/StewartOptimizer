@@ -18,7 +18,7 @@ test('editor parameter fields are the shared topology fields in display order', 
     assert.deepEqual([...PARAMETER_FIELDS[topology]].sort(), [...topologyFields(topology)].sort(), topology);
   }
   assert.deepEqual(PARAMETER_FIELDS.c3_paired, ['base_radius', 'platform_radius', 'base_pair_gap', 'platform_pair_gap',
-    'base_orientation', 'platform_orientation', 'beta_offset']);
+    'base_orientation', 'beta_offset']);
   assert.deepEqual(PARAMETER_FIELDS.rectangular_paired, ['base_radius', 'platform_radius', 'base_aspect', 'platform_aspect',
     'base_orientation', 'platform_orientation', 'beta_offset', 'beta_pair_offset']);
 });
@@ -81,7 +81,8 @@ test('length, height, servo bounds, and explicit anchors change only the request
 });
 
 test('geometry edits rederive derived mounting directions and keep supplied ones', () => {
-  const original = make('c3_paired');
+  // Seed 36 gives a C3 layout whose home pose solves, so mounting can be derived.
+  const original = new Optimizer({}, { topology: 'c3_paired', seed: 36 }).createRandomLayout();
   original.mounting = resolveMounting(original).mounting;
   original.mounting.upper[1] = { source: 'supplied', direction: [0, 0, -1] };
   const before = structuredClone(original.mounting);

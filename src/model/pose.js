@@ -2,7 +2,8 @@ import { degToRad, rotationMatrixFromEuler, rotateVector, vectorAdd, vectorSub,
   vectorMagnitude, vectorNormalize, vectorDot, clamp } from '../math.js';
 import { computeHornTip, hornLocalToWorld, solveServoAngle } from './kinematics.js';
 import { resolveMounting } from './mounting.js';
-import { DEFAULT_BALL_JOINT_LIMIT_DEG } from '../contracts.js';
+import { DEFAULT_BALL_JOINT_LIMIT_DEG, DEFAULT_LINK_CLEARANCE_MM } from '../contracts.js';
+import { assessLinkClearance, validateLinkClearance } from './collision.js';
 import { assessPoseConditioning, validateConditionLimit,
   NUMERICAL_RECIPROCAL_CUTOFF } from './conditioning.js';
 
@@ -80,8 +81,10 @@ export function evaluatePose(layout, pose = {}, options = {}) {
     rodLengthTolerance = 0.5,
     recordLegData = false,
     conditionLimit = null,
+    linkClearanceMm = DEFAULT_LINK_CLEARANCE_MM,
   } = options;
   validateConditionLimit(conditionLimit);
+  validateLinkClearance(linkClearanceMm);
   if (typeof rodLengthTolerance !== 'number' || !Number.isFinite(rodLengthTolerance) || rodLengthTolerance < 0) {
     throw new RangeError('rodLengthTolerance must be a finite nonnegative length in mm.');
   }
@@ -99,6 +102,7 @@ export function evaluatePose(layout, pose = {}, options = {}) {
   const rotationMatrix = rotationMatrixFromEuler(rotation[0], rotation[1], rotation[2]);
 
   const servoAngles = [], rodLengths = [], legDirections = [];
+  const solvedHornTips = [];
   const hornTips = recordLegData ? [] : null;
   const rodVectors = recordLegData ? [] : null;
   const platformPoints = recordLegData ? [] : null;
@@ -130,6 +134,7 @@ export function evaluatePose(layout, pose = {}, options = {}) {
     }
 
     const hornTip = computeHornTip(base, layout.hornLength, beta, alpha);
+    solvedHornTips.push(hornTip);
     const rodVector = vectorSub(q, hornTip);
     conditionRodVectors.push(rodVector);
     const rodLength = vectorMagnitude(rodVector);
@@ -170,6 +175,12 @@ export function evaluatePose(layout, pose = {}, options = {}) {
   }
 
   const jointViolation = violations.some(v => v.type === 'ballJoint');
+  // Links can only be checked once every leg has solved.
+  const clearance = structurallyReachable
+    ? assessLinkClearance(layout.baseAnchors, solvedHornTips, conditionPlatformPoints, linkClearanceMm)
+    : { clearanceMm: linkClearanceMm, closest: null, violations: [] };
+  violations.push(...clearance.violations);
+  const collision = clearance.violations.length > 0;
   const conditioning = assessPoseConditioning(conditionPlatformPoints, conditionRodVectors,
     servoAngles, layout.betaAngles, layout.hornLength, conditionLimit);
   if (structurallyReachable && conditioning.numericalSingularity) {
@@ -180,10 +191,11 @@ export function evaluatePose(layout, pose = {}, options = {}) {
     violations.push({ type: 'conditionLimit', condition: conditioning.condition,
       reciprocal: conditioning.reciprocal, limit: conditionLimit });
   }
-  const mechanicallyReachable = structurallyReachable && !jointViolation;
+  const mechanicallyReachable = structurallyReachable && !jointViolation && !collision;
   return {
     reachable: mechanicallyReachable && conditioning.satisfied,
-    relaxedReachable: structurallyReachable && (!jointViolation || ballJointClamp)
+    // Soft ball-joint mode relaxes only the joint limit; colliding links still fail.
+    relaxedReachable: structurallyReachable && !collision && (!jointViolation || ballJointClamp)
       && conditioning.satisfied,
     geometricallyReachable: structurallyReachable,
     mechanicallyReachable,
@@ -202,5 +214,6 @@ export function evaluatePose(layout, pose = {}, options = {}) {
     jointAngles,
     jointLimits,
     mounting,
+    clearance: { clearanceMm: clearance.clearanceMm, closest: clearance.closest },
   };
 }

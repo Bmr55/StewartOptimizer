@@ -3,10 +3,11 @@ import { normalizeTrajectory } from './trajectory.js';
 import { normalizeMassProperties, RIGID_BODY_FIELDS } from './mass-properties.js';
 import { normalizeStiffnessModel } from './compliance.js';
 import { normalizePayloadSupport } from '../workspace/payload-support.js';
-import { DEFAULT_BALL_JOINT_LIMIT_DEG } from '../contracts.js';
+import { DEFAULT_BALL_JOINT_LIMIT_DEG, DEFAULT_LINK_CLEARANCE_MM } from '../contracts.js';
 
 const DEFAULTS = {
   ball_joint_max_deg: DEFAULT_BALL_JOINT_LIMIT_DEG,
+  link_clearance_mm: DEFAULT_LINK_CLEARANCE_MM,
   servo_travel_bounds_deg: [-120, 120],
   rod_length_bounds_mm: [160, 420],
   horn_length_bounds_mm: [30, 110],
@@ -58,6 +59,7 @@ export function validatePhysicalRequirements(data) {
   normalizeMassProperties(data);
   nonnegative(data.ball_joint_max_deg, 'ball_joint_max_deg');
   if (data.ball_joint_max_deg > 180) throw new Error('ball_joint_max_deg must be between 0 and 180.');
+  if (data.link_clearance_mm !== undefined) nonnegative(data.link_clearance_mm, 'link_clearance_mm');
   for (const key of ['rod_length_bounds_mm', 'horn_length_bounds_mm', 'home_height_bounds_mm']) {
     const bounds = range(data[key], key);
     if (bounds[0] <= 0) throw new Error(`${key} must contain positive lengths.`);

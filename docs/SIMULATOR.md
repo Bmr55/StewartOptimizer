@@ -125,7 +125,9 @@ while keeping current evaluator options.
 
 Circular, C3 paired, and rectangular paired layouts start in parametric mode.
 Radius, C3 anchor pair gap, rectangular aspect, base/platform turn, and horn
-direction offset use the shared `topologyGeometry` generator. Turn and horn
+direction offset use the shared `topologyGeometry` generator. C3 has only a base
+turn, since its platform pairs are locked 60° from the base pairs, and its horn
+offset is limited to ±90° so the mirrored horns of a pair cannot cross. Turn and horn
 direction controls display degrees but store radians. The generator keeps the
 selected topology's anchor and beta-angle invariants. Horn/rod length, home
 height, and servo range are separate scalar controls; the servo range displays
@@ -295,7 +297,7 @@ shares its plane with the base polygon, servo stubs and world axes, so its
 lines carry a depth bias of `GROUND_DEPTH_BIAS_MM` (2 mm) away from the camera
 and lose every depth tie with them.
 
-**Workspace box** (on by default) draws the twelve edges of the requirement
+**Workspace box** (off by default) draws the twelve edges of the requirement
 X/Y/Z ranges as a box about home: X and Y from their `min` to `max`, Z from
 `homeHeight + min` to `homeHeight + max`, from the controller's
 `workspaceRanges`. It is the region the platform origin must reach, not the
@@ -324,7 +326,7 @@ Rz 0°: 812 reachable. Evaluated samples only, not a continuous envelope.`
 between green points is not shown to be reachable, an isolated red point does
 not bound the region, and nothing here claims a continuous envelope or
 boundary. It uses the same checks as every other pose (servo range, ball
-joints, rod length, conditioning) and still no collision detection.
+joints, rod length, link clearance, conditioning).
 
 **Conditioning ellipsoid** (off by default) draws the translation
 manipulability ellipsoid of the accepted pose at the platform origin, so the
@@ -353,7 +355,7 @@ the ellipsoid, still drawn at the held accepted pose, turns the whole-platform
 failure magenta. Without an accepted pose or usable Jacobian rows nothing is
 drawn.
 
-**Servo arcs** (on by default) draw each servo's allowed travel as an arc of
+**Servo arcs** (off by default) draw each servo's allowed travel as an arc of
 horn-length radius about its base anchor, from the effective minimum to the
 effective maximum servo angle (the simulator's `servoRangeRad` option, else the
 layout's range, else ±90°, as `effectiveServoRange` in `src/model/pose.js`
@@ -367,7 +369,7 @@ that servo's range (`servoLimit`). Other failures leave the arc colours alone;
 the leg itself is still coloured as described under Live diagnostics. The margin
 constant lives in `src/simulator/scene.js` for all limit overlays.
 
-**Joint cones** (on by default) draw each ball-joint socket's allowed cone at
+**Joint cones** (off by default) draw each ball-joint socket's allowed cone at
 the accepted pose: 12 cones, a lower one with its apex at the horn tip and an
 upper one with its apex at the platform point. The axis is the socket normal
 in world coordinates from `socketNormalsInWorld` in `src/model/pose.js`, the
@@ -383,8 +385,8 @@ keeps wide limits, up to 180°, bounded. Cones are grey, yellow when the
 accepted joint angle is within `NEAR_LIMIT_MARGIN_RAD` (5°) of the limit, and
 red when the requested pose violates that socket (`ballJoint` for that leg and
 joint). The rod drawn by `legs` shows the current direction against the cone.
-The cones visualise the joint limit only; they are not a collision check, and
-the simulator still has no collision detection.
+The cones visualise the joint limit only; they are not a collision check.
+Link collisions are reported by the evaluator and coloured on both legs.
 
 **Loads** (off by default) draws the rod forces and servo torques the
 controller solved for the accepted pose (`state.loads`, see Controller
@@ -476,6 +478,6 @@ None of these checks replace validation against a physical mechanism.
 
 ## Live diagnostics
 
-The diagnostics panel subscribes to the same controller as the renderer. It reports the six-axis **requested** pose and last valid **rendered accepted** pose separately. A rejected request remains visible with its evaluator failures while the renderer holds the last accepted geometry. Red leg rows mark failures in the requested pose, and a whole-platform conditioning failure has a separate message; the table always lists every failure. In the scene each failure is coloured once, on the geometry that failed. When the **Rejected pose ghost** overlay is on and the solver reached that leg's horn tip (a joint-limit failure), the ghost leg is red and the held accepted leg keeps its normal colours; a whole-platform failure likewise outlines the ghost platform in magenta instead of tinting the held legs. When the ghost is off, or for a structural failure where the solver stopped before that leg's horn tip, the held accepted leg is coloured red (magenta for a whole-platform failure). A red held leg therefore marks a failure in the request, not in the rendered pose, which the evaluator accepted; the rejected pose itself appears only as the dimmed ghost overlay. The servo arcs and joint cones keep their own failure colours either way.
+The diagnostics panel subscribes to the same controller as the renderer. It reports the six-axis **requested** pose and last valid **rendered accepted** pose separately. A rejected request remains visible with its evaluator failures while the renderer holds the last accepted geometry. Red leg rows mark failures in the requested pose, and a whole-platform conditioning failure has a separate message; the table always lists every failure. A `linkCollision` names two legs, so it is listed on both rows, each against the other leg and link, for example `linkCollision (rod with leg 2 rod)`, and both legs are coloured. In the scene each failure is coloured once, on the geometry that failed. When the **Rejected pose ghost** overlay is on and the solver reached that leg's horn tip (a joint-limit failure), the ghost leg is red and the held accepted leg keeps its normal colours; a whole-platform failure likewise outlines the ghost platform in magenta instead of tinting the held legs. When the ghost is off, or for a structural failure where the solver stopped before that leg's horn tip, the held accepted leg is coloured red (magenta for a whole-platform failure). A red held leg therefore marks a failure in the request, not in the rendered pose, which the evaluator accepted; the rejected pose itself appears only as the dimmed ghost overlay. The servo arcs and joint cones keep their own failure colours either way.
 
-Each leg shows lower and upper socket deflection against their effective limits, maximum deflection, rod-length deviation against the editable tolerance, servo angle, rod force and servo torque. The force and torque columns come from the controller's `loads` at the **accepted** pose, not the request: rod force in newtons, positive in compression; servo torque as signed output-shaft N m against the peak rating with the utilisation percentage, or `unrated`, and the torque cell is red above 100 %. A line above the table (`#simLoadDiagnostic`) says whether the loads are static or from the animation, that no payload or ratings are loaded, that there is no accepted pose, or why the cycle model could not solve the pose. Unavailable measurements show a dash because the evaluator may stop at the first structural failure. Lower and upper joint limits and rod tolerance can be edited in the panel; changes reevaluate the current request and last accepted pose, a focused field keeps text the user has typed while an animation plays, an untouched focused field still follows loads and settings changes, and a rejected value is restored. The mandatory reciprocal conditioning cutoff and optional engineering condition limit are displayed. Simulator JSON saves these effective options with the requested and accepted poses, and loading that JSON restores them.
+Each leg shows lower and upper socket deflection against their effective limits, maximum deflection, rod-length deviation against the editable tolerance, servo angle, rod force and servo torque. The force and torque columns come from the controller's `loads` at the **accepted** pose, not the request: rod force in newtons, positive in compression; servo torque as signed output-shaft N m against the peak rating with the utilisation percentage, or `unrated`, and the torque cell is red above 100 %. A line above the table (`#simLoadDiagnostic`) says whether the loads are static or from the animation, that no payload or ratings are loaded, that there is no accepted pose, or why the cycle model could not solve the pose. Unavailable measurements show a dash because the evaluator may stop at the first structural failure. Lower and upper joint limits, rod tolerance and link clearance (`linkClearanceMm`, the minimum distance between two legs' horn or rod centre lines; 0 turns the check off) can be edited in the panel; changes reevaluate the current request and last accepted pose, a focused field keeps text the user has typed while an animation plays, an untouched focused field still follows loads and settings changes, and a rejected value is restored. The mandatory reciprocal conditioning cutoff and optional engineering condition limit are displayed, with the link clearance and the closest pair of links of different legs in the requested pose. Simulator JSON saves these effective options with the requested and accepted poses, and loading that JSON restores them.

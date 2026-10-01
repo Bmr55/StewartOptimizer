@@ -16,13 +16,14 @@ export function asymmetricJointFixture() {
 }
 
 // D3-symmetric paired layout: mirrored leg pairs every 120 degrees, nonsingular at home.
+// Each horn points radially outward, so the two horns and rods of a pair stay apart.
 export function pairedFixture() {
   const rad = Math.PI / 180;
   const baseAnchors = [], platformAnchors = [], betaAngles = [];
   for (let k = 0; k < 3; k++) {
     const axis = 120 * k;
     for (const side of [-1, 1]) {
-      const base = axis + side * 15, platform = axis + side * 45, beta = axis + 75;
+      const base = axis + side * 15, platform = axis + side * 45, beta = axis - 15;
       baseAnchors.push([100 * Math.cos(base * rad), 100 * Math.sin(base * rad), 0]);
       platformAnchors.push([50 * Math.cos(platform * rad), 50 * Math.sin(platform * rad), 0]);
       betaAngles.push((side < 0 ? beta : 2 * axis - beta) * rad);
@@ -30,4 +31,14 @@ export function pairedFixture() {
   }
   return { baseAnchors, platformAnchors, betaAngles, hornLength: 50, rodLength: 200, homeHeight: 200,
     servoRangeRad: [-Math.PI, Math.PI] };
+}
+
+// The paired fixture with each pair's mirrored horns turned to point at each
+// other, as the fixture was before link collision checks. The two rods of a
+// pair cross on the mirror plane, so every pair collides at home.
+export function crossedPairedFixture() {
+  const layout = pairedFixture();
+  const rad = Math.PI / 180;
+  layout.betaAngles = [0, 120, 240].flatMap(axis => [(axis + 75) * rad, (2 * axis - (axis + 75)) * rad]);
+  return layout;
 }

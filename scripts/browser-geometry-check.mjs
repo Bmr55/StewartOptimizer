@@ -38,12 +38,15 @@ try {
   assert.deepEqual(await page.evaluate(() => window.geometryCheck.original), original);
 
   const betas = state.layout.betaAngles;
-  await page.locator('#sim-platform-orientation-range').evaluate(node => {
-    node.value = '45';
+  // C3 has no platform turn; a platform edit still leaves the horns alone.
+  assert.equal(await page.locator('#sim-platform-orientation-range').count(), 0);
+  assert.equal(await page.locator('#sim-beta-offset-range').getAttribute('max'), '90');
+  await page.locator('#sim-platform-pair-gap-range').evaluate(node => {
+    node.value = '20';
     node.dispatchEvent(new Event('input', { bubbles: true }));
   });
   state = await page.evaluate(() => window.geometryCheck.controller.getState());
-  assert.equal(Number(await page.locator('#sim-platform-orientation-number').inputValue()), 45);
+  assert.equal(Number(await page.locator('#sim-platform-pair-gap-number').inputValue()), 20);
   assert.deepEqual(state.layout.betaAngles, betas);
   assert.equal(state.assessment.reachable, state.accepted !== null);
 

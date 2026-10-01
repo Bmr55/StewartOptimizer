@@ -15,15 +15,15 @@ import { sampleText } from '../ui/helpers.js';
 const close = (actual, expected, tolerance = 1e-9, message = '') =>
   assert.ok(Math.abs(actual - expected) <= tolerance, `${message} ${actual} vs ${expected}`);
 const deg = value => value * Math.PI / 180;
-// Peak load torque 0.434 N m at rest; 0.263 N m while moving at 403 deg/s.
+// Peak load torque 0.473 N m; 0.398 N m while moving at 311 deg/s.
 const cycleInput = { mass: 3, stroke: 40, frequency: 3, axis: 'z', ballJointLimitDeg: 180 };
-const curve = { speed_deg_s: [0, 410], torque_nm: [0.45, 0.2] };
+const curve = { speed_deg_s: [0, 400], torque_nm: [0.5, 0.2] };
 
 test('a cycle within scalar peak ratings fails the simultaneous torque-speed envelope', async () => {
   const cycle = computeCycleDemand(pairedFixture(), cycleInput);
-  const scalar = normalizeServoRatings({ servo_torque_rating_nm: 0.45, servo_speed_rating_deg_s: 410 });
+  const scalar = normalizeServoRatings({ servo_torque_rating_nm: 0.5, servo_speed_rating_deg_s: 400 });
   assert.equal(evaluateServoCapacity(cycle, scalar).status, 'below');
-  const ratings = normalizeServoRatings({ servo_torque_rating_nm: 0.45, servo_speed_rating_deg_s: 410,
+  const ratings = normalizeServoRatings({ servo_torque_rating_nm: 0.5, servo_speed_rating_deg_s: 400,
     servo_torque_speed_curve: curve });
   const capacity = evaluateServoCapacity(cycle, ratings);
   assert.equal(capacity.status, 'above');
@@ -33,8 +33,8 @@ test('a cycle within scalar peak ratings fails the simultaneous torque-speed env
   // The limiting operating point is a high-speed sample below both scalar maxima.
   assert.ok(Math.abs(envelope.limiting.speedRadPerSec) > deg(300));
   assert.ok(Math.abs(envelope.limiting.torqueNm) < cycle.torqueNm);
-  close(envelope.limiting.capacityNm, 0.45 - 0.25 * Math.abs(envelope.limiting.speedRadPerSec) / deg(410), 1e-12);
-  close(envelope.worstHeadroomFraction, (envelope.limiting.capacityNm - Math.abs(envelope.limiting.torqueNm)) / 0.45, 1e-12);
+  close(envelope.limiting.capacityNm, 0.5 - 0.3 * Math.abs(envelope.limiting.speedRadPerSec) / deg(400), 1e-12);
+  close(envelope.worstHeadroomFraction, (envelope.limiting.capacityNm - Math.abs(envelope.limiting.torqueNm)) / 0.5, 1e-12);
   assert.equal(capacity.peak.status, 'above');
 
   const evaluation = await evaluateLayout(pairedFixture(), { ranges: {}, sampling: { strategy: 'grid' },
@@ -106,12 +106,12 @@ test('peak, continuous and duration-limited ratings have separate status and mar
   const cycle = computeCycleDemand(pairedFixture(), cycleInput);
   const rms = cycle.actuator.rmsTorqueNm;
   const capacity = evaluateServoCapacity(cycle, normalizeServoRatings({ servo_torque_rating_nm: 0.5,
-    servo_continuous_torque_rating_nm: 0.9 * rms, servo_duration_ratings: [{ torque_nm: 0.44, duration_s: 0.01 }] }));
+    servo_continuous_torque_rating_nm: 0.9 * rms, servo_duration_ratings: [{ torque_nm: 0.48, duration_s: 0.01 }] }));
   assert.equal(capacity.peak.status, 'below');
   close(capacity.peak.worstHeadroomFraction, (0.5 - cycle.torqueNm) / 0.5, 1e-12);
   assert.equal(capacity.continuous.status, 'above');
   close(capacity.continuous.worstHeadroomFraction, -1 / 9, 1e-9);
-  assert.equal(capacity.duration.status, 'below', 'a short window stays near the 0.434 N m peak');
+  assert.equal(capacity.duration.status, 'below', 'a short window stays near the 0.473 N m peak');
   assert.ok(capacity.perServo[0].duration[0].demand > rms && capacity.perServo[0].duration[0].demand <= cycle.torqueNm);
   assert.equal(capacity.status, 'above');
   assert.match(capacity.rmsNote, /not a calibrated temperature/);

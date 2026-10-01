@@ -20,11 +20,30 @@ function ring(radius, orientation) {
   return Array.from({ length: 6 }, (_, i) => point(radius, orientation + i * Math.PI / 3));
 }
 
-function pairedRing(radius, gap, orientation) {
-  const halfAngle = Math.asin(gap / (2 * radius));
-  return Array.from({ length: 6 }, (_, i) => point(radius,
-    orientation + Math.floor(i / 2) * 2 * Math.PI / 3 + (i % 2 ? halfAngle : -halfAngle)));
+// The classic triangulated hexapod. Base pair k sits on the axis
+// base_orientation + k * 120 deg, and its two legs part to the platform pairs
+// 60 deg either side, so neighbouring base pairs meet at each platform pair and
+// the six legs zig-zag into three triangles. The two servos of a pair are
+// mirror images: each horn starts tangent and points away from its partner,
+// toward its leg's lean, and beta_offset turns both by the same mirrored angle.
+function c3PairedGeometry(p) {
+  const baseHalf = Math.asin(p.base_pair_gap / (2 * p.base_radius));
+  const platformHalf = Math.asin(p.platform_pair_gap / (2 * p.platform_radius));
+  const baseAnchors = [], platformAnchors = [], betaAngles = [];
+  for (let i = 0; i < 6; i++) {
+    const side = i % 2 ? 1 : -1;
+    const axis = p.base_orientation + Math.floor(i / 2) * 2 * Math.PI / 3;
+    const baseAngle = axis + side * baseHalf;
+    baseAnchors.push(point(p.base_radius, baseAngle));
+    platformAnchors.push(point(p.platform_radius, axis + side * (Math.PI / 3 - platformHalf)));
+    betaAngles.push(wrapAngle(baseAngle + side * (Math.PI / 2 + p.beta_offset)));
+  }
+  return { baseAnchors, platformAnchors, betaAngles };
 }
+
+// Beyond +/-90 deg a C3 horn turns toward its partner, and the two horns of a
+// pair would sweep through each other across the narrow pair gap.
+export const C3_BETA_OFFSET_LIMIT = Math.PI / 2;
 
 function rectangle(radius, aspect, orientation) {
   const halfDepth = radius / Math.hypot(aspect, 1);
@@ -36,7 +55,9 @@ function rectangle(radius, aspect, orientation) {
 const COMMON_FIELDS = ['base_radius', 'platform_radius', 'base_orientation', 'platform_orientation', 'beta_offset'];
 const TOPOLOGY_FIELDS = Object.freeze({
   circular: Object.freeze([...COMMON_FIELDS, 'beta_pair_offset']),
-  c3_paired: Object.freeze([...COMMON_FIELDS, 'base_pair_gap', 'platform_pair_gap']),
+  // The C3 platform is locked 60 deg from the base, so it has no turn of its own.
+  c3_paired: Object.freeze([...COMMON_FIELDS.filter(field => field !== 'platform_orientation'),
+    'base_pair_gap', 'platform_pair_gap']),
   rectangular_paired: Object.freeze([...COMMON_FIELDS, 'beta_pair_offset', 'base_aspect', 'platform_aspect']),
   free: Object.freeze([]),
 });
@@ -72,21 +93,22 @@ export function topologyGeometry(topology, parameters) {
         throw new Error(`topology_parameters.${gap} must be positive and less than twice ${radius}.`);
       }
     }
+    if (Math.abs(wrapAngle(parameters.beta_offset)) > C3_BETA_OFFSET_LIMIT + 1e-12) {
+      throw new Error('topology_parameters.beta_offset must be within +/-90 degrees for c3_paired, '
+        + 'so the two horns of a pair cannot cross.');
+    }
+    return c3PairedGeometry(parameters);
   }
   if (topology === 'rectangular_paired') {
     for (const field of ['base_aspect', 'platform_aspect']) {
       if (parameters[field] <= 0) throw new Error(`topology_parameters.${field} must be positive.`);
     }
   }
-  const make = (radius, orientation, pairGap, aspect) => {
-    if (topology === 'circular') return ring(radius, orientation);
-    if (topology === 'c3_paired') return pairedRing(radius, pairGap, orientation);
-    return rectangle(radius, aspect, orientation);
-  };
-  const baseAnchors = make(parameters.base_radius, parameters.base_orientation,
-    parameters.base_pair_gap, parameters.base_aspect);
+  const make = (radius, orientation, aspect) => topology === 'circular'
+    ? ring(radius, orientation) : rectangle(radius, aspect, orientation);
+  const baseAnchors = make(parameters.base_radius, parameters.base_orientation, parameters.base_aspect);
   const platformAnchors = make(parameters.platform_radius, parameters.platform_orientation,
-    parameters.platform_pair_gap, parameters.platform_aspect);
+    parameters.platform_aspect);
   // Alternating horn directions preserve the plate geometry without forcing
   // the Circular and Rectangular home Jacobians to have dependent rows.
   const betaAngles = baseAnchors.map(([x, y], i) =>

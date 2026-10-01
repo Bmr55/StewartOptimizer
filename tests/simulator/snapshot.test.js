@@ -9,7 +9,7 @@ const parse = simulator => parseSimulatorSnapshot(simulator, layout, fallback);
 
 test('a saved simulator block round-trips its known fields and drops unknown ones', () => {
   const saved = { options: { ballJointLimitDeg: 45, lowerBallJointLimitDeg: 40, upperBallJointLimitDeg: 50,
-    ballJointClamp: false, conditionLimit: null, servoRangeRad: [-1, 1], rodLengthTolerance: 0.25, extra: 'dropped' },
+    ballJointClamp: false, conditionLimit: null, servoRangeRad: [-1, 1], rodLengthTolerance: 0.25, linkClearanceMm: 4, extra: 'dropped' },
   requested: { x: 1, y: 2, z: 3, rx: 0.1, ry: 0.2, rz: 0.3 }, accepted: { z: 3 },
   camera: { yaw: 1, pitch: 0.5, distance: 400, target: [0, 0, 90], junk: 'x' },
   animation: { pattern: 'tilt', speed: 2, playing: true }, markers: false, tracesEnabled: true, pointerMode: 'platform',
@@ -38,6 +38,7 @@ test('every simulator field is type-checked and the error names the field', () =
     ['x', /simulator must be an object/],
     [{ options: 'x' }, /simulator.options must be an object/],
     [{ options: { ballJointLimitDeg: null } }, /simulator.options: ballJointLimitDeg must be a finite angle/],
+    [{ options: { linkClearanceMm: -1 } }, /simulator.options: linkClearanceMm must be a finite nonnegative length/],
     [{ options: { ballJointLimitDeg: '45' } }, /ballJointLimitDeg must be a finite angle/],
     [{ options: { ballJointLimitDeg: true } }, /ballJointLimitDeg must be a finite angle/],
     [{ options: { ballJointLimitDeg: [] } }, /ballJointLimitDeg must be a finite angle/],
