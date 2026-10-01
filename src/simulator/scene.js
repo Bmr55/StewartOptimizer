@@ -19,6 +19,8 @@ export const SCENE_COLORS = Object.freeze({
   grid: [0.16, 0.2, 0.27], workspace: [0.32, 0.7, 0.76],
   reachable: [0.36, 0.9, 0.5], unreachable: [0.5, 0.2, 0.25],
   wellConditioned: [0.42, 0.85, 1],
+  // Solid servo boxes: a neutral slate, so red on a servo always means failure.
+  servoBody: [0.45, 0.5, 0.6],
   compression: [0.3, 0.55, 1], tension: [0.95, 0.4, 0.2], torqueLow: [0.36, 0.9, 0.5],
 });
 const COLORS = SCENE_COLORS;

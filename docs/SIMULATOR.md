@@ -461,13 +461,14 @@ hidden. The bodies are:
 - a cylinder per horn (radius `0.06 × hornLength`) and per rod
   (`0.04 × hornLength`), from base anchor to horn tip and from horn tip to
   platform point;
-- a box per servo (`0.8 × 0.45 × 0.5` horn lengths along the base direction,
+- a box per servo (`0.5 × 0.3 × 0.35` horn lengths along the base direction,
   the shaft and Z), centred on the shaft height and set beside the horn plane
   along the shaft axis.
 
 Every size has a 1 mm floor (`BODY_DIMENSIONS`, `BODY_MIN_SIZE_MM`). Colours follow
-the wireframe: plates use the base and platform colours, horns, rods and servos
-their own, a leg the held pose failure-colours keeps that colour on its horn,
+the wireframe: plates use the base and platform colours, horns and rods
+their own, servo boxes a neutral slate (`servoBody`, so red on a servo always
+means failure), a leg the held pose failure-colours keeps that colour on its horn,
 rod and servo, and with the **Loads** overlay on and solved the rods take their
 graded force colour. Without an accepted pose only the base plate and servos
 are drawn. The bodies are display volumes with no physical meaning: their sizes

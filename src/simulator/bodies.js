@@ -11,7 +11,7 @@ import { failureColor, hasSolvedLegs, OVERLAY_DEFAULTS, rodForceColor, rodForceR
 export const BODY_DIMENSIONS = Object.freeze({
   hornRadius: 0.06, rodRadius: 0.04, plateThickness: 0.08,
   // Servo box length (along the base direction), depth (along the shaft) and height.
-  servoBox: Object.freeze([0.8, 0.45, 0.5]),
+  servoBox: Object.freeze([0.5, 0.3, 0.35]),
   // Gap between the horn plane and the servo box face.
   servoGap: 0.08,
 });
@@ -51,7 +51,7 @@ export function buildSolidBodies(state) {
   for (let i = 0; i < 6; i++) {
     const [radial, shaft] = hornFrameAxes(layout.betaAngles[i], 0);
     const center = vectorAdd(layout.baseAnchors[i], vectorScale(shaft, -(depth / 2 + size(layout, BODY_DIMENSIONS.servoGap))));
-    boxes.push({ center, axes: [radial, shaft, [0, 0, 1]], size: [length, depth, height], color: legColor(i) ?? SCENE_COLORS.servo });
+    boxes.push({ center, axes: [radial, shaft, [0, 0, 1]], size: [length, depth, height], color: legColor(i) ?? SCENE_COLORS.servoBody });
   }
   if (hasSolvedLegs(solved)) {
     const normal = rotateVector(solved.rotationMatrix, [0, 0, 1]);
