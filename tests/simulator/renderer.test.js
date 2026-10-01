@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { asymmetricJointFixture } from '../fixtures/layout.js';
+import { createFakeGL } from './helpers.js';
 import { createSimulatorController } from '../../src/simulator/controller.js';
 import { buildSceneGeometry, cameraFrame, createWebGLRenderer, NEAR_PLANE_MM, projectPoint,
   projectSegment } from '../../src/simulator/renderer.js';
@@ -69,25 +70,7 @@ test('projected depth keeps near/far ordering for a zoomed-out camera', () => {
   assert.ok(Math.abs(home - (599 / 2000 * 2 - 1)) < 1e-12);
 });
 
-function fakeGL() {
-  const calls = { createProgram: 0, drawArrays: 0, deleteProgram: 0, draws: [] };
-  let lost = false;
-  let size = null;
-  const noop = () => {};
-  return {
-    calls, setLost(value) { lost = value; },
-    VERTEX_SHADER: 1, FRAGMENT_SHADER: 2, COMPILE_STATUS: 3, LINK_STATUS: 4, DEPTH_TEST: 5,
-    ARRAY_BUFFER: 6, DYNAMIC_DRAW: 7, FLOAT: 8, LINES: 9, POINTS: 10, COLOR_BUFFER_BIT: 16, DEPTH_BUFFER_BIT: 32,
-    createShader: () => ({}), shaderSource: noop, compileShader: noop, getShaderParameter: () => true,
-    createProgram() { calls.createProgram++; return {}; }, attachShader: noop, linkProgram: noop,
-    getProgramParameter: () => true, createBuffer: () => ({}), getAttribLocation: () => 0,
-    getUniformLocation: () => ({}), enable: noop, clearColor: noop, viewport: noop, clear: noop,
-    useProgram: noop, bindBuffer: noop, bufferData: noop, vertexAttribPointer: noop,
-    enableVertexAttribArray: noop, uniform1f(location, value) { size = value; },
-    drawArrays(primitive, first, count) { calls.drawArrays++; calls.draws.push({ primitive, count, size }); },
-    deleteBuffer: noop, deleteProgram() { calls.deleteProgram++; }, isContextLost: () => lost,
-  };
-}
+const fakeGL = createFakeGL;
 
 test('a lost context cancels the default, stops drawing, and restore rebuilds the program and redraws', () => {
   const gl = fakeGL();
@@ -100,7 +83,8 @@ test('a lost context cancels the default, stops drawing, and restore rebuilds th
   const controller = createSimulatorController();
   const state = controller.loadLayout(asymmetricJointFixture(), { options: { ballJointLimitDeg: 180 } });
   renderer.render(state, {});
-  assert.equal(gl.calls.createProgram, 1);
+  // One line/point program and one solid-body program.
+  assert.equal(gl.calls.createProgram, 2);
   assert.ok(gl.calls.drawArrays > 0);
   const drawn = gl.calls.drawArrays;
   const event = { defaultPrevented: false, preventDefault() { this.defaultPrevented = true; } };
@@ -113,13 +97,13 @@ test('a lost context cancels the default, stops drawing, and restore rebuilds th
   gl.setLost(false);
   handlers.webglcontextrestored();
   assert.equal(renderer.contextLost, false);
-  assert.equal(gl.calls.createProgram, 2, 'program was not rebuilt after restore');
+  assert.equal(gl.calls.createProgram, 4, 'programs were not rebuilt after restore');
   renderer.render(state, {});
   assert.ok(gl.calls.drawArrays > drawn);
   assert.deepEqual(changes, [true, false]);
   renderer.dispose();
   assert.deepEqual(Object.keys(handlers), []);
-  assert.equal(gl.calls.deleteProgram, 1);
+  assert.equal(gl.calls.deleteProgram, 2);
 });
 
 test('the reachability cloud draws one small point per sample, coloured by its reachable flag', () => {
@@ -562,8 +546,6 @@ test('lines crossing the near plane are clipped there instead of dropped', () =>
   assert.equal(projectSegment(behind, along(-5, 3), camera, 800, 500), null, 'wholly behind');
   // The draw path uses the clipping: a close-up keeps lines that pass beside the eye.
   const gl = fakeGL();
-  let lineVertices = 0;
-  gl.bufferData = (_target, data) => { lineVertices = lineVertices || data.length / 6; };
   const canvas = { width: 800, height: 500, clientWidth: 800, clientHeight: 500, getContext: () => gl, addEventListener() {}, removeEventListener() {} };
   const state = createSimulatorController().loadLayout(asymmetricJointFixture(), { options: { ballJointLimitDeg: 180 } });
   const closeUp = { target: [0, 0, state.layout.homeHeight / 2], yaw: 0.7, pitch: 0.4, distance: 10 };
@@ -572,7 +554,7 @@ test('lines crossing the near plane are clipped there instead of dropped', () =>
   const bothEnds = lines.filter(line => projectPoint(line.from, closeUp, 800, 500) && projectPoint(line.to, closeUp, 800, 500)).length;
   const clipped = lines.filter(line => projectSegment(line.from, line.to, closeUp, 800, 500)).length;
   assert.ok(clipped > bothEnds, `the close-up should have lines with one end behind the eye: ${clipped} vs ${bothEnds}`);
-  assert.equal(lineVertices, 2 * clipped);
+  assert.equal(gl.calls.draws.find(draw => draw.primitive === gl.LINES).count, 2 * clipped);
 });
 
 const buildOf = name => SCENE_BUILDERS.find(builder => builder.name === name).build;

@@ -2,12 +2,15 @@
 import assert from 'node:assert/strict';
 import { launchBrowser } from './browser-launch.mjs';
 import { startServer } from './serve.mjs';
+import { layoutToJSON } from '../src/io/results.js';
 
 const server = await startServer({ port: 0 });
 let browser;
 try {
   browser = await launchBrowser();
   const page = await browser.newPage();
+  const pageErrors = [];
+  page.on('pageerror', error => pageErrors.push(error.message));
   await page.goto(`http://127.0.0.1:${server.address().port}/`);
   await page.evaluate(async () => {
     const [{ Optimizer }, { createSimulatorController }, { createGeometryControls }] = await Promise.all([
@@ -93,7 +96,41 @@ try {
     controller.loadLayout(layout);
   });
   assert.equal(await page.locator('#sim-beta-pair-offset-number').inputValue(), '0');
-  console.log('Browser geometry sliders, explicit mode, editable copy, diagnostics, and reset passed.');
+
+  // Render modes in the app: solid bodies draw under the wireframe without a
+  // WebGL error, switching back restores the wireframe image, and a pose
+  // request in solid mode redraws cleanly.
+  await page.locator('#referenceLayoutInput').fill(JSON.stringify(layoutToJSON(circularLayout)));
+  await page.locator('#simulateTab').click();
+  await page.locator('#simLoadReference').click();
+  await page.locator('#simDiagnosticRows tr').first().waitFor();
+  assert.equal(await page.locator('#simRenderMode').inputValue(), 'wireframe');
+  const modes = await page.evaluate(() => {
+    const canvas = document.querySelector('#simCanvas');
+    const gl = canvas.getContext('webgl2');
+    const select = document.getElementById('simRenderMode');
+    // Non-background pixels right after the synchronous redraw, and the GL error state.
+    const frame = mode => {
+      select.value = mode;
+      select.dispatchEvent(new Event('change'));
+      const pixels = new Uint8Array(canvas.width * canvas.height * 4);
+      gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+      let drawn = 0;
+      for (let i = 0; i < pixels.length; i += 4) if (Math.abs(pixels[i] - 14) + Math.abs(pixels[i + 1] - 19) + Math.abs(pixels[i + 2] - 28) > 12) drawn++;
+      return { drawn, error: gl.getError() };
+    };
+    return { wireframe: frame('wireframe'), solid: frame('solid'), back: frame('wireframe'), again: frame('solid') };
+  });
+  for (const [mode, { error }] of Object.entries(modes)) assert.equal(error, 0, `${mode} raised WebGL error ${error}`);
+  assert.ok(modes.solid.drawn > modes.wireframe.drawn * 1.5, `solid bodies drew little: ${JSON.stringify(modes)}`);
+  assert.equal(modes.back.drawn, modes.wireframe.drawn);
+  assert.equal(modes.again.drawn, modes.solid.drawn);
+  await page.locator('#simZInput').fill('5');
+  await page.locator('#simZInput').press('Tab');
+  assert.match(await page.locator('#simAcceptedDiagnostic').textContent(), /Z 5/);
+  assert.equal(await page.evaluate(() => document.querySelector('#simCanvas').getContext('webgl2').getError()), 0);
+  assert.deepEqual(pageErrors, []);
+  console.log('Browser geometry sliders, explicit mode, editable copy, diagnostics, reset and render modes passed.');
 } finally {
   await browser?.close();
   await new Promise(resolve => server.close(resolve));

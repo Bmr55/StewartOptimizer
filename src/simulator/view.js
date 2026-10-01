@@ -1,6 +1,6 @@
 import { clamp, degToRad, radToDeg, vectorDot, vectorSub } from '../math.js';
 import { HOME_POSE, POSE_AXES } from './controller.js';
-import { cameraFrame, createWebGLRenderer, projectSegment, VIEW_HALF_TANGENT } from './renderer.js';
+import { cameraFrame, createWebGLRenderer, projectSegment, RENDER_MODES, VIEW_HALF_TANGENT, viewProjection } from './renderer.js';
 import { buildSceneGeometry, OVERLAY_NAMES } from './scene.js';
 import { displayText, markCommitted, syncInput } from './geometry-controls.js';
 import { REACHABILITY_SAMPLE_COUNTS } from './reachability.js';
@@ -63,6 +63,7 @@ export function createSimulatorView({ document, window, controller, isActive = (
   const reachSlice = document.getElementById('simReachabilitySlice');
   const reachSliceZ = document.getElementById('simReachabilitySliceZ');
   const reachStatus = document.getElementById('simReachabilityStatus');
+  const renderMode = document.getElementById('simRenderMode');
   const loadsInput = document.getElementById(overlayInputId('loads'));
   const loadsHint = document.getElementById('simLoadsHint');
   // The sample-count choices are the shared workspace sampling presets.
@@ -78,6 +79,9 @@ export function createSimulatorView({ document, window, controller, isActive = (
   let previousFrame = null;
   let frameHandle = null;
   let disposed = false;
+  // Draws with the selected render mode; an unknown value draws wireframe.
+  const draw = state => renderer.render(state, camera,
+    { mode: RENDER_MODES.includes(renderMode?.value) ? renderMode.value : 'wireframe' });
 
   const describePose = pose => pose ? `X ${fmt(pose.x)}, Y ${fmt(pose.y)}, Z ${fmt(pose.z)} mm; `
     + `Rx ${fmt(radToDeg(pose.rx))}, Ry ${fmt(radToDeg(pose.ry))}, Rz ${fmt(radToDeg(pose.rz))}°` : 'None';
@@ -117,7 +121,7 @@ export function createSimulatorView({ document, window, controller, isActive = (
     loadsInput.disabled = !loadable;
     loadsHint.hidden = loadable;
     showReachability(state);
-    if (renderer.available) renderer.render(state, camera);
+    if (renderer.available) draw(state);
   }
 
   // Animation ticks notify every frame; a pose field the user is typing into
@@ -192,10 +196,11 @@ export function createSimulatorView({ document, window, controller, isActive = (
   document.getElementById('simResetPose').addEventListener('click', guarded(() => controller.requestPose(HOME_POSE)));
   document.getElementById('simResetCamera').addEventListener('click', () => {
     camera = { yaw: 0.7, pitch: 0.38, distance: 600, target: centre ? centre.slice() : camera.target };
-    if (renderer.available) renderer.render(controller.getState(), camera);
+    if (renderer.available) draw(controller.getState());
   });
   markers.addEventListener('change', () => controller.setMarkers(markers.checked));
   traces.addEventListener('change', () => controller.setTraces(traces.checked));
+  renderMode?.addEventListener('change', () => { if (renderer.available) draw(controller.getState()); });
   for (const [name, input] of overlayInputs) {
     input.addEventListener('change', () => controller.setOverlays({ [name]: input.checked }));
   }
@@ -243,7 +248,7 @@ export function createSimulatorView({ document, window, controller, isActive = (
         const frame = cameraFrame(camera);
         const perPixel = 2 * camera.distance * VIEW_HALF_TANGENT / height;
         camera.target = camera.target.map((value, k) => value - frame.right[k] * dx * perPixel + frame.up[k] * dy * perPixel);
-        if (renderer.available) renderer.render(controller.getState(), camera);
+        if (renderer.available) draw(controller.getState());
       }
     } else if (pointerMode.value === 'platform') {
       const state = controller.getState();
@@ -252,7 +257,7 @@ export function createSimulatorView({ document, window, controller, isActive = (
     } else {
       camera.yaw += dx * 0.006;
       camera.pitch = clamp(camera.pitch + dy * 0.006, -CAMERA_PITCH_LIMIT, CAMERA_PITCH_LIMIT);
-      if (renderer.available) renderer.render(controller.getState(), camera);
+      if (renderer.available) draw(controller.getState());
     }
     event.preventDefault?.();
   });
@@ -270,8 +275,9 @@ export function createSimulatorView({ document, window, controller, isActive = (
   function depthUnderCursor(clientX, clientY, { left, top, width, height }, frame) {
     const toPage = ([x, y]) => [left + (x + 1) / 2 * width, top + (1 - y) / 2 * height];
     let best = null;
+    const projection = viewProjection(camera, width, height, frame);
     for (const line of buildSceneGeometry(controller.getState()).lines) {
-      const segment = projectSegment(line.from, line.to, camera, width, height, 0, frame);
+      const segment = projectSegment(line.from, line.to, camera, width, height, 0, projection);
       if (!segment) continue;
       const [a, b] = segment.map(toPage);
       const run = [b[0] - a[0], b[1] - a[1]];
@@ -303,7 +309,7 @@ export function createSimulatorView({ document, window, controller, isActive = (
       camera.target = pointed.map((value, k) => value + (camera.target[k] - value) * ratio);
     }
     camera.distance = distance;
-    if (renderer.available) renderer.render(controller.getState(), camera);
+    if (renderer.available) draw(controller.getState());
     event.preventDefault?.();
   }, { passive: false });
 
@@ -362,13 +368,13 @@ export function createSimulatorView({ document, window, controller, isActive = (
   }
   if (typeof window.requestAnimationFrame === 'function') frameHandle = window.requestAnimationFrame(frame);
   window.addEventListener?.('resize', () => {
-    if (renderer.available) renderer.render(controller.getState(), camera);
+    if (renderer.available) draw(controller.getState());
   });
 
   return { renderer, getCamera: () => structuredClone(camera),
     setCamera(next) {
       camera = { ...camera, ...parseCamera(next) };
-      if (renderer.available) renderer.render(controller.getState(), camera);
+      if (renderer.available) draw(controller.getState());
     },
     render() { show(controller.getState()); },
     dispose() { disposed = true; unsubscribe(); if (frameHandle != null) window.cancelAnimationFrame?.(frameHandle);

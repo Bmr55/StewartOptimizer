@@ -119,3 +119,11 @@ test('a saved load model is checked by name, and a run supplies one when the blo
   // A run whose load does not parse means no loads, never a rejected file.
   assert.equal(parseSimulatorSnapshot({}, layout, fallback, null, { requirements: { mass_kg: -3 } }).loadModel, null);
 });
+
+test('a saved render mode is checked by name and an empty or missing one keeps the current mode', () => {
+  assert.equal(parse({}).renderMode, null);
+  assert.equal(parse({ renderMode: '' }).renderMode, null);
+  assert.equal(parse({ renderMode: 'solid' }).renderMode, 'solid');
+  assert.equal(parse({ renderMode: 'wireframe' }).renderMode, 'wireframe');
+  assert.throws(() => parse({ renderMode: 'shaded' }), /simulator.renderMode must be one of wireframe, solid/);
+});
