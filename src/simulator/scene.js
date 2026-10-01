@@ -1,5 +1,6 @@
-import { rotateVector, vectorAdd, vectorCross, vectorNormalize, vectorScale } from '../math.js';
+import { rotateVector, vectorAdd, vectorCross, vectorNormalize, vectorScale, vectorSub } from '../math.js';
 import { hornFrameAxes } from '../model/kinematics.js';
+import { translationSingularSystem } from '../model/conditioning.js';
 import { effectiveServoRange, socketNormalsInWorld } from '../model/pose.js';
 
 // The scene is a list of builders, each `(state, layout, solved) => { lines, points }`.
@@ -17,6 +18,7 @@ export const SCENE_COLORS = Object.freeze({
   limitRange: [0.5, 0.56, 0.66], nearLimit: [1, 0.88, 0.2],
   grid: [0.16, 0.2, 0.27], workspace: [0.32, 0.7, 0.76],
   reachable: [0.36, 0.9, 0.5], unreachable: [0.5, 0.2, 0.25],
+  wellConditioned: [0.42, 0.85, 1],
 });
 const COLORS = SCENE_COLORS;
 // The canvas clear colour; the ghost dims toward it instead of blending.
@@ -32,7 +34,8 @@ const dim = color => color.map((value, k) => SCENE_BACKGROUND[k] + (value - SCEN
 // Toggleable overlays and whether each is drawn when a state or saved file
 // does not say. New overlays default off unless their issue says otherwise.
 export const OVERLAY_DEFAULTS = Object.freeze({ groundGrid: true, servoArcs: true, jointCones: true,
-  workspaceBox: true, reachabilityCloud: false, requestedGhost: true, platformAxes: true, worldAxes: true });
+  workspaceBox: true, reachabilityCloud: false, conditioningEllipsoid: false, requestedGhost: true,
+  platformAxes: true, worldAxes: true });
 export const OVERLAY_NAMES = Object.freeze(Object.keys(OVERLAY_DEFAULTS));
 // Limit overlays (servo travel, socket cones) tint a value this close to its
 // limit as a warning before the evaluator rejects it: 5°, in radians.
@@ -46,6 +49,11 @@ const GROUND_GRID_EXTENT = 1.5;
 export const GROUND_DEPTH_BIAS_MM = 2;
 // Reachability samples are drawn smaller than the 6 to 7 px markers.
 export const REACHABILITY_POINT_SIZE = 3;
+// The conditioning ellipsoid colour runs from wellConditioned at reciprocal
+// condition 1 to nearLimit at this floor, on a log scale. With a condition
+// limit set, the floor is 1 / limit instead, so full yellow means at the limit.
+export const CONDITIONING_GRADE_FLOOR = 0.01;
+const ELLIPSOID_SEGMENTS = 32;
 const SERVO_ARC_SEGMENTS = 24;
 const JOINT_CONE_SEGMENTS = 24;
 const JOINT_CONE_GENERATRICES = 4;
@@ -55,6 +63,9 @@ function polygon(lines, points, color) {
 }
 
 const hasSolvedLegs = solved => solved?.platformPoints?.length === 6 && solved?.hornTips?.length === 6;
+// Length (mm) of the platform axes, which the conditioning ellipsoid also uses
+// for its largest semi-axis.
+export const platformAxisLength = layout => Math.max(18, layout.hornLength * 0.35);
 
 // The rejected assessment the ghost overlay draws, or null when there is no
 // ghost: the request was accepted, or the overlay is off.
@@ -231,6 +242,52 @@ function reachabilityCloud(state) {
   return { lines: [], points };
 }
 
+// Colour of the conditioning ellipsoid: the whole-platform failure colour when
+// the requested pose fails a conditioning check, otherwise graded from
+// wellConditioned to nearLimit by the accepted pose's reciprocal condition
+// number on a log scale (see CONDITIONING_GRADE_FLOOR).
+export function conditioningColor(state, solved) {
+  const violations = state.assessment?.violations ?? [];
+  if (violations.some(violation => violation.type === 'conditionLimit' || violation.type === 'numericalSingularity')) {
+    return COLORS.globalFailure;
+  }
+  const limit = state.options?.conditionLimit;
+  const floor = Number.isFinite(limit) && limit > 1 ? 1 / limit : CONDITIONING_GRADE_FLOOR;
+  const reciprocal = solved?.conditioning?.reciprocal;
+  const t = Number.isFinite(reciprocal) && reciprocal > 0
+    ? Math.min(1, Math.max(0, Math.log(reciprocal) / Math.log(floor))) : 1;
+  return COLORS.wellConditioned.map((value, k) => value + (COLORS.nearLimit[k] - value) * t);
+}
+
+// The translation manipulability ellipsoid at the accepted pose, centred on the
+// platform origin: its principal axes are the right singular vectors of the
+// Jacobian's translation block, each half-length proportional to its singular
+// value, with the largest equal to the platform axis length. A short axis is a
+// direction the servos barely drive or hold, so the ellipsoid flattens as the
+// pose nears a translational singularity. Drawn as the three axes plus the three
+// great circles through each pair; the axes sit a little behind the platform axes
+// they overlap. The colour follows the full six-axis condition number, which
+// also covers rotation.
+function conditioningEllipsoid(state, layout, solved) {
+  const lines = [];
+  const system = hasSolvedLegs(solved) ? translationSingularSystem(solved.conditioning?.jacobianRows) : null;
+  if (!system || !(system[0].value > 0)) return { lines, points: [] };
+  const center = solved.translation;
+  const color = conditioningColor(state, solved);
+  const semi = system.map(({ value, vector }) => vectorScale(vector, platformAxisLength(layout) * value / system[0].value));
+  for (const axis of semi) {
+    lines.push({ from: vectorSub(center, axis), to: vectorAdd(center, axis), color, depthBias: -GROUND_DEPTH_BIAS_MM });
+  }
+  for (const [a, b] of [[0, 1], [1, 2], [2, 0]]) {
+    const ring = Array.from({ length: ELLIPSOID_SEGMENTS }, (_, k) => {
+      const turn = 2 * Math.PI * k / ELLIPSOID_SEGMENTS;
+      return vectorAdd(center, vectorAdd(vectorScale(semi[a], Math.cos(turn)), vectorScale(semi[b], Math.sin(turn))));
+    });
+    polygon(lines, ring, color);
+  }
+  return { lines, points: [] };
+}
+
 // The rejected request drawn faintly beside the accepted pose: the one layer
 // that shows geometry the evaluator did not accept. It uses only what the
 // rejected evaluation returned. The platform comes from its translation and
@@ -256,7 +313,7 @@ function requestedGhost(state, layout) {
     lines.push({ from: layout.baseAnchors[i], to: hornTips[i], color: failed ? COLORS.failure : dim(COLORS.horn) });
     lines.push({ from: hornTips[i], to: platformPoints[i], color: failed ? COLORS.failure : dim(COLORS.rod) });
   }
-  const axis = Math.max(18, layout.hornLength * 0.35);
+  const axis = platformAxisLength(layout);
   const column = index => requested.rotationMatrix.map(row => row[index]);
   for (const [index, color] of [[0, COLORS.x], [1, COLORS.y], [2, COLORS.z]]) {
     lines.push({ from: requested.translation, to: vectorAdd(requested.translation, vectorScale(column(index), axis)), color: dim(color) });
@@ -272,7 +329,7 @@ function platformAxes(state, layout, solved) {
   const lines = [];
   if (!hasSolvedLegs(solved)) return { lines, points: [] };
   const center = solved.translation;
-  const axis = Math.max(18, layout.hornLength * 0.35);
+  const axis = platformAxisLength(layout);
   const column = index => solved.rotationMatrix.map(row => row[index]);
   for (const [index, color] of [[0, COLORS.x], [1, COLORS.y], [2, COLORS.z]]) {
     lines.push({ from: center, to: vectorAdd(center, vectorScale(column(index), axis)), color });
@@ -302,6 +359,7 @@ export const SCENE_BUILDERS = Object.freeze([
   { name: 'jointCones', overlay: 'jointCones', build: jointCones },
   { name: 'workspaceBox', overlay: 'workspaceBox', build: workspaceBox },
   { name: 'reachabilityCloud', overlay: 'reachabilityCloud', build: reachabilityCloud },
+  { name: 'conditioningEllipsoid', overlay: 'conditioningEllipsoid', build: conditioningEllipsoid },
   { name: 'requestedGhost', overlay: 'requestedGhost', build: requestedGhost },
   { name: 'platformAxes', overlay: 'platformAxes', build: platformAxes },
   { name: 'worldAxes', overlay: 'worldAxes', build: worldAxes },

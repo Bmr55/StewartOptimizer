@@ -192,17 +192,18 @@ test('overlay builders reproduce the frozen single-function scene exactly', () =
 
 test('each overlay toggle removes only its own builder output', () => {
   // A rejected request so the ghost has output; the accepted pose is still drawn.
-  // Two published cloud samples give the default-off reachability cloud output.
+  // Two published cloud samples give the default-off reachability cloud output,
+  // and the default-off conditioning ellipsoid is switched on.
   const { legFailure: rejected } = frozenSceneStates();
-  const state = { ...rejected, overlays: { ...rejected.overlays, reachabilityCloud: true },
+  const state = { ...rejected, overlays: { ...rejected.overlays, reachabilityCloud: true, conditioningEllipsoid: true },
     reachabilityCloud: { points: [{ at: [0, 0, 100], reachable: true }, { at: [10, 0, 100], reachable: false }],
       progress: 1, total: 2, orientation: { rx: 0, ry: 0, rz: 0 }, error: null } };
   const full = buildSceneGeometry(state);
   const parts = Object.fromEntries(SCENE_BUILDERS.map(builder =>
     [builder.name, builder.build(state, state.layout, state.acceptedAssessment)]));
   assert.deepEqual(SCENE_BUILDERS.map(builder => builder.name),
-    ['groundGrid', 'base', 'platform', 'legs', 'servoArcs', 'jointCones', 'workspaceBox', 'reachabilityCloud', 'requestedGhost',
-      'platformAxes', 'worldAxes', 'trace']);
+    ['groundGrid', 'base', 'platform', 'legs', 'servoArcs', 'jointCones', 'workspaceBox', 'reachabilityCloud',
+      'conditioningEllipsoid', 'requestedGhost', 'platformAxes', 'worldAxes', 'trace']);
   assert.deepEqual(SCENE_BUILDERS.filter(builder => builder.overlay).map(builder => builder.overlay), OVERLAY_NAMES);
   assert.equal(parts.platformAxes.lines.length, 3);
   assert.equal(parts.worldAxes.lines.length, 3);

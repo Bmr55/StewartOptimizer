@@ -1,13 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { asymmetricJointFixture, jointFixture } from '../fixtures/layout.js';
+import { asymmetricJointFixture, jointFixture, pairedFixture } from '../fixtures/layout.js';
 import { evaluatePose } from '../../src/model/pose.js';
 import { computeWorkspace } from '../../src/workspace/sweep.js';
 import { computeCycleDemand } from '../../src/model/cycle.js';
 import { Optimizer } from '../../src/optimization/optimizer.js';
 import { selectBest, exportResult } from '../../src/io/results.js';
 import { rotationMatrixFromEuler, rotateVector } from '../../src/math.js';
-import { assessJacobian, rotaryActuatorJacobian,
+import { assessJacobian, rotaryActuatorJacobian, translationSingularSystem,
   NUMERICAL_RECIPROCAL_CUTOFF } from '../../src/model/conditioning.js';
 
 const close = (actual, expected, tolerance = 1e-6) =>
@@ -178,4 +178,58 @@ test('invalid-home candidates remain diagnostic with unavailable quality', async
   assert.equal(exported.metadata.conditioning_quality, null);
   assert.equal(exported.diagnostic, true);
   assert.equal(exported.workspace_stats.conditioningCounts.numericalSingularity, 1);
+});
+
+// A 6x6 Jacobian whose translation block is U * diag(values) * V^T, with U the
+// first three unit columns and V the rows of `basis`; rotation columns are 1.
+const withTranslationBlock = (values, basis) => Array.from({ length: 6 }, (_, row) =>
+  [...[0, 1, 2].map(col => row < 3 ? values[row] * basis[row][col] : 0), 1, 1, 1]);
+
+test('translation singular system recovers the values and world directions of the translation block', () => {
+  const c = Math.cos(0.4), s = Math.sin(0.4);
+  const basis = [[c, s, 0], [-s, c, 0], [0, 0, 1]];
+  const system = translationSingularSystem(withTranslationBlock([0.5, 3, 1e-6], basis));
+  assert.deepEqual(system.map(entry => entry.value).map(value => Number(value.toPrecision(12))), [3, 0.5, 1e-6]);
+  // Largest first, each with its own direction (sign is arbitrary).
+  for (const [entry, direction] of [[system[0], basis[1]], [system[1], basis[0]], [system[2], basis[2]]]) {
+    close(Math.abs(entry.vector.reduce((sum, value, k) => sum + value * direction[k], 0)), 1, 1e-12);
+  }
+  const layout = asymmetricJointFixture();
+  const rows = evaluatePose(layout, { x: 5, ry: 0.03 }, mechanical).jacobianRows;
+  for (const { value, vector } of translationSingularSystem(rows)) {
+    // J_t^T J_t v = sigma^2 v for the first three Jacobian columns.
+    const jv = rows.map(row => row[0] * vector[0] + row[1] * vector[1] + row[2] * vector[2]);
+    const jtjv = [0, 1, 2].map(col => rows.reduce((sum, row, k) => sum + row[col] * jv[k], 0));
+    jtjv.forEach((component, k) => close(component, value * value * vector[k], 1e-9));
+    close(Math.hypot(...vector), 1, 1e-12);
+  }
+  assert.equal(translationSingularSystem(null), null);
+  assert.equal(translationSingularSystem([[1, 2, 3]]), null);
+  assert.equal(translationSingularSystem(Array.from({ length: 6 }, () => Array(6).fill(0))), null);
+  assert.equal(translationSingularSystem(Array.from({ length: 6 }, () => [NaN, 0, 0, 0, 0, 0])), null);
+});
+
+test('a symmetric layout at home gives equal horizontal axes about a vertical one', () => {
+  // The D3-symmetric paired layout: any horizontal direction couples equally,
+  // while the near-vertical rods couple more strongly to vertical motion.
+  const home = evaluatePose(pairedFixture(), {}, mechanical);
+  const [vertical, ...horizontal] = translationSingularSystem(home.jacobianRows);
+  close(Math.abs(vertical.vector[2]), 1, 1e-12);
+  close(horizontal[0].value, horizontal[1].value, 1e-12);
+  for (const { vector } of horizontal) close(vector[2], 0, 1e-12);
+});
+
+test('the translation helper leaves pose conditioning and its condition number unchanged', () => {
+  // Frozen from before the helper existed: the pose conditioning outputs, which
+  // feed optimizer results, must not move.
+  const layout = pairedFixture();
+  const home = evaluatePose(layout, {}, mechanical);
+  const rows = structuredClone(home.jacobianRows);
+  translationSingularSystem(home.jacobianRows);
+  assert.deepEqual(home.jacobianRows, rows, 'the rows are not modified');
+  assert.equal(home.conditioning.reciprocal, 0.3514923980989354);
+  assert.equal(home.conditioning.condition, 2.8450117425257306);
+  assert.deepEqual(home.conditioning.singularValues, [2.285374541057664, 1.6226197168762975,
+    1.6226197168762972, 1.1406769909749306, 0.8032917779906122, 0.8032917779906122]);
+  assert.deepEqual(assessJacobian(rows).singularValues, home.conditioning.singularValues);
 });

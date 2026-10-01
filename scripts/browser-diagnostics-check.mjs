@@ -83,7 +83,8 @@ try {
     const withoutAxes = toggle('simOverlayWorldAxes', false);
     return { all, withoutGhost, withGhost, narrowCones, wideCones, withoutCones, withoutArcs, withoutAxes,
       withoutEither: toggle('simOverlayPlatformAxes', false), restored: toggle('simOverlayPlatformAxes', true),
-      withoutGrid: toggle('simOverlayGroundGrid', false), gridRestored: toggle('simOverlayGroundGrid', true) };
+      withoutGrid: toggle('simOverlayGroundGrid', false), gridRestored: toggle('simOverlayGroundGrid', true),
+      withEllipsoid: toggle('simOverlayConditioningEllipsoid', true), ellipsoidOff: toggle('simOverlayConditioningEllipsoid', false) };
   });
   assert.ok(overlayPixels.withoutGhost < overlayPixels.all, `the rejected request drew no ghost: ${JSON.stringify(overlayPixels)}`);
   assert.equal(overlayPixels.withGhost, overlayPixels.all);
@@ -96,6 +97,8 @@ try {
   assert.equal(overlayPixels.restored, overlayPixels.withoutAxes);
   assert.ok(overlayPixels.withoutGrid < overlayPixels.restored, `ground grid toggle drew nothing: ${JSON.stringify(overlayPixels)}`);
   assert.equal(overlayPixels.gridRestored, overlayPixels.restored);
+  assert.ok(overlayPixels.withEllipsoid > overlayPixels.gridRestored, `conditioning ellipsoid toggle drew nothing: ${JSON.stringify(overlayPixels)}`);
+  assert.equal(overlayPixels.ellipsoidOff, overlayPixels.gridRestored);
 
   const downloadPromise = page.waitForEvent('download');
   await page.locator('#simDownload').click();
@@ -106,7 +109,7 @@ try {
   assert.equal(exported.simulator.requested.z, 100);
   assert.equal(exported.simulator.accepted.z, 0);
   assert.deepEqual(exported.simulator.overlays, { groundGrid: true, servoArcs: false, jointCones: false, workspaceBox: true, reachabilityCloud: false,
-    requestedGhost: true, platformAxes: true, worldAxes: false });
+    conditioningEllipsoid: false, requestedGhost: true, platformAxes: true, worldAxes: false });
   await page.locator('#optimizeTab').click();
   await page.locator('#referenceLayoutInput').fill(JSON.stringify(exported));
   await page.locator('#simulateTab').click();

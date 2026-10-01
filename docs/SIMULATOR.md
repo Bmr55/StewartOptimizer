@@ -215,8 +215,8 @@ where `solved` is the accepted assessment or `null`, so builders only draw data
 the evaluator already produced. The list order is the draw order: `groundGrid`,
 `base` (base polygon, servo direction stubs and base markers), `platform`
 (platform polygon), `legs` (horns, rods and their markers), `servoArcs`,
-`jointCones`, `workspaceBox`, `reachabilityCloud`, `requestedGhost`,
-`platformAxes`, `worldAxes` and `trace`. Markers and traces keep their own
+`jointCones`, `workspaceBox`, `reachabilityCloud`, `conditioningEllipsoid`,
+`requestedGhost`, `platformAxes`, `worldAxes` and `trace`. Markers and traces keep their own
 controls. Each point carries a pixel `size` (markers 6 or 7, reachability
 samples 3); the renderer draws each size in its own call, and a point without
 one at 7.
@@ -225,9 +225,11 @@ A builder with an `overlay` key is drawn only when that key is on in
 `state.overlays`. `OVERLAY_DEFAULTS` lists every toggleable overlay and its
 default; today these are **Ground grid** (`groundGrid`), **Servo arcs**
 (`servoArcs`), **Joint cones** (`jointCones`), **Workspace box**
-(`workspaceBox`), **Reachability cloud** (`reachabilityCloud`), **Rejected pose
+(`workspaceBox`), **Reachability cloud** (`reachabilityCloud`),
+**Conditioning ellipsoid** (`conditioningEllipsoid`), **Rejected pose
 ghost** (`requestedGhost`), **Platform axes** (`platformAxes`) and **World
-axes** (`worldAxes`), all on except the reachability cloud. With only the two
+axes** (`worldAxes`), all on except the reachability cloud and the
+conditioning ellipsoid. With only the two
 axis overlays on, the scene matches the original single-function renderer line
 for line (a frozen fixture in `tests/fixtures/scene-geometry.json` checks this). The Simulate tab shows one checkbox per overlay in the
 **Overlays** group, with the id `simOverlay` plus the capitalised name (for
@@ -275,6 +277,33 @@ between green points is not shown to be reachable, an isolated red point does
 not bound the region, and nothing here claims a continuous envelope or
 boundary. It uses the same checks as every other pose (servo range, ball
 joints, rod length, conditioning) and still no collision detection.
+
+**Conditioning ellipsoid** (off by default) draws the translation
+manipulability ellipsoid of the accepted pose at the platform origin, so the
+reciprocal condition number shown as text in the diagnostics panel has a
+shape. Its principal axes are the right singular vectors of the translation
+block of the accepted assessment's `conditioning.jacobianRows`, from
+`translationSingularSystem` in `src/model/conditioning.js` (see
+[CONDITIONING_MODEL.md](./CONDITIONING_MODEL.md#translation-conditioning-ellipsoid)).
+Each half-axis is proportional to its singular value, and the largest equals
+the platform axis length (`platformAxisLength`, the larger of 18 mm and 0.35
+horn lengths), so the drawing shows proportions, not a physical size. The
+builder draws the three axes as full diameters, carrying the ground grid's
+2 mm depth bias away from the camera so the platform axes they overlap stay on
+top, and the three great circles through each pair of axes (32 segments each).
+As the pose nears a translational singularity one axis shrinks and the
+ellipsoid flattens toward a disc or a line. A symmetric layout at home has
+equal horizontal axes; with near-vertical rods the vertical axis is the
+longest, so it is not a sphere. The colour comes from the full six-axis
+reciprocal condition number of the accepted pose, which also covers rotation
+the shape does not show: `conditioningColor` blends from light blue
+(`wellConditioned`) at reciprocal 1 to the near-limit yellow at
+`CONDITIONING_GRADE_FLOOR` (0.01, condition 100) on a log scale, or at
+1 / `conditionLimit` when a condition limit above 1 is set. When the requested
+pose fails a conditioning check (`conditionLimit` or `numericalSingularity`)
+the ellipsoid, still drawn at the held accepted pose, turns the whole-platform
+failure magenta. Without an accepted pose or usable Jacobian rows nothing is
+drawn.
 
 **Servo arcs** (on by default) draw each servo's allowed travel as an arc of
 horn-length radius about its base anchor, from the effective minimum to the
