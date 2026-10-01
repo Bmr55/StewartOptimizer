@@ -19,6 +19,9 @@ export function buildPoseDiagnostics(state) {
   const assessment = state?.assessment ?? null;
   const layout = state?.layout ?? null;
   const violations = assessment?.violations ?? [];
+  // Loads belong to the accepted pose, not the request.
+  const loads = state?.loads ?? null;
+  const solvedLoads = loads?.valid ? loads : null;
   const legs = Array.from({ length: 6 }, (_, index) => {
     const lowerDeg = angleDeg(assessment?.jointAngles?.lower?.[index]);
     const upperDeg = angleDeg(assessment?.jointAngles?.upper?.[index]);
@@ -36,6 +39,10 @@ export function buildPoseDiagnostics(state) {
       rodDeviationMm, rodLengthToleranceMm,
       rodWithinTolerance: rodDeviationMm == null ? null : Math.abs(rodDeviationMm) <= rodLengthToleranceMm,
       servoAngleDeg, failures,
+      rodForceN: numeric(solvedLoads?.rodForceN?.[index]),
+      servoTorqueNm: numeric(solvedLoads?.servoTorqueNm?.[index]),
+      ratedTorqueNm: numeric(solvedLoads?.ratedTorqueNm?.[index]),
+      torqueUtilization: numeric(solvedLoads?.utilization?.[index]),
       lowerFailed: failures.some(failure => failure.joint === 'lower'),
       upperFailed: failures.some(failure => failure.joint === 'upper'),
     };
@@ -53,7 +60,25 @@ export function buildPoseDiagnostics(state) {
     globalFailures: violations.filter(violation => !Number.isInteger(violation.leg))
       .map(violation => ({ type: violation.type, reason: violation.reason ?? null })),
     affectedLegs: legs.filter(leg => leg.failures.length).map(leg => leg.leg),
+    loadStatus: !state?.loadModel ? 'none' : !loads ? 'noPose' : loads.valid ? loads.motion : 'unavailable',
+    loadReason: loads?.reason ?? null,
   };
+}
+
+const LOAD_STATUS_TEXT = Object.freeze({
+  none: 'Loads: no payload or servo ratings loaded. A candidate from a run, or simulator JSON with a loadModel, supplies them.',
+  noPose: 'Loads: no accepted pose to solve.',
+  static: 'Loads at the accepted pose: static (zero velocity and acceleration).',
+  animation: 'Loads at the accepted pose: dynamic, from the animation velocity and acceleration.',
+  unavailable: 'Loads unavailable at the accepted pose:',
+});
+
+// Signed output-shaft torque, with the peak rating and utilisation when rated.
+function torqueText(leg) {
+  if (leg.servoTorqueNm == null) return '—';
+  const torque = `${rounded(leg.servoTorqueNm)} N m`;
+  return leg.ratedTorqueNm == null ? `${torque} / unrated`
+    : `${torque} / ${rounded(leg.ratedTorqueNm)} N m (${Math.round(leg.torqueUtilization * 100)}%)`;
 }
 
 function poseText(pose) {
@@ -74,8 +99,9 @@ export function mountSimulatorDiagnostics({ document, controller, host = documen
     <p id="simConditionPolicy" class="status"></p>
     <p id="simDiagnosticError" class="status error" role="alert" hidden></p>
     <p id="simGlobalFailures" class="status" aria-live="polite"></p>
+    <p id="simLoadDiagnostic" class="status"></p>
     <div class="sim-diagnostic-table-wrap"><table class="sim-diagnostic-table"><thead><tr>
-      <th>Leg</th><th>Lower</th><th>Upper</th><th>Max</th><th>Rod deviation</th><th>Servo</th><th>Requested-pose failure</th>
+      <th>Leg</th><th>Lower</th><th>Upper</th><th>Max</th><th>Rod deviation</th><th>Servo</th><th>Rod force (+ compression)</th><th>Servo torque / rating</th><th>Requested-pose failure</th>
     </tr></thead><tbody id="simDiagnosticRows"></tbody></table></div>`;
   const field = id => document.getElementById(id);
   const error = field('simDiagnosticError');
@@ -99,6 +125,8 @@ export function mountSimulatorDiagnostics({ document, controller, host = documen
       ? `Whole-platform failure: ${diagnostics.globalFailures.map(failure => failure.type).join(', ')}.` : 'No whole-platform failure.';
     // aria-live: rewrite only on change so animation frames do not re-announce it.
     if (field('simGlobalFailures').textContent !== globalFailures) field('simGlobalFailures').textContent = globalFailures;
+    field('simLoadDiagnostic').textContent = LOAD_STATUS_TEXT[diagnostics.loadStatus]
+      + (diagnostics.loadReason ? ` ${diagnostics.loadReason}` : '');
     field('simDiagnosticRows').innerHTML = diagnostics.legs.map(leg => {
       const labels = leg.failures.map(failure => `${failure.type}${failure.joint ? ` (${failure.joint})` : ''}`);
       return `<tr data-leg="${leg.leg}" class="${leg.failures.length ? 'sim-leg-failure' : ''}">
@@ -108,6 +136,8 @@ export function mountSimulatorDiagnostics({ document, controller, host = documen
         <td>${rounded(leg.maximumDeflectionDeg)}°</td>
         <td class="${leg.rodWithinTolerance === false ? 'sim-joint-failure' : ''}">${rounded(leg.rodDeviationMm, 6)} / ±${rounded(leg.rodLengthToleranceMm)} mm</td>
         <td>${rounded(leg.servoAngleDeg)}°</td>
+        <td>${leg.rodForceN == null ? '—' : `${rounded(leg.rodForceN, 2)} N`}</td>
+        <td class="${leg.torqueUtilization > 1 ? 'sim-joint-failure' : ''}">${torqueText(leg)}</td>
         <td>${escapeHtml(labels.join(', ') || '—')}</td>
       </tr>`;
     }).join('');

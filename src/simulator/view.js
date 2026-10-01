@@ -4,6 +4,7 @@ import { cameraFrame, createWebGLRenderer, projectSegment, VIEW_HALF_TANGENT } f
 import { buildSceneGeometry, OVERLAY_NAMES } from './scene.js';
 import { displayText, markCommitted, syncInput } from './geometry-controls.js';
 import { REACHABILITY_SAMPLE_COUNTS } from './reachability.js';
+import { hasLoad } from './loads.js';
 
 const RADIAN_AXES = new Set(['rx', 'ry', 'rz']);
 const axisInput = (document, axis) => document.getElementById(`sim${axis.toUpperCase()}Input`);
@@ -62,6 +63,8 @@ export function createSimulatorView({ document, window, controller, isActive = (
   const reachSlice = document.getElementById('simReachabilitySlice');
   const reachSliceZ = document.getElementById('simReachabilitySliceZ');
   const reachStatus = document.getElementById('simReachabilityStatus');
+  const loadsInput = document.getElementById(overlayInputId('loads'));
+  const loadsHint = document.getElementById('simLoadsHint');
   // The sample-count choices are the shared workspace sampling presets.
   reachSamples.innerHTML = REACHABILITY_SAMPLE_COUNTS
     .map(count => `<option value="${count}">${count.toLocaleString('en-US')}</option>`).join('');
@@ -109,6 +112,10 @@ export function createSimulatorView({ document, window, controller, isActive = (
     markers.checked = state.markers;
     traces.checked = state.tracesEnabled;
     for (const [name, input] of overlayInputs) input.checked = state.overlays[name];
+    // The loads toggle needs a payload or external load to solve against.
+    const loadable = hasLoad(state.loadModel);
+    loadsInput.disabled = !loadable;
+    loadsHint.hidden = loadable;
     showReachability(state);
     if (renderer.available) renderer.render(state, camera);
   }

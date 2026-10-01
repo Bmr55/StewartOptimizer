@@ -105,3 +105,17 @@ test('saved workspace ranges read mm and degrees, fall back to the run bounds an
   assert.throws(() => parse({ workspaceRanges: [] }), /simulator.workspaceRanges must be an object/);
   assert.throws(() => parse({ workspaceRanges: { z: { min: 4 } } }), /simulator.workspaceRanges.z must have finite min and max/);
 });
+
+test('a saved load model is checked by name, and a run supplies one when the block has none', () => {
+  assert.equal(parse({}).loadModel, null);
+  assert.deepEqual(parse({ loadModel: { mass_kg: 2, servo_torque_rating_nm: 0.5, extra: 1 } }).loadModel,
+    { mass_kg: 2, servo_torque_rating_nm: 0.5 });
+  assert.throws(() => parse({ loadModel: 'heavy' }), /simulator.loadModel must be an object/);
+  assert.throws(() => parse({ loadModel: { mass_kg: -1 } }), /simulator.loadModel: mass_kg/);
+  const run = { requirements: { mass_kg: 3 }, servoRatings: { servo_torque_rating_nm: 1 } };
+  const withRun = block => parseSimulatorSnapshot(block, layout, fallback, null, run);
+  assert.deepEqual(withRun({}).loadModel, { mass_kg: 3, servo_torque_rating_nm: 1 });
+  assert.deepEqual(withRun({ loadModel: { mass_kg: 1 } }).loadModel, { mass_kg: 1 });
+  // A run whose load does not parse means no loads, never a rejected file.
+  assert.equal(parseSimulatorSnapshot({}, layout, fallback, null, { requirements: { mass_kg: -3 } }).loadModel, null);
+});

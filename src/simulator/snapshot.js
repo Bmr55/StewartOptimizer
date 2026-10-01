@@ -2,6 +2,7 @@ import { degToRad, radToDeg } from '../math.js';
 import { evaluatePose } from '../model/pose.js';
 import { ANIMATION_PATTERNS, HOME_POSE, normalizePose, normalizeWorkspaceRanges } from './controller.js';
 import { parseReachability } from './reachability.js';
+import { loadModelFromSettings, parseLoadModel } from './loads.js';
 import { parseOverlays } from './scene.js';
 import { parseCamera } from './view.js';
 
@@ -44,7 +45,9 @@ export function workspaceRangesToJSON(ranges) {
 // are used, and checked, when the block carries no options. `fallbackRanges`
 // (the source run's bounds, user units) stand in for missing workspace ranges;
 // ranges that do not parse there only mean no box, never a rejected file.
-export function parseSimulatorSnapshot(saved, layout, fallbackOptions, fallbackRanges = null) {
+// `fallbackSettings` (the source run's `effective_settings`) likewise supply the
+// load model when the block carries none; one that does not parse means no loads.
+export function parseSimulatorSnapshot(saved, layout, fallbackOptions, fallbackRanges = null, fallbackSettings = null) {
   const block = saved == null ? {} : plainObject(saved, 'simulator');
   let options;
   if (block.options == null) options = { ...fallbackOptions };
@@ -61,7 +64,14 @@ export function parseSimulatorSnapshot(saved, layout, fallbackOptions, fallbackR
 
   const result = { options, requested: pose(block.requested, 'simulator.requested'),
     accepted: pose(block.accepted, 'simulator.accepted'), camera: null, animation: null,
-    markers: null, tracesEnabled: null, overlays: null, reachability: null, pointerMode: null, workspaceRanges: null };
+    markers: null, tracesEnabled: null, overlays: null, reachability: null, pointerMode: null, workspaceRanges: null,
+    loadModel: null };
+  if (block.loadModel != null) {
+    result.loadModel = parseLoadModel(block.loadModel, 'simulator.loadModel')?.input ?? null;
+  } else {
+    try { result.loadModel = parseLoadModel(loadModelFromSettings(fallbackSettings))?.input ?? null; }
+    catch { result.loadModel = null; }
+  }
   if (block.workspaceRanges != null) {
     result.workspaceRanges = parseWorkspaceRanges(block.workspaceRanges, 'simulator.workspaceRanges');
   } else {

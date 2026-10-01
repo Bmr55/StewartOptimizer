@@ -100,4 +100,7 @@ names need a coordinated migration. Issue #35 remains outside this plan.
   sampled translations at the requested rotation through the same evaluator
   in yielding, abortable chunks and reports evaluated samples only. The
   optional conditioning ellipsoid draws the singular vectors of the accepted
-  pose's Jacobian translation block and evaluates no pose of its own.
+  pose's Jacobian translation block and evaluates no pose of its own. The
+  optional loads overlay draws rod forces and servo torque utilisation that
+  the controller solves for the accepted pose with the cycle model's
+  `dynamicsAtPose`, statically or from the animation's analytic derivatives.

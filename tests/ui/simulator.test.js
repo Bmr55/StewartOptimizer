@@ -392,3 +392,39 @@ test('a candidate draws its run workspace box, which simulator JSON carries; JSO
   assert.equal(JSON.parse((fresh('simUseReference').handlers.click(), fresh('referenceLayoutInput').value))
     .simulator.workspaceRanges, null);
 });
+
+test('a candidate carries its run payload into the simulator, simulator JSON and a reload', async () => {
+  const element = await loadUI(FixtureOptimizer);
+  await element('runOptimization').handlers.click();
+  const controller = element.app.simulatorController;
+  const toggle = (id, checked) => { element(id).checked = checked; element(id).handlers.change({ target: element(id) }); };
+  // The fixture run's requirements carry mass_kg 1, so the loads toggle is usable.
+  assert.deepEqual(controller.getState().loadModel, { mass_kg: 1 });
+  assert.equal(controller.getState().loads.motion, 'static');
+  assert.equal(element('simOverlayLoads').disabled, false);
+  assert.equal(element('simLoadsHint').hidden, true);
+  assert.equal(element('simOverlayLoads').checked, false);
+  toggle('simOverlayLoads', true);
+  assert.equal(controller.getState().overlays.loads, true);
+  element('simUseReference').handlers.click();
+  const saved = JSON.parse(element('referenceLayoutInput').value);
+  assert.deepEqual(saved.simulator.loadModel, { mass_kg: 1 });
+  assert.equal(saved.simulator.overlays.loads, true);
+  // A saved model wins over the run's; one without a model or a run has no loads.
+  saved.simulator.loadModel = { mass_kg: 4, servo_torque_rating_nm: 0.3 };
+  element('referenceLayoutInput').value = JSON.stringify(saved);
+  element('simLoadReference').handlers.click();
+  assert.deepEqual(controller.getState().loadModel, { mass_kg: 4, servo_torque_rating_nm: 0.3 });
+  assert.ok(controller.getState().loads.utilization.every(Number.isFinite));
+  delete saved.simulator.loadModel;
+  element('referenceLayoutInput').value = JSON.stringify(saved);
+  element('simLoadReference').handlers.click();
+  assert.deepEqual(controller.getState().loadModel, { mass_kg: 1 }, 'the run supplies the model');
+  delete saved.run;
+  element('referenceLayoutInput').value = JSON.stringify(saved);
+  element('simLoadReference').handlers.click();
+  assert.equal(controller.getState().loadModel, null);
+  assert.equal(controller.getState().loads, null);
+  assert.equal(element('simOverlayLoads').disabled, true);
+  assert.equal(element('simLoadsHint').hidden, false);
+});
