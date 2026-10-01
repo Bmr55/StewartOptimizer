@@ -333,6 +333,41 @@ it appears: failure-coloured ghost lines are pulled toward the camera so they
 show on top, and dimmed ghost lines are pushed away so the held pose shows
 wherever the two overlap.
 
+## Rendering checks
+
+The camera is an orbit camera with +Z up. `yaw` is the eye's azimuth about the
+target, measured from +X toward +Y; `pitch` is its elevation above the target's
+horizontal plane; `distance` is the eye's distance from `target` in mm. The view
+is a pinhole projection with a 60° vertical field of view and square pixels, so
+the horizontal field follows the canvas aspect ratio. Screen right is the view
+direction crossed with +Z, so from any camera above the base plane the world
+X axis turns counterclockwise onto the Y axis on screen. `cameraFrame` and
+`projectPoint` in `src/simulator/renderer.js` implement this, and the CPU
+projection is the only one: the vertex shader passes positions through.
+
+Three layers of checks tie what is drawn to the evaluator's solved geometry:
+
+- `tests/simulator/renderer.test.js` checks that each leg line runs from the
+  evaluator's own base anchor, horn tip and platform point objects.
+- `tests/simulator/projection-oracle.test.js` compares `cameraFrame` and
+  `projectPoint` with an independently written pinhole camera
+  (`tests/fixtures/independent-geometry.js`), checks screen handedness, the
+  field of view and square pixels, and checks that the vertex buffer the
+  renderer uploads puts every horn and rod at the pinhole projection of the
+  solved points.
+- `npm run test:browser:render` (`scripts/browser-render-check.mjs`) loads a
+  tilted, translated pose with markers and overlays off in real WebGL, reads the
+  canvas back and requires the rod and horn colours at the pinhole projection of
+  points along every rod and horn, and the X, Y and Z axis colours along the
+  world axes. The same samples mirrored left-right or top-bottom must mostly
+  miss, so a flipped image fails.
+
+The model side of the same chain is checked in
+`tests/model/inverse-kinematics-oracle.test.js` (hand-solved legs, and an
+independent platform transform, horn-tip formula and root search for general
+poses) and `tests/model/rotation-convention.test.js` (the Euler convention).
+None of these checks replace validation against a physical mechanism.
+
 ## Live diagnostics
 
 The diagnostics panel subscribes to the same controller as the renderer. It reports the six-axis **requested** pose and last valid **rendered accepted** pose separately. A rejected request remains visible with its evaluator failures while the renderer holds the last accepted geometry. Red leg rows mark failures in the requested pose, and a whole-platform conditioning failure has a separate message; the table always lists every failure. In the scene each failure is coloured once, on the geometry that failed. When the **Rejected pose ghost** overlay is on and the solver reached that leg's horn tip (a joint-limit failure), the ghost leg is red and the held accepted leg keeps its normal colours; a whole-platform failure likewise outlines the ghost platform in magenta instead of tinting the held legs. When the ghost is off, or for a structural failure where the solver stopped before that leg's horn tip, the held accepted leg is coloured red (magenta for a whole-platform failure). A red held leg therefore marks a failure in the request, not in the rendered pose, which the evaluator accepted; the rejected pose itself appears only as the dimmed ghost overlay. The servo arcs and joint cones keep their own failure colours either way.
