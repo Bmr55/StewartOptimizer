@@ -5,10 +5,11 @@ import { dominates, fastNonDominatedSort, assignCrowdingDistance, tournamentSele
 import { evaluateLayout, evaluateCycle, computeFatigue } from './evaluate-layout.js';
 import { estimateWork } from './budget.js';
 import { selectBest, exportResult, layoutToJSON } from '../io/results.js';
-import { DEFAULT_TOPOLOGY, TOPOLOGIES, DEFAULT_BALL_JOINT_LIMIT_DEG } from '../contracts.js';
+import { DEFAULT_TOPOLOGY, TOPOLOGIES, DEFAULT_BALL_JOINT_LIMIT_DEG, DEFAULT_LINK_CLEARANCE_MM } from '../contracts.js';
 import { normalizeSampling } from '../workspace/sampling.js';
 import { createRandom, normalizeSeed, RANDOM_ALGORITHM } from './random.js';
 import { validateConditionLimit } from '../model/conditioning.js';
+import { validateLinkClearance } from '../model/collision.js';
 import { importLayout } from '../io/layout-import.js';
 import { evaluatePose } from '../model/pose.js';
 import { initialPopulation, referenceBoundsConflicts, seedComposition } from './reference-seeding.js';
@@ -53,6 +54,8 @@ export class Optimizer {
         && settings.objectiveDefinitions?.some(definition => definition.key === 'loadBalance') ? 'full-v1' : settings.objectiveSet,
       // Runs saved before adaptive sampling used the fixed 64-sample schedule.
       cycleSampling: settings.cycleSampling ?? LEGACY_CYCLE_SAMPLING,
+      // Runs saved before link collision checks had none; a zero clearance never collides.
+      linkClearanceMm: settings.linkClearanceMm ?? 0,
       ranges: settings.bounds,
       referenceLayout: settings.reference_layout ?? null,
       onProgress,
@@ -76,6 +79,7 @@ export class Optimizer {
     lowerBallJointLimitDeg,
     upperBallJointLimitDeg,
     conditionLimit = null,
+    linkClearanceMm,
     ballJointClamp = false,
     servoRatings,
     onProgress,
@@ -111,6 +115,8 @@ export class Optimizer {
     this.lowerBallJointLimitDeg = lowerBallJointLimitDeg ?? this.ballJointLimitDeg;
     this.upperBallJointLimitDeg = upperBallJointLimitDeg ?? this.ballJointLimitDeg;
     this.conditionLimit = validateConditionLimit(conditionLimit);
+    this.linkClearanceMm = validateLinkClearance(linkClearanceMm ?? requirements.link_clearance_mm
+      ?? DEFAULT_LINK_CLEARANCE_MM);
     this.ballJointClamp = ballJointClamp;
     this.servoRatingsInput = Object.fromEntries(SERVO_RATING_KEYS
       .filter(key => Object.hasOwn(servoRatings ?? {}, key) || Object.hasOwn(requirements, key))
@@ -176,6 +182,7 @@ export class Optimizer {
           lowerBallJointLimitDeg: this.lowerBallJointLimitDeg,
           upperBallJointLimitDeg: this.upperBallJointLimitDeg,
           conditionLimit: this.conditionLimit,
+          linkClearanceMm: this.linkClearanceMm,
           servoRangeRad: this.referenceLayout.servoRangeRad,
           mounting: this.referenceLayout.mounting,
           recordLegData: true,
@@ -217,6 +224,7 @@ export class Optimizer {
       lowerBallJointLimitDeg: this.lowerBallJointLimitDeg,
       upperBallJointLimitDeg: this.upperBallJointLimitDeg,
       conditionLimit: this.conditionLimit,
+      linkClearanceMm: this.linkClearanceMm,
       ballJointClamp: this.ballJointClamp,
       servoRangeRad: this.servoRangeRad, sampling: this.sampling,
       servoRatings: this.servoRatings, objectiveSet: this.objectiveSet,
@@ -355,6 +363,7 @@ export class Optimizer {
       lowerBallJointLimitDeg: this.lowerBallJointLimitDeg,
       upperBallJointLimitDeg: this.upperBallJointLimitDeg,
       conditionLimit: this.conditionLimit,
+      linkClearanceMm: this.linkClearanceMm,
       ballJointClamp: this.ballJointClamp,
       servoRangeDeg: this.servoRangeDeg,
       servoRatings: this.servoRatingsInput,

@@ -4,7 +4,7 @@ import { vectorNormalize, vectorCross, vectorDot, vectorScale, vectorAdd, vector
   rotateVector } from '../math.js';
 import { GRAVITY, massPropertiesDescription, normalizeMassProperties } from './mass-properties.js';
 import { isStationary, legacyTrajectory, trajectoryIdentity, trajectoryState } from './trajectory.js';
-import { CYCLE_MODEL_VERSION, DEFAULT_BALL_JOINT_LIMIT_DEG } from '../contracts.js';
+import { CYCLE_MODEL_VERSION, DEFAULT_BALL_JOINT_LIMIT_DEG, DEFAULT_LINK_CLEARANCE_MM } from '../contracts.js';
 import { LEGACY_CYCLE_SAMPLING, normalizeCycleSampling, periodicSampleWeights } from './cycle-sampling.js';
 import { actuatorTorque } from './servo-ratings.js';
 import { createLoadSharingAccumulator, unavailableLoadSharing } from './load-sharing.js';
@@ -182,7 +182,7 @@ export function computeCycleDemand(layout, { mass = 0, stroke = 0, frequency = 0
   trajectory, massProperties, trajectorySource, sampling = LEGACY_CYCLE_SAMPLING, actuators = null,
   ballJointLimitDeg = DEFAULT_BALL_JOINT_LIMIT_DEG, lowerBallJointLimitDeg = ballJointLimitDeg,
   upperBallJointLimitDeg = ballJointLimitDeg, conditionLimit = null,
-  mounting, signal, onPose } = {}) {
+  linkClearanceMm = DEFAULT_LINK_CLEARANCE_MM, mounting, signal, onPose } = {}) {
   const effectiveTrajectory = trajectory ?? legacyTrajectory({ stroke, frequency, axis });
   const effectiveMass = massProperties ?? normalizeMassProperties({ mass_kg: mass });
   const policy = normalizeCycleSampling(sampling);
@@ -214,7 +214,7 @@ export function computeCycleDemand(layout, { mass = 0, stroke = 0, frequency = 0
     const state = trajectoryState(effectiveTrajectory, time);
     const result = evaluateDynamicPose(layout, state, effectiveMass, {
       ballJointLimitDeg, lowerBallJointLimitDeg, upperBallJointLimitDeg,
-      conditionLimit, mounting: effectiveMounting,
+      conditionLimit, linkClearanceMm, mounting: effectiveMounting,
     });
     evaluated++;
     onPose?.();

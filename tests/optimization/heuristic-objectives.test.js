@@ -76,7 +76,7 @@ test('limit margin measures reachable headroom instead of collapsing when a samp
 
 test('a stiffness model selects physical stiffness by default, false keeps the proxy, and older exports replay with the proxy', async () => {
   const model = { servo_torsional_stiffness_nm_per_rad: 40, rods: 'rigid' };
-  const settings = { populationSize: 4, generations: 1, ranges: {}, sampling: { strategy: 'grid' }, objectiveSet: 'full', seed: 9 };
+  const settings = { populationSize: 4, generations: 1, ranges: {}, sampling: { strategy: 'grid' }, objectiveSet: 'full', seed: 5 };
   const physical = new Optimizer({ mass_kg: 1, stiffness_model: model }, settings);
   assert.equal(physical.effectiveSettings().objectiveDefinitions[5].key, 'physicalStiffness');
   assert.equal(physical.effectiveSettings().stiffnessModel.useAsObjective, true);

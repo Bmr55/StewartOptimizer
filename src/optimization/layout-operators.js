@@ -1,7 +1,7 @@
 import { clamp, randomNormal, degToRad } from '../math.js';
 import { DEFAULT_TOPOLOGY, TOPOLOGIES } from '../contracts.js';
 import { topologyGeometry, topologyFields, validateTopology, wrapAngle,
-  PAIRED_HORN_TOPOLOGIES, DEFAULT_BETA_PAIR_OFFSET } from './topology.js';
+  PAIRED_HORN_TOPOLOGIES, DEFAULT_BETA_PAIR_OFFSET, C3_BETA_OFFSET_LIMIT } from './topology.js';
 
 export const DEFAULT_DESIGN_SPACE = {
   baseRadius: [90, 160], platformRadius: [40, 120], homeHeightBounds: [50, 450],
@@ -12,6 +12,14 @@ export const DEFAULT_DESIGN_SPACE = {
 };
 
 const randomInRange = ([min, max], random) => min + random() * (max - min);
+
+// Wraps an angle; a C3 horn offset is also held inside the range that keeps
+// the two horns of a pair apart.
+function boundAngle(topology, field, value) {
+  const angle = wrapAngle(value);
+  return topology === 'c3_paired' && field === 'beta_offset'
+    ? clamp(angle, -C3_BETA_OFFSET_LIMIT, C3_BETA_OFFSET_LIMIT) : angle;
+}
 
 function pairGapRange(radius, space) {
   const [min, max] = space.pairGapBounds;
@@ -26,7 +34,7 @@ function regenerateBoundedTopology(layout, space) {
   p.base_radius = clamp(p.base_radius, Math.max(space.baseRadius[0], minimum), space.baseRadius[1]);
   p.platform_radius = clamp(p.platform_radius, Math.max(space.platformRadius[0], minimum), space.platformRadius[1]);
   for (const field of ['base_orientation', 'platform_orientation', 'beta_offset']) {
-    p[field] = wrapAngle(p[field]);
+    if (topologyFields(topology).includes(field)) p[field] = boundAngle(topology, field, p[field]);
   }
   if (PAIRED_HORN_TOPOLOGIES.includes(topology)) {
     p.beta_pair_offset = wrapAngle(p.beta_pair_offset ?? 0);
@@ -59,9 +67,9 @@ function randomParameters(topology, space, random) {
     base_radius: randomInRange(radiusBounds(space.baseRadius), random),
     platform_radius: randomInRange(radiusBounds(space.platformRadius), random),
     base_orientation: randomInRange([-Math.PI, Math.PI], random),
-    platform_orientation: randomInRange([-Math.PI, Math.PI], random),
-    beta_offset: randomInRange([-space.betaJitterRad, space.betaJitterRad], random),
   };
+  if (topology !== 'c3_paired') p.platform_orientation = randomInRange([-Math.PI, Math.PI], random);
+  p.beta_offset = randomInRange([-space.betaJitterRad, space.betaJitterRad], random);
   if (PAIRED_HORN_TOPOLOGIES.includes(topology)) p.beta_pair_offset = DEFAULT_BETA_PAIR_OFFSET;
   if (topology === 'c3_paired') {
     p.base_pair_gap = randomInRange(pairGapRange(p.base_radius, space), random);
@@ -167,8 +175,10 @@ export function mutateLayout(source, { designSpace: space, servoRangeRad, servoR
     p.platform_radius = clamp(p.platform_radius + randomNormal(random) * space.platformJitter,
       Math.max(space.platformRadius[0], minimum), space.platformRadius[1]);
     p.base_orientation += randomNormal(random) * space.mutationAngle;
-    p.platform_orientation += randomNormal(random) * space.mutationAngle;
+    if (layout.topology !== 'c3_paired') p.platform_orientation += randomNormal(random) * space.mutationAngle;
     p.beta_offset += randomNormal(random) * space.mutationAngle;
+    // Bound the C3 offset now: topologyGeometry rejects one beyond the limit.
+    if (layout.topology === 'c3_paired') p.beta_offset = boundAngle('c3_paired', 'beta_offset', p.beta_offset);
     if (PAIRED_HORN_TOPOLOGIES.includes(layout.topology)) {
       p.beta_pair_offset = (p.beta_pair_offset ?? 0) + randomNormal(random) * space.mutationAngle;
     }

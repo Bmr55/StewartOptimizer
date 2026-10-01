@@ -23,7 +23,7 @@ const input = { mass: 2.5, stroke: 10, frequency: 2, ballJointLimitDeg: 180 };
 function unequalLeverageFixture() {
   const layout = pairedFixture();
   const home = evaluatePose(layout, {}, { ballJointLimitDeg: 180, recordLegData: true });
-  const beta = layout.betaAngles[0] + Math.PI / 3, alpha = home.servoAngles[0] + 0.3;
+  const beta = layout.betaAngles[0] - Math.PI / 3, alpha = home.servoAngles[0] + 0.3;
   const x = hornFrameAxes(beta, alpha)[0];
   layout.baseAnchors[0] = home.hornTips[0].map((value, i) => value - layout.hornLength * x[i]);
   layout.betaAngles[0] = beta;

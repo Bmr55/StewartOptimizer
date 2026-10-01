@@ -15,6 +15,7 @@ Requirements may be flat or grouped into `payload`, `workspace`, `rotations`, an
 | x_range_mm, y_range_mm, z_range_mm | Finite min/max with max >= min; offsets from home, mm | Required |
 | rx_range_deg, ry_range_deg, rz_range_deg | Finite min/max with max >= min; roll/pitch/yaw, degrees | Required |
 | ball_joint_max_deg | Finite number in [0, 180] | 45 |
+| link_clearance_mm | Finite number >= 0; minimum distance between the centre lines of two legs' horns or rods, mm. A closer pose is a link collision; 0 turns the check off | 6 |
 | rod_length_bounds_mm | Two positive finite lengths with max >= min | [160, 420] |
 | horn_length_bounds_mm | Two positive finite lengths with max >= min | [30, 110] |
 | home_height_bounds_mm | Two positive finite home heights, mm, with max >= min | [50, 450] |

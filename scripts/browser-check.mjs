@@ -16,7 +16,7 @@ try {
   await page.waitForFunction(() => document.querySelector('#requirementsInput').value.includes('mass_kg'));
   assert.equal(await page.locator('#copyResultOutput').isEnabled(), false);
   const infoButtons = page.locator('.info-button');
-  assert.equal(await infoButtons.count(), 32);
+  assert.equal(await infoButtons.count(), 33);
   assert.equal(await infoButtons.first().getAttribute('aria-label'), 'More information');
   assert.match(await infoButtons.first().evaluate(button => getComputedStyle(button, '::before').maskImage), /info\.svg/);
   await infoButtons.first().click();
@@ -55,6 +55,8 @@ try {
   await optimizationPanel.locator('summary').click();
   assert.equal(await page.locator('#optPopulation').inputValue(), '4');
   await page.locator('#optGenerations').fill('1');
+  // Seed 4's candidates all have finite torque and speed, so they plot on those axes below.
+  await page.locator('#optSeed').fill('4');
   await page.locator('#optObjectiveSet').selectOption('full');
   await page.locator('#optMutationRate').fill('0');
   await page.locator('#servoTorqueRating').fill('0.000001');
@@ -100,20 +102,26 @@ try {
   await page.locator('#chartXAxis').selectOption('torque');
   await page.locator('#chartYAxis').selectOption('speedDemand');
   await page.locator('#paretoChart').scrollIntoViewIfNeeded();
-  const chartPoint = await page.evaluate(id => {
+  // Click the first listed candidate, other than the selected one, that plots
+  // on these axes; a candidate without finite torque or speed is not drawn.
+  const chartPoint = await page.evaluate(ids => {
     const chart = Chart.getChart('paretoChart');
-    for (const [datasetIndex, dataset] of chart.data.datasets.entries()) {
-      const index = dataset.data.findIndex(point => point.id === Number(id));
-      if (index >= 0) {
-        const { x, y } = chart.getDatasetMeta(datasetIndex).data[index];
-        return { x, y };
+    for (const id of ids) {
+      for (const [datasetIndex, dataset] of chart.data.datasets.entries()) {
+        const index = dataset.data.findIndex(point => point.id === Number(id));
+        if (index >= 0) {
+          const { x, y } = chart.getDatasetMeta(datasetIndex).data[index];
+          return { id, x, y };
+        }
       }
     }
-  }, options[0]);
+    return null;
+  }, options.filter(id => id !== selected));
+  assert.ok(chartPoint, 'another candidate plots on the torque and speed axes');
   const chartBounds = await page.locator('#paretoChart').boundingBox();
   await page.mouse.click(chartBounds.x + chartPoint.x, chartBounds.y + chartPoint.y);
-  await page.waitForFunction(id => document.getElementById('candidateSelect').value === id, options[0]);
-  assert.equal(await candidateSelect.inputValue(), options[0]);
+  await page.waitForFunction(id => document.getElementById('candidateSelect').value === id, chartPoint.id);
+  assert.equal(await candidateSelect.inputValue(), chartPoint.id);
   await candidateSelect.selectOption(selected);
 
   const downloadPromise = page.waitForEvent('download');

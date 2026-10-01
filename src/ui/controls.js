@@ -11,8 +11,10 @@ export const CYCLE_SAMPLING_PRESETS = Object.freeze({
 
 export function createControls(document) {
     const ballJointLimitInput = document.getElementById('ballJointLimit');
+    const linkClearanceInput = document.getElementById('linkClearance');
     let lastWorkspaceDefaults = null;
     let lastJointDefault = null;
+    let lastClearanceDefault = null;
     let lastHeightDefaults = null;
     function populateWorkspaceInputs(workspace, preserveEdits = false) {
         const mappings = [
@@ -43,6 +45,12 @@ export function createControls(document) {
             ballJointLimitInput.value = jointDefault;
         }
         lastJointDefault = jointDefault;
+        const clearanceDefault = parsed.normalized.link_clearance_mm;
+        if (!preserveEdits || lastClearanceDefault === null || linkClearanceInput.value === ''
+            || Number(linkClearanceInput.value) === lastClearanceDefault) {
+            linkClearanceInput.value = clearanceDefault;
+        }
+        lastClearanceDefault = clearanceDefault;
         const heights = parsed.normalized.home_height_bounds_mm ?? [50, 450];
         for (const [id, value, previous] of [
             ['homeHeightMin', heights[0], lastHeightDefaults?.[0]],

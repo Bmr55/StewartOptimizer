@@ -1,6 +1,7 @@
 import { computeCycleDemand } from '../model/cycle.js';
 import { evaluatePose } from '../model/pose.js';
 import { resolveMounting } from '../model/mounting.js';
+import { validateLinkClearance } from '../model/collision.js';
 import { validateConditionLimit, NUMERICAL_RECIPROCAL_CUTOFF } from '../model/conditioning.js';
 import { evaluateServoCapacity, normalizeServoRatings } from '../model/servo-ratings.js';
 import { massPropertiesDescription, normalizeMassProperties } from '../model/mass-properties.js';
@@ -9,7 +10,7 @@ import { actuatorUtilization } from '../model/load-sharing.js';
 import { evaluateCompliance } from '../model/compliance.js';
 import { computeWorkspace } from '../workspace/sweep.js';
 import { failureCategories } from '../io/results.js';
-import { DEFAULT_BALL_JOINT_LIMIT_DEG, MODEL_VERSION } from '../contracts.js';
+import { DEFAULT_BALL_JOINT_LIMIT_DEG, DEFAULT_LINK_CLEARANCE_MM, MODEL_VERSION } from '../contracts.js';
 import { normalizeTrajectory, trajectorySummary } from '../model/trajectory.js';
 import { average, clamp, degToRad } from '../math.js';
 import { objectiveValues } from './objectives.js';
@@ -32,6 +33,7 @@ export function resolveEvaluationOptions(options) {
     ballJointLimitDeg,
     lowerBallJointLimitDeg: options.lowerBallJointLimitDeg ?? ballJointLimitDeg,
     upperBallJointLimitDeg: options.upperBallJointLimitDeg ?? ballJointLimitDeg,
+    linkClearanceMm: options.linkClearanceMm ?? DEFAULT_LINK_CLEARANCE_MM,
     trajectorySource,
     stroke: options.stroke ?? summary?.stroke,
     frequency: options.frequency ?? summary?.frequency,
@@ -41,8 +43,9 @@ export function resolveEvaluationOptions(options) {
 export async function evaluateLayout(layout, rawOptions) {
   const options = resolveEvaluationOptions(rawOptions);
   const { ranges, signal, onProgress, payload, stroke, frequency, ballJointLimitDeg, ballJointClamp,
-    lowerBallJointLimitDeg, upperBallJointLimitDeg, sampling, random, onPoseWork } = options;
+    lowerBallJointLimitDeg, upperBallJointLimitDeg, linkClearanceMm, sampling, random, onPoseWork } = options;
   const conditionLimit = validateConditionLimit(options.conditionLimit);
+  validateLinkClearance(linkClearanceMm);
   const mounting = resolveMounting(layout).mounting;
   layout.mounting = mounting;
   const massProperties = options.massProperties ?? normalizeMassProperties({ mass_kg: payload ?? 0 });
@@ -55,7 +58,8 @@ export async function evaluateLayout(layout, rawOptions) {
   const workspaceResult = await computeWorkspace(layout, ranges, {
     signal, onProgress,
     payload, stroke, frequency, ballJointLimitDeg, lowerBallJointLimitDeg,
-    upperBallJointLimitDeg, ballJointClamp, mounting, sampling, random, conditionLimit, payloadSupport,
+    upperBallJointLimitDeg, ballJointClamp, mounting, sampling, random, conditionLimit, linkClearanceMm,
+    payloadSupport,
   });
 
   const coverage = Number.isFinite(workspaceResult.coverage) ? workspaceResult.coverage : 0;
@@ -71,7 +75,7 @@ export async function evaluateLayout(layout, rawOptions) {
     rz: 0,
   }, {
     ballJointLimitDeg, lowerBallJointLimitDeg, upperBallJointLimitDeg, ballJointClamp, mounting,
-    conditionLimit,
+    conditionLimit, linkClearanceMm,
     servoRangeRad: layout.servoRangeRad,
     recordLegData: true,
   });
@@ -124,6 +128,11 @@ export async function evaluateLayout(layout, rawOptions) {
         || stats.conditioningCounts?.unavailable)
       && !cycle.violations?.some(v => ['numericalSingularity', 'conditionLimit'].includes(v.type)),
     // Budget exhaustion before convergence is inconclusive, never a convergence pass.
+    // Links of different legs kept their clearance at home, at every sampled
+    // workspace pose and at every evaluated cycle sample.
+    collisionSatisfied: !homeResult.violations.some(v => v.type === 'linkCollision')
+      && !stats.violationCounts?.linkCollision
+      && !cycle.violations?.some(v => v.type === 'linkCollision'),
     cycleConvergence: cycle.sampling?.status ?? null,
     cycleConvergenceSatisfied: cycle.sampling?.status !== 'budget-limited'
       || cycle.sampling?.inconclusivePolicy === 'advisory',
@@ -132,7 +141,7 @@ export async function evaluateLayout(layout, rawOptions) {
     payloadSupport: support?.status ?? null,
     payloadSupportSatisfied: payloadSupportSatisfied(support),
     payloadSupportEnforced: support?.policy === 'enforced',
-    scope: 'Sampled poses under the modeled geometry, servo, rod, ball-joint and conditioning constraints',
+    scope: 'Sampled poses under the modeled geometry, servo, rod, ball-joint, link-clearance and conditioning constraints',
   };
   feasibility.failedCategories = failureCategories({ feasibility, cycle });
   feasibility.passing = feasibility.failedCategories.length === 0;
@@ -179,14 +188,15 @@ export async function evaluateLayout(layout, rawOptions) {
 export function evaluateCycle(layout, rawOptions) {
   const { payload, stroke, frequency, cycleAxis, trajectory, trajectorySource,
     massProperties, cycleSampling, servoRatings, ballJointLimitDeg,
-    lowerBallJointLimitDeg, upperBallJointLimitDeg, conditionLimit, mounting, signal, onPose } = resolveEvaluationOptions(rawOptions);
+    lowerBallJointLimitDeg, upperBallJointLimitDeg, conditionLimit, linkClearanceMm, mounting, signal,
+    onPose } = resolveEvaluationOptions(rawOptions);
   // A legacy-cycle trajectory keeps the single-axis identity in exported results.
   const supplied = trajectorySource === 'supplied' ? trajectory : undefined;
   return computeCycleDemand(layout, { mass: payload, stroke,
     frequency, axis: cycleAxis, trajectory: supplied, trajectorySource, massProperties, sampling: cycleSampling,
     actuators: servoRatings?.perServo?.map(servo => servo.actuator) ?? null,
     ballJointLimitDeg, lowerBallJointLimitDeg,
-    upperBallJointLimitDeg, conditionLimit, mounting, signal, onPose });
+    upperBallJointLimitDeg, conditionLimit, linkClearanceMm, mounting, signal, onPose });
 }
 
 // Servo motion rate (rad/s): cycle frequency times the mean over the six servos
